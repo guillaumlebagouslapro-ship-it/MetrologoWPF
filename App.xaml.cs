@@ -1,38 +1,40 @@
-﻿using Metrologo.Services;
+﻿using Metrologo;
+using Metrologo.Services;
 using Metrologo.ViewModels;
 using Metrologo.Views;
 using System.Windows;
 
-namespace Metrologo
+namespace MetrologoWPF
 {
     public partial class App : Application
     {
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            // 1. On prépare la fenêtre de Login
+            await DatabaseInitializer.InitialiserAsync();
+
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);
             var loginWin = new LoginWindow(loginVM);
 
-            // 2. On l'affiche en mode "Bloquant" (Dialog)
             if (loginWin.ShowDialog() == true)
             {
-                // 3. Si l'utilisateur a réussi à se connecter, on lance le vrai logiciel !
-                var mainWin = new MainWindow();
-
-                // On transmet l'utilisateur connecté au MainViewModel (si vous avez ajouté la propriété)
-                if (mainWin.DataContext is MainViewModel mainVM)
+                var mainVM = new MainViewModel
                 {
-                    mainVM.UtilisateurConnecte = loginVM.UtilisateurSession;
-                }
+                    UtilisateurConnecte = loginVM.UtilisateurSession
+                };
 
+                var mainWin = new MainWindow
+                {
+                    DataContext = mainVM
+                };
+
+                MainWindow = mainWin;
                 mainWin.Show();
             }
             else
             {
-                // Si l'utilisateur ferme la fenêtre de login ou clique sur Quitter, on arrête tout
                 Shutdown();
             }
         }

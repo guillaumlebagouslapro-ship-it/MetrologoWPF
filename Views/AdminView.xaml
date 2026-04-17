@@ -1,0 +1,29 @@
+﻿<UserControl x:Class="Metrologo.Views.AdminView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Border BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="6"
+                Padding="20" Background="#FAFAFA">
+            <StackPanel>
+                <TextBlock Text="🔐 Mode Administration"
+                           FontSize="22" FontWeight="Bold" Margin="0,0,0,15"/>
+
+                <TextBlock Text="Cette zone est réservée aux administrateurs."
+                           Margin="0,0,0,10" Foreground="#555"/>
+
+                <TextBlock Text="Fonctions prévues :"
+                           FontWeight="SemiBold" Margin="0,10,0,8"/>
+                <TextBlock Text="• Gestion des utilisateurs" Margin="10,2,0,2"/>
+                <TextBlock Text="• Paramètres avancés" Margin="10,2,0,2"/>
+                <TextBlock Text="• Configuration système" Margin="10,2,0,2"/>
+                <TextBlock Text="• Journal et maintenance" Margin="10,2,0,2"/>
+
+                <Border Margin="0,20,0,0" Padding="12"
+                        Background="#EEF4FF" CornerRadius="4">
+                    <TextBlock Text="{Binding MessageAdmin}"
+                               TextWrapping="Wrap" Foreground="#333"/>
+                </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

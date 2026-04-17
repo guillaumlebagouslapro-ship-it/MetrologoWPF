@@ -1,120 +1,73 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
-using Metrologo.Services;
-using Metrologo.Views;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace Metrologo.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-        // Déclaration des services manquants
-        private readonly IExcelService _excelService = new ExcelService();
-        private readonly IIeeeService _ieeeService = new SimulationIeeeService();
-        // Ajoutez ceci au début de la classe MainViewModel
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(EstAdmin))] // Prévient l'interface que les droits changent
+        [NotifyPropertyChangedFor(nameof(EstAdmin))]
+        [NotifyPropertyChangedFor(nameof(TexteUtilisateurConnecte))]
         private Utilisateur? _utilisateurConnecte;
 
-        // Cette propriété calculée permet de cacher/afficher des boutons dans le XAML
-        public bool EstAdmin => UtilisateurConnecte?.Role == RoleUtilisateur.Administrateur;
-
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(EstEnModeAdmin))]
+        [NotifyPropertyChangedFor(nameof(TexteMode))]
+        private object? _vueActuelle;
 
         [ObservableProperty]
         private string _titreApplication = "Metrologo v2026 - Migration Delphi";
 
-        [ObservableProperty]
-        private string _informationsGenerales = "Prêt. En attente d'exécution...";
+        private readonly AccueilViewModel _accueilViewModel = new();
+        private readonly AdminViewModel _adminViewModel = new();
 
-        [ObservableProperty]
-        private string _rubidiumActifTexte = "Rubidium : Non sélectionné";
+        public bool EstAdmin => UtilisateurConnecte?.Role == RoleUtilisateur.Administrateur;
+        public bool EstEnModeAdmin => VueActuelle is AdminViewModel;
+        public string TexteMode => EstEnModeAdmin ? "Mode : Administration" : "Mode : Exploitation";
+        public string TexteUtilisateurConnecte =>
+            UtilisateurConnecte == null
+                ? "Utilisateur : non connecté"
+                : $"Utilisateur : {UtilisateurConnecte.Login} ({UtilisateurConnecte.Role})";
+        public string RubidiumActifTexte => _accueilViewModel.RubidiumActifTexte;
 
-        [ObservableProperty]
-        private Mesure _mesureConfig = new Mesure(); // Initialisé par défaut pour éviter le null
-
-        [RelayCommand]
-        private void OuvrirConfiguration()
+        public MainViewModel()
         {
-            if (MesureConfig == null) MesureConfig = new Mesure();
-
-            var configVM = new ConfigurationViewModel { MesureConfig = this.MesureConfig };
-            var win = new ConfigurationWindow(configVM)
+            VueActuelle = _accueilViewModel;
+            _accueilViewModel.PropertyChanged += (_, e) =>
             {
-                Owner = Application.Current.MainWindow
+                if (e.PropertyName == nameof(AccueilViewModel.RubidiumActifTexte))
+                    OnPropertyChanged(nameof(RubidiumActifTexte));
             };
+        }
 
-            if (win.ShowDialog() == true)
-            {
-                this.MesureConfig = configVM.MesureConfig;
-                AjouterInformation($"✅ Configuration validée : FI {MesureConfig.NumFI}, {MesureConfig.NbMesures} mesures.");
-            }
+        partial void OnUtilisateurConnecteChanged(Utilisateur? value)
+        {
+            OnPropertyChanged(nameof(EstAdmin));
+            OnPropertyChanged(nameof(TexteUtilisateurConnecte));
+        }
+
+        partial void OnVueActuelleChanged(object? value)
+        {
+            OnPropertyChanged(nameof(EstEnModeAdmin));
+            OnPropertyChanged(nameof(TexteMode));
         }
 
         [RelayCommand]
-        private async Task ExecuterMesure()
+        private void AllerAccueil() => VueActuelle = _accueilViewModel;
+
+        [RelayCommand]
+        private void OuvrirAdmin()
         {
-            // 1. On ouvre la fenêtre de configuration AVANT de faire quoi que ce soit
-            OuvrirConfiguration();
-
-            // 2. Si l'utilisateur clique sur "Annuler" ou ne met pas de N° FI, on arrête tout
-            if (MesureConfig == null || string.IsNullOrWhiteSpace(MesureConfig.NumFI))
-            {
-                AjouterInformation("ℹ️ Mesure annulée : Configuration incomplète ou abandonnée.");
-                return;
-            }
-
-            // 3. Si c'est validé, on lance le vrai processus !
-            try
-            {
-                AjouterInformation($"▶ Lancement Excel pour : {MesureConfig.NumFI}");
-                await _excelService.InitialiserRapportAsync(MesureConfig.NumFI, MesureConfig);
-
-                AjouterInformation("📡 Connexion aux appareils IEEE...");
-                List<double> mesuresRecuperees = new List<double>();
-
-                // Boucle de mesure
-                for (int i = 0; i < MesureConfig.NbMesures; i++)
-                {
-                    double val = await _ieeeService.LireMesureAsync(new AppareilIEEE());
-                    mesuresRecuperees.Add(val);
-                    AjouterInformation($"   Mesure {i + 1}/{MesureConfig.NbMesures} : {val:F3} Hz");
-                }
-
-                AjouterInformation("📝 Transfert vers Excel...");
-                await _excelService.AjouterResultatsAsync(mesuresRecuperees);
-
-                await _excelService.SauvegarderEtOuvrirAsync();
-                AjouterInformation("✅ Rapport sauvegardé et ouvert avec succès.");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Erreur critique : {ex.Message}");
-            }
-            finally
-            {
-                _excelService.FermerExcel();
-            }
+            if (!EstAdmin) return;
+            VueActuelle = _adminViewModel;
         }
 
         [RelayCommand]
-        private void StopperMesure()
-        {
-            AjouterInformation("⏹ Arrêt demandé par l'utilisateur.");
-        }
+        private void RetourAccueil() => VueActuelle = _accueilViewModel;
 
         [RelayCommand]
-        private void Quitter()
-        {
-            Application.Current.Shutdown();
-        }
-
-        private void AjouterInformation(string message)
-        {
-            InformationsGenerales += $"\n[{DateTime.Now:HH:mm:ss}] {message}";
-        }
+        private void Quitter() => Application.Current.Shutdown();
     }
 }

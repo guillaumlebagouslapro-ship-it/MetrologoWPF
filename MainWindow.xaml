@@ -3,14 +3,22 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Metrologo"
         xmlns:vm="clr-namespace:Metrologo.ViewModels"
+        xmlns:views="clr-namespace:Metrologo.Views"
         mc:Ignorable="d"
-        Title="{Binding TitreApplication}" Height="600" Width="900" WindowStartupLocation="CenterScreen">
+        Title="{Binding TitreApplication}"
+        Height="600" Width="950"
+        WindowStartupLocation="CenterScreen">
 
-    <Window.DataContext>
-        <vm:MainViewModel />
-    </Window.DataContext>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <DataTemplate DataType="{x:Type vm:AccueilViewModel}">
+            <views:AccueilView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:AdminViewModel}">
+            <views:AdminView />
+        </DataTemplate>
+    </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -20,31 +28,37 @@
         </Grid.RowDefinitions>
 
         <ToolBar Grid.Row="0" Padding="5">
-            <Button Command="{Binding ExecuterMesureCommand}" Content="▶ Exécuter" Margin="5,0"/>
+            <Button Command="{Binding AllerAccueilCommand}"
+                    Content="🏠 Accueil" Margin="5,0"/>
             <Separator />
-            <Button Command="{Binding StopperMesureCommand}" Content="⏹ Stop" Margin="5,0"/>
+            <Button Command="{Binding OuvrirAdminCommand}"
+                    Content="🔐 Administration"
+                    Margin="5,0"
+                    Visibility="{Binding EstAdmin, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            <Button Command="{Binding RetourAccueilCommand}"
+                    Content="↩ Retour"
+                    Margin="5,0"
+                    Visibility="{Binding EstEnModeAdmin, Converter={StaticResource BoolToVisibilityConverter}}"/>
             <Separator />
-            <Button Content="⚙ Rubidium" Margin="5,0"/>
-            <Button Content="📊 Param. Incertitudes" Margin="5,0"/>
-            <Separator />
-            <Button Command="{Binding QuitterCommand}" Content="❌ Quitter" Margin="5,0"/>
+            <Button Command="{Binding QuitterCommand}"
+                    Content="❌ Quitter" Margin="5,0"/>
         </ToolBar>
 
-        <GroupBox Grid.Row="1" Header="Informations Générales" Margin="10">
-            <TextBox Text="{Binding InformationsGenerales}" 
-                     IsReadOnly="True" 
-                     TextWrapping="Wrap" 
-                     VerticalScrollBarVisibility="Auto" 
-                     FontFamily="Consolas" />
-        </GroupBox>
+        <ContentControl Grid.Row="1"
+                        Content="{Binding VueActuelle}"
+                        Margin="10"/>
 
         <StatusBar Grid.Row="2">
             <StatusBarItem>
-                <TextBlock Text="Mode : Exploitation" FontWeight="Bold"/>
+                <TextBlock Text="{Binding TexteMode}" FontWeight="Bold"/>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock Text="{Binding RubidiumActifTexte}" />
+                <TextBlock Text="{Binding TexteUtilisateurConnecte}"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding RubidiumActifTexte}"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>

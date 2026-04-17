@@ -1,5 +1,4 @@
-﻿using Metrologo.ViewModels;
-using System.Windows;
+﻿using System.Windows;
 
 namespace Metrologo
 {
@@ -8,8 +7,6 @@ namespace Metrologo
         public MainWindow()
         {
             InitializeComponent();
-            // CETTE LIGNE EST LE BRANCHEMENT :
-            this.DataContext = new MainViewModel();
         }
     }
 }
