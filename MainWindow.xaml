@@ -1,0 +1,51 @@
+﻿<Window x:Class="Metrologo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Metrologo"
+        xmlns:vm="clr-namespace:Metrologo.ViewModels"
+        mc:Ignorable="d"
+        Title="{Binding TitreApplication}" Height="600" Width="900" WindowStartupLocation="CenterScreen">
+
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ToolBar Grid.Row="0" Padding="5">
+            <Button Command="{Binding ExecuterMesureCommand}" Content="▶ Exécuter" Margin="5,0"/>
+            <Separator />
+            <Button Command="{Binding StopperMesureCommand}" Content="⏹ Stop" Margin="5,0"/>
+            <Separator />
+            <Button Content="⚙ Rubidium" Margin="5,0"/>
+            <Button Content="📊 Param. Incertitudes" Margin="5,0"/>
+            <Separator />
+            <Button Command="{Binding QuitterCommand}" Content="❌ Quitter" Margin="5,0"/>
+        </ToolBar>
+
+        <GroupBox Grid.Row="1" Header="Informations Générales" Margin="10">
+            <TextBox Text="{Binding InformationsGenerales}" 
+                     IsReadOnly="True" 
+                     TextWrapping="Wrap" 
+                     VerticalScrollBarVisibility="Auto" 
+                     FontFamily="Consolas" />
+        </GroupBox>
+
+        <StatusBar Grid.Row="2">
+            <StatusBarItem>
+                <TextBlock Text="Mode : Exploitation" FontWeight="Bold"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding RubidiumActifTexte}" />
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>
