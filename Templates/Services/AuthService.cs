@@ -1,7 +1,9 @@
-﻿using Dapper;
-using Metrologo.Models;
-using Microsoft.Data.SqlClient;
+﻿using System;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Data.Sqlite;
+using Metrologo.Models;
 
 namespace Metrologo.Services
 {
@@ -12,20 +14,43 @@ namespace Metrologo.Services
 
     public class AuthService : IAuthService
     {
-        // Pensez à mettre votre vraie chaîne de connexion ici
-        private readonly string _connectionString = "Server=(localdb)\\mssqllocaldb;Database=MetrologoDB;Trusted_Connection=True;";
-
         public async Task<Utilisateur?> AuthentifierAsync(string login, string password)
         {
-            using var db = new SqlConnection(_connectionString);
+            string passwordHash = HashPassword(password);
 
-            // Requête SQL pour vérifier les identifiants
+            using var connection = new SqliteConnection(DatabaseService.ConnectionString);
+            await connection.OpenAsync();
+
             string sql = @"
-                SELECT UTI_ID as Id, UTI_LOGIN as Login, UTI_ROLE as Role 
-                FROM T_UTILISATEURS 
-                WHERE UTI_LOGIN = @login AND UTI_PASSWORD_HASH = @password";
+                SELECT Id, Login, Role
+                FROM T_UTILISATEURS
+                WHERE Login = @login AND PasswordHash = @passwordHash
+                LIMIT 1";
 
-            return await db.QueryFirstOrDefaultAsync<Utilisateur>(sql, new { login, password });
+            using var cmd = new SqliteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@login", login);
+            cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                return new Utilisateur
+                {
+                    Id = reader.GetInt32(0),
+                    Login = reader.GetString(1),
+                    Role = Enum.Parse<RoleUtilisateur>(reader.GetString(2))
+                };
+            }
+
+            return null;
+        }
+
+        public static string HashPassword(string password)
+        {
+            using var sha = SHA256.Create();
+            byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(password));
+            return Convert.ToHexString(bytes);
         }
     }
 }

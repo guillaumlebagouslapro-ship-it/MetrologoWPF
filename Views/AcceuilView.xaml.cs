@@ -2,9 +2,9 @@
 
 namespace Metrologo.Views
 {
-    public partial class AccueilView : UserControl
+    public partial class AcceuilView : UserControl
     {
-        public AccueilView()
+        public AcceuilView()
         {
             InitializeComponent();
         }

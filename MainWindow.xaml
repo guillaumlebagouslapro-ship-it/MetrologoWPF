@@ -13,7 +13,7 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <DataTemplate DataType="{x:Type vm:AccueilViewModel}">
-            <views:AccueilView />
+            <views:AcceuilView />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:AdminViewModel}">
             <views:AdminView />
