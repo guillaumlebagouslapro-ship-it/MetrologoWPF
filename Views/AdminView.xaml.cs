@@ -1,6 +1,6 @@
 ﻿using System.Windows.Controls;
 
-namespace Metrologo.Services
+namespace Metrologo.Views
 {
     public partial class AdminView : UserControl
     {

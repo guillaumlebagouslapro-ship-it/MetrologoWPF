@@ -8,12 +8,14 @@ namespace MetrologoWPF
 {
     public partial class App : Application
     {
-        protected override async void OnStartup(StartupEventArgs e)
+        protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            await DatabaseInitializer.InitialiserAsync();
+            // 1. FORCER LA CRÉATION DE LA BDD AVANT TOUT LE RESTE (.Wait() est important ici)
+            DatabaseInitializer.InitialiserAsync().Wait();
 
+            // 2. Fenêtre de Login
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);
             var loginWin = new LoginWindow(loginVM);
@@ -30,7 +32,7 @@ namespace MetrologoWPF
                     DataContext = mainVM
                 };
 
-                MainWindow = mainWin;
+                Application.Current.MainWindow = mainWin;
                 mainWin.Show();
             }
             else
