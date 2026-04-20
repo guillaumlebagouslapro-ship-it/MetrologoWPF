@@ -3,24 +3,39 @@ using Metrologo.Services;
 using Metrologo.ViewModels;
 using Metrologo.Views;
 using System.Windows;
+using System.Threading.Tasks;
 
 namespace MetrologoWPF
 {
     public partial class App : Application
     {
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            // 1. FORCER LA CRÉATION DE LA BDD AVANT TOUT LE RESTE (.Wait() est important ici)
-            DatabaseInitializer.InitialiserAsync().Wait();
+            Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            // 2. Fenêtre de Login
+            // Initialize DB asynchrone pour ne pas tuer le Thread UI (évite de freeze ou de crash la fenêtre noire)
+            await DatabaseInitializer.InitialiserAsync();
+
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);
-            var loginWin = new LoginWindow(loginVM);
+            var loginWin = new Metrologo.Views.LoginWindow(loginVM);
 
-            if (loginWin.ShowDialog() == true)
+            loginVM.CloseAction = ok =>
+            {
+                // Si la fenêtre de login est encore ouverte, on applique la réponse
+                if (loginWin.IsVisible)
+                {
+                    loginWin.DialogResult = ok;
+                    loginWin.Close();
+                }
+            };
+
+            // L'appel bloquant ShowDialog relancera la UI après initialisation DB
+            bool? result = loginWin.ShowDialog();
+
+            if (result == true)
             {
                 var mainVM = new MainViewModel
                 {
@@ -33,11 +48,12 @@ namespace MetrologoWPF
                 };
 
                 Application.Current.MainWindow = mainWin;
+                Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
                 mainWin.Show();
             }
             else
             {
-                Shutdown();
+                Application.Current.Shutdown();
             }
         }
     }

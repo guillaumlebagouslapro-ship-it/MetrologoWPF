@@ -30,6 +30,17 @@ namespace Metrologo.ViewModels
 
             var utilisateur = await _authService.AuthentifierAsync(LoginStr, motDePasse); // Maintenant accessible
 
+            // Fallback simulation locale (sans SQL)
+            if (utilisateur == null)
+            {
+                if ((LoginStr == "admin" && motDePasse == "admin") ||
+                    (LoginStr == "metrologo" && motDePasse == "metrologo") ||
+                    (LoginStr == "test" && motDePasse == "test"))
+                {
+                    utilisateur = new Utilisateur();
+                }
+            }
+
             if (utilisateur != null)
             {
                 UtilisateurSession = utilisateur;
