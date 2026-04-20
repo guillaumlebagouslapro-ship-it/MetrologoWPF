@@ -1,10 +1,11 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Services;
+using Metrologo.Services.Journal;
 using Metrologo.Views;
 using System;
-using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -12,86 +13,241 @@ namespace Metrologo.ViewModels
 {
     public partial class AccueilViewModel : ObservableObject
     {
-        private readonly IExcelService _excelService = new ExcelService();
         private readonly IIeeeService _ieeeService = new SimulationIeeeService();
+        private readonly IExcelService _excelService = new ExcelService();
+        private readonly MesureOrchestrator _orchestrator;
+
+        private CancellationTokenSource? _cts;
+
+        [ObservableProperty] private bool _estSurBaie = true;
+        [ObservableProperty] private string _informationsGenerales = "Prêt. En attente d'exécution...";
+        [ObservableProperty] private string _rubidiumActifTexte = "Rubidium : Non sélectionné";
+        [ObservableProperty] private Mesure _mesureConfig = new Mesure();
+        [ObservableProperty] private Rubidium? _rubidiumActif;
 
         [ObservableProperty]
-        private bool _estSurBaie = true;
+        [NotifyCanExecuteChangedFor(nameof(RelancerMesureCommand))]
+        private bool _mesureEnCours;
 
         [ObservableProperty]
-        private string _informationsGenerales = "Prêt. En attente d'exécution...";
+        [NotifyCanExecuteChangedFor(nameof(RelancerMesureCommand))]
+        private bool _derniereMesureDisponible;
 
-        [ObservableProperty]
-        private string _rubidiumActifTexte = "Rubidium : Non sélectionné";
+        private double? _derniereFNominale;
 
-        [ObservableProperty]
-        private Mesure _mesureConfig = new Mesure();
+        public AccueilViewModel()
+        {
+            _orchestrator = new MesureOrchestrator(_ieeeService, _excelService);
+        }
+
+        // -------- Commandes --------
+
+        [RelayCommand]
+        private void ChoisirRubidium()
+        {
+            var win = new ChoixRubidiumWindow { Owner = Application.Current.MainWindow };
+            if (win.ShowDialog() == true && win.ViewModel.Resultat != null)
+            {
+                RubidiumActif = win.ViewModel.Resultat;
+                RubidiumActifTexte = $"Rubidium : {RubidiumActif.Designation} — "
+                    + (RubidiumActif.AvecGPS ? "raccord GPS" : "raccord Allouis");
+                Log($"🎯 Rubidium actif : {RubidiumActif.Designation} ({(RubidiumActif.AvecGPS ? "GPS" : "Allouis")})");
+
+                Journal.Info(CategorieLog.Rubidium, "SELECTION_RUBIDIUM",
+                    $"{RubidiumActif.Designation} — {(RubidiumActif.AvecGPS ? "GPS" : "Allouis")}",
+                    new { id = RubidiumActif.Id, gps = RubidiumActif.AvecGPS });
+            }
+        }
 
         [RelayCommand]
         private void OuvrirConfiguration()
         {
             if (MesureConfig == null) MesureConfig = new Mesure();
 
-            var configVM = new ConfigurationViewModel { MesureConfig = this.MesureConfig };
-            configVM.EstSurBaie = EstSurBaie;
+            var vm = new ConfigurationViewModel { MesureConfig = MesureConfig };
+            vm.EstSurBaie = EstSurBaie;
 
-            var win = new ConfigurationWindow(configVM)
-            {
-                Owner = Application.Current.MainWindow
-            };
-
+            var win = new ConfigurationWindow(vm) { Owner = Application.Current.MainWindow };
             if (win.ShowDialog() == true)
             {
-                MesureConfig = configVM.MesureConfig;
-                AjouterInformation($"✅ Configuration validée : FI {MesureConfig.NumFI}, {MesureConfig.NbMesures} mesures.");
+                MesureConfig = vm.MesureConfig;
+                Log($"⚙ Configuration : FI {MesureConfig.NumFI} · {MesureConfig.TypeMesure} · "
+                  + $"{MesureConfig.Frequencemetre} · {MesureConfig.NbMesures} mesures · "
+                  + $"Mode {MesureConfig.ModeMesure}");
+
+                Journal.Info(CategorieLog.Configuration, "CONFIG_VALIDEE",
+                    $"FI {MesureConfig.NumFI} · {MesureConfig.TypeMesure} · {MesureConfig.Frequencemetre}",
+                    new
+                    {
+                        numFI = MesureConfig.NumFI,
+                        type = MesureConfig.TypeMesure.ToString(),
+                        appareil = MesureConfig.Frequencemetre.ToString(),
+                        nbMesures = MesureConfig.NbMesures,
+                        mode = MesureConfig.ModeMesure.ToString(),
+                        source = MesureConfig.SourceMesure.ToString(),
+                        gateIndex = MesureConfig.GateIndex,
+                        fNominale = MesureConfig.FNominale
+                    });
             }
         }
 
         [RelayCommand]
-        private async Task ExecuterMesure()
+        private async Task ExecuterMesureAsync()
         {
-            OuvrirConfiguration();
+            if (MesureEnCours) return;
 
-            if (MesureConfig == null || string.IsNullOrWhiteSpace(MesureConfig.NumFI))
+            // 1) Rubidium obligatoire
+            if (RubidiumActif == null)
             {
-                AjouterInformation("ℹ️ Mesure annulée : Configuration incomplète ou abandonnée.");
-                return;
+                Log("ℹ Sélection du rubidium requise avant de lancer une mesure.");
+                ChoisirRubidium();
+                if (RubidiumActif == null) { Log("✖ Mesure annulée (rubidium non sélectionné)."); return; }
             }
+
+            // 2) Configuration (FI obligatoire)
+            if (string.IsNullOrWhiteSpace(MesureConfig?.NumFI))
+            {
+                Log("ℹ Configuration requise avant de lancer une mesure.");
+                OuvrirConfiguration();
+                if (MesureConfig == null || string.IsNullOrWhiteSpace(MesureConfig.NumFI))
+                {
+                    Log("✖ Mesure annulée (configuration incomplète).");
+                    return;
+                }
+            }
+
+            // 3) Sélection du gate / procédure
+            var gateWin = new SelectionGateWindow(MesureConfig) { Owner = Application.Current.MainWindow };
+            if (gateWin.ShowDialog() != true) { Log("✖ Mesure annulée (gate)."); return; }
+            MesureConfig.GateIndex = gateWin.ViewModel.IndexGateResultat;
+            Log($"⏱ Gate : index {MesureConfig.GateIndex}");
+
+            // 4) Saisie fréquence nominale si mode Indirect ou source Générateur
+            double? fNominale = null;
+            bool besoinNominale = MesureConfig.ModeMesure == ModeMesure.Indirect
+                               || MesureConfig.SourceMesure == SourceMesure.Generateur;
+
+            if (besoinNominale)
+            {
+                var saisieVm = new SaisieValFreqViewModel(
+                    MesureConfig.FNominale,
+                    titre: MesureConfig.SourceMesure == SourceMesure.Generateur
+                        ? "Fréquence du générateur"
+                        : "Fréquence nominale",
+                    sousTitre: "Saisissez la valeur de référence en Hertz",
+                    libelle: "VALEUR (HZ)");
+
+                var saisieWin = new SaisieValFreqWindow(saisieVm) { Owner = Application.Current.MainWindow };
+                if (saisieWin.ShowDialog() != true) { Log("✖ Mesure annulée (saisie fréquence)."); return; }
+
+                fNominale = saisieVm.ValeurLue;
+                Log($"📝 Fréquence nominale : {fNominale:N3} Hz");
+            }
+
+            await LancerMesureAsync(MesureConfig, RubidiumActif, fNominale, preambule: "▶ Lancement");
+        }
+
+        [RelayCommand(CanExecute = nameof(PeutRelancer))]
+        private async Task RelancerMesureAsync()
+        {
+            if (MesureEnCours || !DerniereMesureDisponible || RubidiumActif == null) return;
+            await LancerMesureAsync(MesureConfig, RubidiumActif, _derniereFNominale,
+                preambule: "🔁 Relance (mêmes paramètres)");
+        }
+
+        private bool PeutRelancer() => DerniereMesureDisponible && !MesureEnCours;
+
+        private async Task LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
+        {
+            _cts = new CancellationTokenSource();
+            MesureEnCours = true;
+
+            Log("═══════════════════════════════════════════");
+            Log($"{preambule} : {config.NbMesures} mesures sur {config.Frequencemetre}");
+            Log($"   FI {config.NumFI} · Rubidium : {rubi.Designation} · "
+              + (rubi.AvecGPS ? "GPS" : "Allouis"));
+
+            Journal.Info(CategorieLog.Mesure, "MESURE_DEBUT",
+                $"{preambule} : {config.NbMesures} mesures sur {config.Frequencemetre} pour FI {config.NumFI}",
+                new
+                {
+                    numFI = config.NumFI,
+                    type = config.TypeMesure.ToString(),
+                    appareil = config.Frequencemetre.ToString(),
+                    nbMesures = config.NbMesures,
+                    mode = config.ModeMesure.ToString(),
+                    source = config.SourceMesure.ToString(),
+                    gateIndex = config.GateIndex,
+                    fNominale,
+                    rubidium = rubi.Designation,
+                    gps = rubi.AvecGPS
+                });
+
+            var progress = new Progress<ProgressionMesure>(p =>
+            {
+                if (p.DerniereValeur.HasValue)
+                    Log($"   {p.Message} : {p.DerniereValeur.Value:F6} Hz");
+                else
+                    Log($"… {p.Message}");
+            });
 
             try
             {
-                AjouterInformation($"▶ Lancement Excel pour : {MesureConfig.NumFI}");
-                await _excelService.InitialiserRapportAsync(MesureConfig.NumFI, MesureConfig);
+                var result = await _orchestrator.ExecuterAsync(
+                    config, rubi, fNominale, progress, _cts.Token);
 
-                AjouterInformation("📡 Connexion aux appareils IEEE...");
-                List<double> mesuresRecuperees = new List<double>();
-
-                for (int i = 0; i < MesureConfig.NbMesures; i++)
+                if (result.Succes)
                 {
-                    double val = await _ieeeService.LireMesureAsync(new AppareilIEEE());
-                    mesuresRecuperees.Add(val);
-                    AjouterInformation($"   Mesure {i + 1}/{MesureConfig.NbMesures} : {val:F3} Hz");
-                }
+                    Log("───────────────────────────────────────────");
+                    Log($"✅ Moyenne : {result.Moyenne:F6} Hz");
+                    Log($"✅ Écart-type : {result.EcartType:E3} Hz");
+                    Log($"✅ Rapport Excel ouvert.");
 
-                AjouterInformation("📝 Transfert vers Excel...");
-                await _excelService.AjouterResultatsAsync(mesuresRecuperees);
-                await _excelService.SauvegarderEtOuvrirAsync();
-                AjouterInformation("✅ Rapport sauvegardé et ouvert avec succès.");
+                    // Mémorise pour Relancer
+                    _derniereFNominale = fNominale;
+                    DerniereMesureDisponible = true;
+
+                    Journal.Info(CategorieLog.Mesure, "MESURE_FIN",
+                        $"Mesure terminée : moyenne {result.Moyenne:F6} Hz, σ {result.EcartType:E3} Hz",
+                        new { result.Moyenne, result.EcartType, nbValeurs = result.Valeurs.Count });
+                }
+                else
+                {
+                    Log($"✖ Échec : {result.Erreur}");
+                    Journal.Erreur(CategorieLog.Mesure, "MESURE_ECHEC", result.Erreur ?? "Échec inconnu.");
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur critique : {ex.Message}");
+                Log($"✖ Erreur inattendue : {ex.Message}");
+                Journal.Erreur(CategorieLog.Mesure, "MESURE_EXCEPTION", ex.Message, new { ex.StackTrace });
             }
             finally
             {
-                _excelService.FermerExcel();
+                MesureEnCours = false;
+                _cts?.Dispose();
+                _cts = null;
             }
         }
 
         [RelayCommand]
-        private void StopperMesure() => AjouterInformation("⏹ Arrêt demandé par l'utilisateur.");
+        private void StopperMesure()
+        {
+            if (_cts != null && !_cts.IsCancellationRequested)
+            {
+                _cts.Cancel();
+                Log("⏹ Arrêt demandé — en cours…");
+                Journal.Warn(CategorieLog.Mesure, "MESURE_STOP", "Arrêt demandé par l'utilisateur.");
+            }
+            else
+            {
+                Log("ℹ Aucune mesure en cours.");
+            }
+        }
 
-        private void AjouterInformation(string message)
+        // -------- Utilitaires --------
+
+        private void Log(string message)
         {
             InformationsGenerales += $"\n[{DateTime.Now:HH:mm:ss}] {message}";
         }

@@ -1,28 +1,241 @@
 <UserControl x:Class="Metrologo.Views.AcceuilView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <ToolBar Grid.Row="0" Padding="5">
-            <Button Command="{Binding ExecuterMesureCommand}" Content="▶ Exécuter" Margin="5,0"/>
-            <Separator />
-            <Button Command="{Binding StopperMesureCommand}" Content="⏹ Stop" Margin="5,0"/>
-            <Separator />
-            <Button Command="{Binding OuvrirConfigurationCommand}" Content="⚙ Configuration" Margin="5,0"/>
-            <Button Content="⚙ Rubidium" Margin="5,0"/>
-            <Button Content="📊 Param. Incertitudes" Margin="5,0"/>
-        </ToolBar>
+        <!-- Bandeau d'en-tête -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Tableau de bord"
+                       FontSize="28" FontWeight="Bold"
+                       Foreground="{StaticResource AsertiNavyBrush}"/>
+            <TextBlock Text="Lancez une mesure ou consultez les paramètres de votre banc"
+                       FontSize="13"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Margin="0,4,0,0"/>
+        </StackPanel>
 
-        <GroupBox Grid.Row="1" Header="Informations Générales" Margin="0,10,0,0">
-            <TextBox Text="{Binding InformationsGenerales}"
-                     IsReadOnly="True"
-                     TextWrapping="Wrap"
-                     VerticalScrollBarVisibility="Auto"
-                     FontFamily="Consolas"/>
-        </GroupBox>
+        <!-- Cartes d'actions -->
+        <Grid Grid.Row="1" Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Exécuter (action primaire orange) -->
+            <Button Grid.Column="0"
+                    Command="{Binding ExecuterMesureCommand}"
+                    Cursor="Hand"
+                    BorderThickness="0"
+                    Padding="0">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" CornerRadius="10" Padding="20"
+                                Background="{StaticResource AsertiOrangeBrush}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2" Color="{StaticResource AsertiOrangeDarkColor}"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <Border Width="44" Height="44" CornerRadius="10"
+                                        HorizontalAlignment="Left" Margin="0,0,0,14">
+                                    <Border.Background>
+                                        <SolidColorBrush Color="White" Opacity="0.22"/>
+                                    </Border.Background>
+                                    <ui:SymbolIcon Symbol="Play24" FontSize="24"
+                                                   Foreground="White"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="EXÉCUTER" FontSize="11" FontWeight="Bold"
+                                           Foreground="White" Opacity="0.85" Margin="0,0,0,2"/>
+                                <TextBlock Text="Lancer la mesure" FontSize="16" FontWeight="SemiBold"
+                                           Foreground="White"/>
+                                <TextBlock Text="Démarre l'acquisition sur l'instrument configuré"
+                                           FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
+                                    <TextBlock.Foreground>
+                                        <SolidColorBrush Color="White" Opacity="0.85"/>
+                                    </TextBlock.Foreground>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource AsertiOrangeDarkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- Relancer (mêmes paramètres) -->
+            <Button Grid.Column="2"
+                    Command="{Binding RelancerMesureCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="44" Height="44" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,14"
+                            Background="#FFFFF0D9">
+                        <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="22"
+                                       Foreground="{StaticResource AsertiOrangeDarkBrush}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="RELANCER" FontSize="11" FontWeight="Bold"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                    <TextBlock Text="Même mesure"
+                               FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Rejoue avec les mêmes paramètres que la dernière exécution"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <!-- Stop -->
+            <Button Grid.Column="4"
+                    Command="{Binding StopperMesureCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="44" Height="44" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,14"
+                            Background="#FFFEE2E2">
+                        <ui:SymbolIcon Symbol="Stop24" FontSize="22"
+                                       Foreground="#FFDC2626"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="STOP" FontSize="11" FontWeight="Bold"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                    <TextBlock Text="Arrêter"
+                               FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Interrompt la mesure en cours"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <!-- Configuration -->
+            <Button Grid.Column="6"
+                    Command="{Binding OuvrirConfigurationCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="44" Height="44" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,14"
+                            Background="#FFDEEAFE">
+                        <ui:SymbolIcon Symbol="Settings24" FontSize="22"
+                                       Foreground="#FF2563EB"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="PARAMÈTRES" FontSize="11" FontWeight="Bold"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                    <TextBlock Text="Configuration"
+                               FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="N° FI, instrument, type de mesure"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <!-- Rubidium -->
+            <Button Grid.Column="8"
+                    Command="{Binding ChoisirRubidiumCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="44" Height="44" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,14"
+                            Background="#FFDCFCE7">
+                        <ui:SymbolIcon Symbol="Timer24" FontSize="22"
+                                       Foreground="#FF16A34A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="RÉFÉRENCE" FontSize="11" FontWeight="Bold"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                    <TextBlock Text="Rubidium"
+                               FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Sélection et raccordement GPS"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <!-- Panneau Informations Générales -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource ApplicationBackgroundBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Padding="18,14"
+                        CornerRadius="10,10,0,0"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        Background="{DynamicResource LayerFillColorDefaultBrush}">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="28" Height="28" CornerRadius="6"
+                                Background="{StaticResource AsertiNavyBrush}"
+                                Margin="0,0,10,0">
+                            <ui:SymbolIcon Symbol="DocumentBulletList24" FontSize="16"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="Informations générales"
+                                   FontSize="15" FontWeight="SemiBold"
+                                   Foreground="{StaticResource AsertiNavyBrush}"
+                                   VerticalAlignment="Center"/>
+                        <Border Background="#FFDCFCE7" CornerRadius="10"
+                                Padding="8,2" Margin="14,0,0,0"
+                                VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="6" Height="6" Fill="#FF16A34A"
+                                         VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="Prêt" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="#FF166534"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <TextBox Grid.Row="1"
+                         Text="{Binding InformationsGenerales}"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Cascadia Mono, Consolas"
+                         FontSize="12"
+                         Padding="18,14"
+                         BorderThickness="0"
+                         Background="Transparent"/>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

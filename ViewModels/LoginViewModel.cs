@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Services;
+using Metrologo.Services.Journal;
 
 namespace Metrologo.ViewModels
 {
@@ -49,6 +50,9 @@ namespace Metrologo.ViewModels
             else
             {
                 MessageErreur = "Identifiant ou mot de passe incorrect.";
+                // Tentative infructueuse — loggée hors session (sera rattachée à la prochaine session si elle s'ouvre)
+                Journal.Warn(CategorieLog.Authentification, "ECHEC_CONNEXION",
+                    $"Tentative de connexion échouée pour « {LoginStr} ».");
             }
         }
 

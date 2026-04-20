@@ -8,6 +8,7 @@ namespace Metrologo.Models
         public TypeAppareilIEEE Frequencemetre { get; set; }
         public TypeMesure TypeMesure { get; set; }
         public ModeMesure ModeMesure { get; set; }
+        public SourceMesure SourceMesure { get; set; } = SourceMesure.Frequencemetre;
         // Dans Models/Mesure.cs, ajoutez cette ligne dans la classe :
         public int NbMesures { get; set; } = 30;
 
@@ -21,6 +22,10 @@ namespace Metrologo.Models
         // Paramètres pour le mode Indirect
         public double FNominale { get; set; } = 10000000;
         public int IndexMultiplicateur { get; set; }
+
+        // Paramètres d'incertitude (ajustables via dialogue ParamsIncert)
+        public double Resolution { get; set; } = 0.01;
+        public double IncertSupp { get; set; } = 0.0;
 
         public Mesure()
         {

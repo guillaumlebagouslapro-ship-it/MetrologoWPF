@@ -1,9 +1,10 @@
 ﻿using System.Windows;
 using Metrologo.ViewModels;
+using Wpf.Ui.Controls;
 
 namespace Metrologo.Views
 {
-    public partial class ConfigurationWindow : Window
+    public partial class ConfigurationWindow : FluentWindow
     {
         public ConfigurationWindow(ConfigurationViewModel vm)
         {

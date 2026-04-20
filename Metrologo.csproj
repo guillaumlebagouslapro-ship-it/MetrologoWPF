@@ -22,4 +22,10 @@
 		</None>
 	</ItemGroup>
 
+	<ItemGroup>
+		<Resource Include="Resources\*.png" />
+		<Resource Include="Resources\*.jpg" />
+		<Resource Include="Resources\*.ico" />
+	</ItemGroup>
+
 </Project>

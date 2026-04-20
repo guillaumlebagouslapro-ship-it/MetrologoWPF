@@ -1,5 +1,6 @@
-﻿using Metrologo;
+using Metrologo;
 using Metrologo.Services;
+using Metrologo.Services.Journal;
 using Metrologo.ViewModels;
 using Metrologo.Views;
 using System.Windows;
@@ -15,17 +16,17 @@ namespace Metrologo
 
             Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            // Initialize DB asynchrone pour ne pas tuer le Thread UI (évite de freeze ou de crash la fenêtre noire)
             await DatabaseInitializer.InitialiserAsync();
 
-            // 2. Prépare et affiche la fenêtre de connexion
+            // Initialisation du journal (SQLite local)
+            Journal.Configurer(new SqliteJournalService());
+
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);
             var loginWin = new Metrologo.Views.LoginWindow(loginVM);
 
             loginVM.CloseAction = ok =>
             {
-                // Si la fenêtre de login est encore ouverte, on applique la réponse
                 if (loginWin.IsVisible)
                 {
                     loginWin.DialogResult = ok;
@@ -33,22 +34,22 @@ namespace Metrologo
                 }
             };
 
-            // L'appel bloquant ShowDialog relancera la UI après initialisation DB
             bool? result = loginWin.ShowDialog();
 
-            if (result == true)
+            if (result == true && loginVM.UtilisateurSession != null)
             {
-                // On passe l'utilisateur connecté au MainViewModel
+                // Démarrage de la session journalisée
+                await Journal.DemarrerSessionAsync(loginVM.UtilisateurSession.Login);
+
                 var mainVM = new MainViewModel
                 {
                     UtilisateurConnecte = loginVM.UtilisateurSession
                 };
 
-                // On ouvre la fenêtre principale
-                var mainWin = new MainWindow
-                {
-                    DataContext = mainVM
-                };
+                var mainWin = new MainWindow { DataContext = mainVM };
+
+                // Fin de session à la fermeture
+                mainWin.Closed += async (_, _) => await Journal.TerminerSessionAsync();
 
                 Application.Current.MainWindow = mainWin;
                 Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;

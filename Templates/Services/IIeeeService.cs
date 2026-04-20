@@ -1,14 +1,16 @@
-﻿using System.Threading.Tasks;
+using System.Threading;
+using System.Threading.Tasks;
 using Metrologo.Models;
 
 namespace Metrologo.Services
 {
     public interface IIeeeService
     {
-        // Pour tester si le bus IEEE répond
         Task<bool> InitialiserAsync();
 
-        // Pour lire une valeur depuis un fréquencemètre
-        Task<double> LireMesureAsync(AppareilIEEE appareil);
+        /// <summary>
+        /// Lit une valeur de fréquence en respectant le gate time configuré dans la Mesure.
+        /// </summary>
+        Task<double> LireMesureAsync(Mesure mesure, CancellationToken ct = default);
     }
 }

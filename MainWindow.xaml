@@ -1,16 +1,19 @@
-﻿<Window x:Class="Metrologo.MainWindow"
+<ui:FluentWindow x:Class="Metrologo.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:vm="clr-namespace:Metrologo.ViewModels"
         xmlns:views="clr-namespace:Metrologo.Views"
         mc:Ignorable="d"
         Title="{Binding TitreApplication}"
-        Height="600" Width="950"
-        WindowStartupLocation="CenterScreen">
+        Height="720" Width="1080"
+        WindowStartupLocation="CenterScreen"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True">
 
-    <Window.Resources>
+    <ui:FluentWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <DataTemplate DataType="{x:Type vm:AccueilViewModel}">
             <views:AcceuilView />
@@ -21,48 +24,113 @@
         <DataTemplate DataType="{x:Type vm:SelectionPosteViewModel}">
             <views:SelectionPosteView />
         </DataTemplate>
-    </Window.Resources>
+    </ui:FluentWindow.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ToolBar Grid.Row="0" Padding="5">
-            <Button Command="{Binding AllerAccueilCommand}"
-                    Content="🏠 Accueil" Margin="5,0"/>
-            <Separator />
-            <Button Command="{Binding OuvrirAdminCommand}"
-                    Content="🔐 Administration"
-                    Margin="5,0"
-                    Visibility="{Binding EstAdmin, Converter={StaticResource BoolToVisibilityConverter}}"/>
-            <Button Command="{Binding RetourAccueilCommand}"
-                    Content="↩ Retour"
-                    Margin="5,0"
-                    Visibility="{Binding EstEnModeAdmin, Converter={StaticResource BoolToVisibilityConverter}}"/>
-            <Separator />
-            <Button Command="{Binding QuitterCommand}"
-                    Content="❌ Quitter" Margin="5,0"/>
-        </ToolBar>
+        <ui:TitleBar Grid.Row="0"
+                     Title="{Binding TitreApplication}"
+                     ShowMaximize="True"/>
 
-        <ContentControl Grid.Row="1"
+        <!-- Barre de navigation avec logo -->
+        <Border Grid.Row="1"
+                Padding="20,12"
+                Background="{StaticResource AsertiNavyBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Logo ASERTI -->
+                <Border Grid.Column="0"
+                        Background="White"
+                        CornerRadius="6"
+                        Padding="10,6"
+                        Margin="0,0,24,0"
+                        VerticalAlignment="Center">
+                    <Image Source="/Resources/aserti-logo.png"
+                           Height="28"
+                           Stretch="Uniform"/>
+                </Border>
+
+                <!-- Navigation -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Command="{Binding AllerAccueilCommand}"
+                            Style="{StaticResource NavButtonStyle}"
+                            Margin="0,0,6,0">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Home24" FontSize="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="Accueil" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding OuvrirAdminCommand}"
+                            Style="{StaticResource NavButtonStyle}"
+                            Margin="0,0,6,0"
+                            Visibility="{Binding EstAdmin, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="ShieldKeyhole24" FontSize="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="Administration" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding RetourAccueilCommand}"
+                            Style="{StaticResource NavButtonStyle}"
+                            Margin="0,0,6,0"
+                            Visibility="{Binding EstEnModeAdmin, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="ArrowLeft24" FontSize="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="Retour" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Bouton Quitter à droite -->
+                <Button Grid.Column="2"
+                        Command="{Binding QuitterCommand}"
+                        Style="{StaticResource NavAccentButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Power24" FontSize="18" Margin="0,0,8,0"/>
+                        <TextBlock Text="Quitter" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <ContentControl Grid.Row="2"
                         Content="{Binding VueActuelle}"
-                        Margin="10"/>
+                        Margin="16,16,16,8"/>
 
-        <StatusBar Grid.Row="2">
-            <StatusBarItem>
-                <TextBlock Text="{Binding TexteMode}" FontWeight="Bold"/>
-            </StatusBarItem>
-            <Separator/>
-            <StatusBarItem>
-                <TextBlock Text="{Binding TexteUtilisateurConnecte}"/>
-            </StatusBarItem>
-            <Separator/>
-            <StatusBarItem>
-                <TextBlock Text="{Binding RubidiumActifTexte}"/>
-            </StatusBarItem>
-        </StatusBar>
+        <!-- Barre de statut -->
+        <Border Grid.Row="3"
+                Padding="20,10"
+                Background="{DynamicResource LayerFillColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <StackPanel Orientation="Horizontal">
+                <Border Width="8" Height="8" CornerRadius="4"
+                        Background="{StaticResource AsertiOrangeBrush}"
+                        VerticalAlignment="Center"
+                        Margin="0,0,10,0"/>
+                <TextBlock Text="{Binding TexteMode}" FontWeight="SemiBold" VerticalAlignment="Center"
+                           Foreground="{StaticResource AsertiNavyBrush}"/>
+                <Rectangle Width="1" Fill="{DynamicResource ControlStrokeColorDefaultBrush}" Margin="16,2"/>
+                <ui:SymbolIcon Symbol="Person24" Margin="0,0,8,0" FontSize="14"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Text="{Binding TexteUtilisateurConnecte}" VerticalAlignment="Center"/>
+                <Rectangle Width="1" Fill="{DynamicResource ControlStrokeColorDefaultBrush}" Margin="16,2"/>
+                <ui:SymbolIcon Symbol="Timer24" Margin="0,0,8,0" FontSize="14"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Text="{Binding RubidiumActifTexte}" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
     </Grid>
-</Window>
+</ui:FluentWindow>

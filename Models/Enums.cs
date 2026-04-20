@@ -1,4 +1,4 @@
-﻿namespace Metrologo.Models
+namespace Metrologo.Models
 {
     public enum TypeAppareilIEEE
     {
@@ -15,7 +15,6 @@
         FreqAvantInterv,
         FreqFinale,
         TachyContact,
-        TachyOptique,
         Stroboscope
     }
 
@@ -23,6 +22,12 @@
     {
         Direct,
         Indirect
+    }
+
+    public enum SourceMesure
+    {
+        Frequencemetre,
+        Generateur
     }
 
     public enum ModeMetrologo

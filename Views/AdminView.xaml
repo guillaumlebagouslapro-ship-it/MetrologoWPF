@@ -1,28 +1,175 @@
-﻿<UserControl x:Class="Metrologo.Views.AdminView"
+<UserControl x:Class="Metrologo.Views.AdminView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
     <Grid>
-        <Border BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="6"
-                Padding="20" Background="#FAFAFA">
-            <StackPanel>
-                <TextBlock Text="🔐 Mode Administration"
-                           FontSize="22" FontWeight="Bold" Margin="0,0,0,15"/>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-                <TextBlock Text="Cette zone est réservée aux administrateurs."
-                           Margin="0,0,0,10" Foreground="#555"/>
+        <!-- En-tête avec bandeau -->
+        <Border Grid.Row="0"
+                CornerRadius="12"
+                Padding="28,24"
+                Margin="0,0,0,20">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="{StaticResource AsertiNavyDarkColor}" Offset="0"/>
+                    <GradientStop Color="{StaticResource AsertiNavyColor}" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-                <TextBlock Text="Fonctions prévues :"
-                           FontWeight="SemiBold" Margin="0,10,0,8"/>
-                <TextBlock Text="• Gestion des utilisateurs" Margin="10,2,0,2"/>
-                <TextBlock Text="• Paramètres avancés" Margin="10,2,0,2"/>
-                <TextBlock Text="• Configuration système" Margin="10,2,0,2"/>
-                <TextBlock Text="• Journal et maintenance" Margin="10,2,0,2"/>
-
-                <Border Margin="0,20,0,0" Padding="12"
-                        Background="#EEF4FF" CornerRadius="4">
-                    <TextBlock Text="{Binding MessageAdmin}"
-                               TextWrapping="Wrap" Foreground="#333"/>
+                <Border Grid.Column="0"
+                        Width="64" Height="64"
+                        CornerRadius="16"
+                        Margin="0,0,20,0">
+                    <Border.Background>
+                        <SolidColorBrush Color="{StaticResource AsertiOrangeColor}" Opacity="0.25"/>
+                    </Border.Background>
+                    <ui:SymbolIcon Symbol="ShieldKeyhole24" FontSize="32"
+                                   Foreground="{StaticResource AsertiOrangeBrush}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
                 </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="ZONE ADMINISTRATEUR" FontSize="11" FontWeight="Bold"
+                               Margin="0,0,0,4">
+                        <TextBlock.Foreground>
+                            <SolidColorBrush Color="{StaticResource AsertiOrangeLightColor}"/>
+                        </TextBlock.Foreground>
+                    </TextBlock>
+                    <TextBlock Text="Administration Metrologo"
+                               FontSize="26" FontWeight="Bold"
+                               Foreground="White"/>
+                    <TextBlock Text="Gestion des utilisateurs, paramètres avancés et maintenance système"
+                               FontSize="13" Margin="0,4,0,0">
+                        <TextBlock.Foreground>
+                            <SolidColorBrush Color="White" Opacity="0.78"/>
+                        </TextBlock.Foreground>
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Grille de fonctionnalités (cliquables) -->
+        <Grid Grid.Row="1" Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"
+                    Command="{Binding OuvrirUtilisateursCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="40" Height="40" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,12"
+                            Background="#FFDEEAFE">
+                        <ui:SymbolIcon Symbol="People24" FontSize="20"
+                                       Foreground="#FF2563EB"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Utilisateurs" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Comptes, rôles, permissions"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="2"
+                    Command="{Binding OuvrirIncertitudesCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="40" Height="40" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,12"
+                            Background="#FFFEF3C7">
+                        <ui:SymbolIcon Symbol="DataHistogram24" FontSize="20"
+                                       Foreground="#FFD97706"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Incertitudes" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Coefficients A/B, rubidiums, plages"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="4"
+                    Command="{Binding OuvrirParamsIncertCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="40" Height="40" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,12"
+                            Background="#FFE0E7FF">
+                        <ui:SymbolIcon Symbol="Ruler24" FontSize="20"
+                                       Foreground="#FF4F46E5"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Résolution &amp; incert. supp." FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Paramètres à ajuster par mesure"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="6"
+                    Command="{Binding OuvrirJournalCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="40" Height="40" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,12"
+                            Background="#FFFEE2E2">
+                        <ui:SymbolIcon Symbol="History24" FontSize="20"
+                                       Foreground="#FFDC2626"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Journal &amp; maintenance" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Logs, audit, sauvegarde"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <!-- Message d'information -->
+        <Border Grid.Row="2"
+                CornerRadius="10"
+                Padding="18,16"
+                VerticalAlignment="Top"
+                Background="#FFFFF7ED"
+                BorderBrush="#FFFED7AA"
+                BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <ui:SymbolIcon Symbol="Info24" FontSize="22"
+                               Foreground="{StaticResource AsertiOrangeBrush}"
+                               Margin="0,0,12,0"
+                               VerticalAlignment="Top"/>
+                <TextBlock Text="{Binding MessageAdmin}"
+                           TextWrapping="Wrap"
+                           Foreground="#FF7C2D12"
+                           VerticalAlignment="Center"
+                           FontSize="13"/>
             </StackPanel>
         </Border>
     </Grid>

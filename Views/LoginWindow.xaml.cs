@@ -1,10 +1,10 @@
-﻿using Metrologo.Models;
 using Metrologo.ViewModels;
 using System.Windows;
+using Wpf.Ui.Controls;
 
 namespace Metrologo.Views
 {
-    public partial class LoginWindow : Window
+    public partial class LoginWindow : FluentWindow
     {
         public LoginWindow()
         {
@@ -14,8 +14,6 @@ namespace Metrologo.Views
         public LoginWindow(object viewModel) : this()
         {
             DataContext = viewModel;
-            
-            // ModePosteCourant = null; (s'il existe dans le contexte)
         }
 
         private async void BtnConnexion_Click(object sender, RoutedEventArgs e)
@@ -33,7 +31,7 @@ namespace Metrologo.Views
                 return;
             }
 
-            MessageBox.Show("Contexte de connexion invalide.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            System.Windows.MessageBox.Show("Contexte de connexion invalide.", "Erreur", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
         }
     }
 }
