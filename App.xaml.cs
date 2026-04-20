@@ -5,7 +5,7 @@ using Metrologo.Views;
 using System.Windows;
 using System.Threading.Tasks;
 
-namespace MetrologoWPF
+namespace Metrologo
 {
     public partial class App : Application
     {

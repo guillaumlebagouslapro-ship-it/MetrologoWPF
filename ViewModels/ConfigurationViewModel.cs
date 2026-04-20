@@ -12,6 +12,9 @@ namespace Metrologo.ViewModels
         [ObservableProperty]
         private Mesure _mesureConfig = new Mesure();
 
+        [ObservableProperty]
+        private bool _estSurBaie = true;
+
 
         // Menus déroulants
         public IEnumerable<TypeAppareilIEEE> Appareils => Enum.GetValues(typeof(TypeAppareilIEEE)).Cast<TypeAppareilIEEE>();
@@ -53,7 +56,11 @@ namespace Metrologo.ViewModels
         public bool IsModeIndirect
         {
             get => MesureConfig.ModeMesure == ModeMesure.Indirect;
-            set { if (value) { MesureConfig.ModeMesure = ModeMesure.Indirect; RefreshAll(); } }
+            set
+            {
+                if (value && !EstSurBaie) return;
+                if (value) { MesureConfig.ModeMesure = ModeMesure.Indirect; RefreshAll(); }
+            }
         }
 
         // Rafraîchissement global
@@ -66,6 +73,12 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(IsModeIndirect));
             OnPropertyChanged(nameof(ShowGateSettings));
             OnPropertyChanged(nameof(ShowCoupling));
+            OnPropertyChanged(nameof(IndirectDisponible));
+        }
+
+        private object IndirectDisponible()
+        {
+            throw new NotImplementedException();
         }
 
         public void OnTypeMesureChanged()

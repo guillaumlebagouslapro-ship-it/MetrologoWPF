@@ -33,6 +33,8 @@ namespace Metrologo.ViewModels
             if (MesureConfig == null) MesureConfig = new Mesure();
 
             var configVM = new ConfigurationViewModel { MesureConfig = this.MesureConfig };
+            configVM.EstSurBaie = EstSurBaie;
+
             var win = new ConfigurationWindow(configVM)
             {
                 Owner = Application.Current.MainWindow

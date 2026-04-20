@@ -1,10 +1,12 @@
 ﻿<Window x:Class="Metrologo.Views.ConfigurationWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Configuration de la Mesure" Height="650" Width="450" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        Title="Configuration de la Mesure" Height="650" Width="450" WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        xmlns:converters="clr-namespace:Metrologo.Converters">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     </Window.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -74,9 +76,27 @@
 
             <GroupBox Header="Mode de calcul" Margin="0,0,0,15">
                 <StackPanel Margin="5">
-                    <RadioButton Content="Direct" IsChecked="{Binding IsModeDirect, Mode=TwoWay}" />
-                    <RadioButton Content="Indirect" IsChecked="{Binding IsModeIndirect, Mode=TwoWay}" Margin="0,5,0,0"/>
-                    <StackPanel Visibility="{Binding IsModeIndirect, Converter={StaticResource BoolToVis}}" Margin="20,10,0,0">
+                    <RadioButton Content="Direct"
+                     IsChecked="{Binding IsModeDirect, Mode=TwoWay}" />
+                    <RadioButton Content="Indirect"
+                     IsChecked="{Binding IsModeIndirect, Mode=TwoWay}"
+                     IsEnabled="{Binding IndirectDisponible}"
+                     Margin="0,5,0,0"/>
+                    <TextBlock Text="⚠️ Mode indirect non disponible en paillasse"
+                   Foreground="OrangeRed" FontSize="11" Margin="0,4,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IndirectDisponible}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <StackPanel Visibility="{Binding IsModeIndirect,
+                        Converter={StaticResource BoolToVis}}" Margin="20,10,0,0">
                         <TextBlock Text="Fréquence Nominale (Hz) :"/>
                         <TextBox Text="{Binding MesureConfig.FNominale}"/>
                     </StackPanel>

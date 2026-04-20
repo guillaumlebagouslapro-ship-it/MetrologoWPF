@@ -5,15 +5,14 @@ namespace Metrologo.Views
 {
     public partial class ConfigurationWindow : Window
     {
-        public ConfigurationWindow(ConfigurationViewModel viewModel)
+        public ConfigurationWindow(ConfigurationViewModel vm)
         {
             InitializeComponent();
-            DataContext = viewModel;
+            DataContext = vm;
 
-            viewModel.CloseAction = (result) =>
+            vm.CloseAction = result =>
             {
                 this.DialogResult = result;
-                this.Close();
             };
         }
 
