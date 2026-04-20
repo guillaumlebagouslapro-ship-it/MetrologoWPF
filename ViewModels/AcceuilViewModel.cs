@@ -16,6 +16,9 @@ namespace Metrologo.ViewModels
         private readonly IIeeeService _ieeeService = new SimulationIeeeService();
 
         [ObservableProperty]
+        private bool _estSurBaie = true;
+
+        [ObservableProperty]
         private string _informationsGenerales = "Prêt. En attente d'exécution...";
 
         [ObservableProperty]
@@ -30,6 +33,8 @@ namespace Metrologo.ViewModels
             if (MesureConfig == null) MesureConfig = new Mesure();
 
             var configVM = new ConfigurationViewModel { MesureConfig = this.MesureConfig };
+            configVM.EstSurBaie = EstSurBaie;
+
             var win = new ConfigurationWindow(configVM)
             {
                 Owner = Application.Current.MainWindow

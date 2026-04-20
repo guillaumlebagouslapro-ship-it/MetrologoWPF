@@ -1,8 +1,12 @@
-﻿<Application x:Class="MetrologoWPF.App"
+﻿<Application x:Class="Metrologo.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:MetrologoWPF"
-             ShutdownMode="OnExplicitShutdown">
+             xmlns:converters="clr-namespace:Metrologo.Converters">
+
+
     <Application.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     </Application.Resources>
+
 </Application>

@@ -17,22 +17,15 @@ namespace Metrologo.Services
         public async Task<Utilisateur?> AuthentifierAsync(string login, string password)
         {
             string passwordHash = HashPassword(password);
-
             using var connection = new SqliteConnection(DatabaseService.ConnectionString);
             await connection.OpenAsync();
 
-            string sql = @"
-                SELECT Id, Login, Role
-                FROM T_UTILISATEURS
-                WHERE Login = @login AND PasswordHash = @passwordHash
-                LIMIT 1";
-
+            string sql = "SELECT Id, Login, Role FROM T_UTILISATEURS WHERE Login = @login AND PasswordHash = @passwordHash LIMIT 1";
             using var cmd = new SqliteCommand(sql, connection);
             cmd.Parameters.AddWithValue("@login", login);
             cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
 
             using var reader = await cmd.ExecuteReaderAsync();
-
             if (await reader.ReadAsync())
             {
                 return new Utilisateur
@@ -42,7 +35,6 @@ namespace Metrologo.Services
                     Role = Enum.Parse<RoleUtilisateur>(reader.GetString(2))
                 };
             }
-
             return null;
         }
 

@@ -13,7 +13,8 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Dapper" Version="2.1.72" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.6" />
+	<PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.4" />
+	<PackageReference Include="WPF-UI" Version="3.0.4" />
   </ItemGroup>
 	<ItemGroup>
 		<None Update="Templates\METROLOGO.xltm">

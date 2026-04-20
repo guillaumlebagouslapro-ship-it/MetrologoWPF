@@ -18,6 +18,9 @@
         <DataTemplate DataType="{x:Type vm:AdminViewModel}">
             <views:AdminView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SelectionPosteViewModel}">
+            <views:SelectionPosteView />
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>

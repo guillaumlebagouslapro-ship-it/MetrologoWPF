@@ -3,8 +3,9 @@ using Metrologo.Services;
 using Metrologo.ViewModels;
 using Metrologo.Views;
 using System.Windows;
+using System.Threading.Tasks;
 
-namespace MetrologoWPF
+namespace Metrologo
 {
     public partial class App : Application
     {
@@ -12,16 +13,30 @@ namespace MetrologoWPF
         {
             base.OnStartup(e);
 
-            // 1. Initialise la base de données (crée le fichier et les tables si besoin)
+            Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            // Initialize DB asynchrone pour ne pas tuer le Thread UI (évite de freeze ou de crash la fenêtre noire)
             await DatabaseInitializer.InitialiserAsync();
 
             // 2. Prépare et affiche la fenêtre de connexion
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);
-            var loginWin = new LoginWindow(loginVM);
+            var loginWin = new Metrologo.Views.LoginWindow(loginVM);
 
-            // 3. Si la connexion réussit
-            if (loginWin.ShowDialog() == true)
+            loginVM.CloseAction = ok =>
+            {
+                // Si la fenêtre de login est encore ouverte, on applique la réponse
+                if (loginWin.IsVisible)
+                {
+                    loginWin.DialogResult = ok;
+                    loginWin.Close();
+                }
+            };
+
+            // L'appel bloquant ShowDialog relancera la UI après initialisation DB
+            bool? result = loginWin.ShowDialog();
+
+            if (result == true)
             {
                 // On passe l'utilisateur connecté au MainViewModel
                 var mainVM = new MainViewModel
@@ -36,12 +51,12 @@ namespace MetrologoWPF
                 };
 
                 Application.Current.MainWindow = mainWin;
+                Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
                 mainWin.Show();
             }
             else
             {
-                // Si l'utilisateur ferme la fenêtre de login, on quitte l'appli
-                Shutdown();
+                Application.Current.Shutdown();
             }
         }
     }
