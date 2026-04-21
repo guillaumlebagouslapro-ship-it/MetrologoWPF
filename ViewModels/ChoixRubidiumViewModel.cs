@@ -23,19 +23,20 @@ namespace Metrologo.ViewModels
         public bool AvecGpsResultat { get; private set; }
         public Action<bool>? CloseAction { get; set; }
 
+        public bool ListeVide => Rubidiums.Count == 0;
+
         public ChoixRubidiumViewModel()
         {
-            ChargerRubidiumsSimules();
+            ChargerRubidiums();
         }
 
-        private void ChargerRubidiumsSimules()
+        private void ChargerRubidiums()
         {
             // TODO : remplacer par une requête SQL : Select RUB_ID, RUB_ACTIF, RUB_DESIGNATION from TR_METROLOGO_RUBIDIUMS
-            Rubidiums.Add(new Rubidium { Id = 1, Designation = "FS725 - SN 12345", FrequenceMoyenne = 10000000.0 });
-            Rubidiums.Add(new Rubidium { Id = 2, Designation = "FS725 - SN 67890", FrequenceMoyenne = 10000000.0 });
-            Rubidiums.Add(new Rubidium { Id = 3, Designation = "LPRO-101 - SN 54321", FrequenceMoyenne = 10000000.0 });
-
+            Rubidiums.Add(new Rubidium { Id = 1, Designation = "Rubidium A", FrequenceMoyenne = 10000000.0 });
+            Rubidiums.Add(new Rubidium { Id = 2, Designation = "Rubidium B", FrequenceMoyenne = 10000000.0 });
             RubidiumSelectionne = Rubidiums[0];
+            OnPropertyChanged(nameof(ListeVide));
         }
 
         partial void OnAvecGPSChanged(bool value)

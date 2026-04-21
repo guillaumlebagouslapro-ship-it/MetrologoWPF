@@ -6,6 +6,8 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -59,8 +61,155 @@
             </Grid>
         </Border>
 
+        <!-- Panneau : Rubidium actif (source de vérité unique, définie ici) -->
+        <Border Grid.Row="1"
+                CornerRadius="10"
+                Padding="18,14"
+                Margin="0,0,0,20"
+                Background="White"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Width="48" Height="48" CornerRadius="12"
+                        Background="#FFDCFCE7"
+                        Margin="0,0,16,0">
+                    <ui:SymbolIcon Symbol="Timer24" FontSize="24"
+                                   Foreground="#FF16A34A"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="RÉFÉRENCE DE FRÉQUENCE"
+                               FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource AsertiOrangeBrush}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding RubidiumActifTexte}"
+                               FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Le rubidium actif est utilisé pour toutes les mesures réalisées depuis l'accueil."
+                               FontSize="11"
+                               Margin="0,2,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+
+                <Button Grid.Column="2"
+                        Command="{Binding ChoisirRubidiumCommand}"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Padding="16,10"
+                        MinWidth="170">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Timer24" FontSize="16"
+                                       Foreground="White"
+                                       Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Changer le rubidium"
+                                   VerticalAlignment="Center"
+                                   FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Panneau : Macro VBA (Metrologo.xla) -->
+        <Border Grid.Row="2"
+                CornerRadius="10"
+                Padding="18,14"
+                Margin="0,0,0,20"
+                Background="White"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Width="48" Height="48" CornerRadius="12"
+                        Margin="0,0,16,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="#FFFEE2E2"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding MacroXlaTrouve}" Value="True">
+                                    <Setter Property="Background" Value="#FFDCFCE7"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <ui:SymbolIcon HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="24">
+                        <ui:SymbolIcon.Style>
+                            <Style TargetType="ui:SymbolIcon">
+                                <Setter Property="Symbol" Value="Warning24"/>
+                                <Setter Property="Foreground" Value="#FFDC2626"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding MacroXlaTrouve}" Value="True">
+                                        <Setter Property="Symbol" Value="CheckmarkCircle24"/>
+                                        <Setter Property="Foreground" Value="#FF16A34A"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ui:SymbolIcon.Style>
+                    </ui:SymbolIcon>
+                </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="MACRO VBA (METROLOGO.XLA)"
+                               FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource AsertiOrangeBrush}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding MacroXlaChemin}"
+                               FontSize="13" FontWeight="SemiBold"
+                               FontFamily="Cascadia Mono, Consolas"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="{Binding MacroXlaStatut}"
+                               FontSize="11"
+                               Margin="0,2,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+
+                <Button Grid.Column="2"
+                        Command="{Binding OuvrirDossierMacroXLACommand}"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Padding="14,8"
+                        MinWidth="130">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Info24" FontSize="14"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Ouvrir le dossier" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="4"
+                        Command="{Binding ConfigurerMacroXLACommand}"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Padding="14,8"
+                        MinWidth="150">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="DocumentEdit24" FontSize="14"
+                                       Foreground="White"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Configurer"
+                                   Foreground="White"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
         <!-- Grille de fonctionnalités (cliquables) -->
-        <Grid Grid.Row="1" Margin="0,0,0,20">
+        <Grid Grid.Row="3" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="12"/>
@@ -153,7 +302,7 @@
         </Grid>
 
         <!-- Message d'information -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="4"
                 CornerRadius="10"
                 Padding="18,16"
                 VerticalAlignment="Top"

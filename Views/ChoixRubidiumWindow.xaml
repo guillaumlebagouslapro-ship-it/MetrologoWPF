@@ -54,6 +54,30 @@
                             <TextBlock Text="Rubidium actif" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
                         </StackPanel>
 
+                        <!-- État vide -->
+                        <Border Visibility="{Binding ListeVide, Converter={StaticResource BoolToVis}}"
+                                Background="#FFFFF7ED"
+                                BorderBrush="#FFFED7AA"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="14,12"
+                                Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Info24" FontSize="18"
+                                               Foreground="{StaticResource AsertiOrangeBrush}"
+                                               Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <StackPanel>
+                                    <TextBlock Text="Aucun rubidium configuré"
+                                               FontWeight="SemiBold" FontSize="13"
+                                               Foreground="#FF7C2D12"/>
+                                    <TextBlock Text="La liste sera chargée depuis la base de données des rubidiums."
+                                               FontSize="11"
+                                               Foreground="#FF9A3412"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <ListBox ItemsSource="{Binding Rubidiums}"
                                  SelectedItem="{Binding RubidiumSelectionne, Mode=TwoWay}"
                                  BorderThickness="0"

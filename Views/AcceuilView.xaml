@@ -24,13 +24,11 @@
         <Grid Grid.Row="1" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="12"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="12"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="12"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
@@ -154,29 +152,6 @@
                 </StackPanel>
             </Button>
 
-            <!-- Rubidium -->
-            <Button Grid.Column="8"
-                    Command="{Binding ChoisirRubidiumCommand}"
-                    Style="{StaticResource ActionCardStyle}">
-                <StackPanel>
-                    <Border Width="44" Height="44" CornerRadius="10"
-                            HorizontalAlignment="Left" Margin="0,0,0,14"
-                            Background="#FFDCFCE7">
-                        <ui:SymbolIcon Symbol="Timer24" FontSize="22"
-                                       Foreground="#FF16A34A"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="RÉFÉRENCE" FontSize="11" FontWeight="Bold"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
-                    <TextBlock Text="Rubidium"
-                               FontSize="16" FontWeight="SemiBold"
-                               Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Sélection et raccordement GPS"
-                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
-            </Button>
         </Grid>
 
         <!-- Panneau Informations Générales -->

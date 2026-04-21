@@ -87,7 +87,7 @@ namespace Metrologo.Services
                     EtapeActuelle = 1,
                     EtapesTotales = config.NbMesures + 2
                 });
-                await _excel.InitialiserRapportAsync(config.NumFI, config);
+                await _excel.InitialiserRapportAsync(config.NumFI, config, rubidium);
 
                 // Boucle de mesures
                 var valeurs = new List<double>();

@@ -32,27 +32,21 @@ namespace Metrologo.ViewModels
         public double ValRubi2 { get; private set; }
         public Action<bool>? CloseAction { get; set; }
 
-        public SaisieFreqAutresViewModel() : this(ChargerRubidiumsInactifsSimules()) { }
+        public SaisieFreqAutresViewModel() : this(new List<Rubidium>()) { }
 
         public SaisieFreqAutresViewModel(IList<Rubidium> rubidiumsInactifs)
         {
-            if (rubidiumsInactifs.Count < 2) return;
-
-            IdRubi1 = rubidiumsInactifs[0].Id;
-            LabelRubi1 = rubidiumsInactifs[0].Designation;
-
-            IdRubi2 = rubidiumsInactifs[1].Id;
-            LabelRubi2 = rubidiumsInactifs[1].Designation;
-        }
-
-        private static IList<Rubidium> ChargerRubidiumsInactifsSimules()
-        {
-            // TODO : requête SQL : Select RUB_ID, RUB_DESIGNATION from TR_METROLOGO_RUBIDIUMS where RUB_ACTIF=0 order by RUB_ID
-            return new List<Rubidium>
+            // TODO : charger depuis SQL : Select RUB_ID, RUB_DESIGNATION from TR_METROLOGO_RUBIDIUMS where RUB_ACTIF=0 order by RUB_ID
+            if (rubidiumsInactifs.Count >= 1)
             {
-                new() { Id = 2, Designation = "FS725 - SN 67890" },
-                new() { Id = 3, Designation = "LPRO-101 - SN 54321" }
-            };
+                IdRubi1 = rubidiumsInactifs[0].Id;
+                LabelRubi1 = rubidiumsInactifs[0].Designation;
+            }
+            if (rubidiumsInactifs.Count >= 2)
+            {
+                IdRubi2 = rubidiumsInactifs[1].Id;
+                LabelRubi2 = rubidiumsInactifs[1].Designation;
+            }
         }
 
         [RelayCommand]

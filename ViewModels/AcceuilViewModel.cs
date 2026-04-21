@@ -21,9 +21,8 @@ namespace Metrologo.ViewModels
 
         [ObservableProperty] private bool _estSurBaie = true;
         [ObservableProperty] private string _informationsGenerales = "Prêt. En attente d'exécution...";
-        [ObservableProperty] private string _rubidiumActifTexte = "Rubidium : Non sélectionné";
+        [ObservableProperty] private string _rubidiumActifTexte = EtatApplication.RubidiumActifTexte;
         [ObservableProperty] private Mesure _mesureConfig = new Mesure();
-        [ObservableProperty] private Rubidium? _rubidiumActif;
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(RelancerMesureCommand))]
@@ -38,26 +37,15 @@ namespace Metrologo.ViewModels
         public AccueilViewModel()
         {
             _orchestrator = new MesureOrchestrator(_ieeeService, _excelService);
+
+            // Se tient à jour si l'administrateur change le rubidium actif
+            EtatApplication.RubidiumActifChange += (_, _) =>
+            {
+                RubidiumActifTexte = EtatApplication.RubidiumActifTexte;
+            };
         }
 
         // -------- Commandes --------
-
-        [RelayCommand]
-        private void ChoisirRubidium()
-        {
-            var win = new ChoixRubidiumWindow { Owner = Application.Current.MainWindow };
-            if (win.ShowDialog() == true && win.ViewModel.Resultat != null)
-            {
-                RubidiumActif = win.ViewModel.Resultat;
-                RubidiumActifTexte = $"Rubidium : {RubidiumActif.Designation} — "
-                    + (RubidiumActif.AvecGPS ? "raccord GPS" : "raccord Allouis");
-                Log($"🎯 Rubidium actif : {RubidiumActif.Designation} ({(RubidiumActif.AvecGPS ? "GPS" : "Allouis")})");
-
-                Journal.Info(CategorieLog.Rubidium, "SELECTION_RUBIDIUM",
-                    $"{RubidiumActif.Designation} — {(RubidiumActif.AvecGPS ? "GPS" : "Allouis")}",
-                    new { id = RubidiumActif.Id, gps = RubidiumActif.AvecGPS });
-            }
-        }
 
         [RelayCommand]
         private void OuvrirConfiguration()
@@ -96,12 +84,18 @@ namespace Metrologo.ViewModels
         {
             if (MesureEnCours) return;
 
-            // 1) Rubidium obligatoire
-            if (RubidiumActif == null)
+            // 1) Rubidium obligatoire — défini uniquement dans le menu Administration
+            var rubi = EtatApplication.RubidiumActif;
+            if (rubi == null)
             {
-                Log("ℹ Sélection du rubidium requise avant de lancer une mesure.");
-                ChoisirRubidium();
-                if (RubidiumActif == null) { Log("✖ Mesure annulée (rubidium non sélectionné)."); return; }
+                Log("✖ Mesure impossible : aucun rubidium actif.");
+                Journal.Warn(CategorieLog.Mesure, "MESURE_BLOQUEE",
+                    "Tentative de mesure sans rubidium actif.");
+                MessageBox.Show(
+                    "Aucun rubidium n'est défini comme actif.\n\n"
+                    + "Un administrateur doit en définir un via le menu Administration.",
+                    "Rubidium requis", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
 
             // 2) Configuration (FI obligatoire)
@@ -144,14 +138,21 @@ namespace Metrologo.ViewModels
                 Log($"📝 Fréquence nominale : {fNominale:N3} Hz");
             }
 
-            await LancerMesureAsync(MesureConfig, RubidiumActif, fNominale, preambule: "▶ Lancement");
+            await LancerMesureAsync(MesureConfig, rubi, fNominale, preambule: "▶ Lancement");
         }
 
         [RelayCommand(CanExecute = nameof(PeutRelancer))]
         private async Task RelancerMesureAsync()
         {
-            if (MesureEnCours || !DerniereMesureDisponible || RubidiumActif == null) return;
-            await LancerMesureAsync(MesureConfig, RubidiumActif, _derniereFNominale,
+            if (MesureEnCours || !DerniereMesureDisponible) return;
+            var rubi = EtatApplication.RubidiumActif;
+            if (rubi == null)
+            {
+                MessageBox.Show("Le rubidium actif n'est plus défini.",
+                    "Impossible de relancer", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            await LancerMesureAsync(MesureConfig, rubi, _derniereFNominale,
                 preambule: "🔁 Relance (mêmes paramètres)");
         }
 
@@ -203,7 +204,6 @@ namespace Metrologo.ViewModels
                     Log($"✅ Écart-type : {result.EcartType:E3} Hz");
                     Log($"✅ Rapport Excel ouvert.");
 
-                    // Mémorise pour Relancer
                     _derniereFNominale = fNominale;
                     DerniereMesureDisponible = true;
 
@@ -215,12 +215,16 @@ namespace Metrologo.ViewModels
                 {
                     Log($"✖ Échec : {result.Erreur}");
                     Journal.Erreur(CategorieLog.Mesure, "MESURE_ECHEC", result.Erreur ?? "Échec inconnu.");
+                    MessageBox.Show(result.Erreur ?? "Erreur inconnue.",
+                        "Mesure interrompue", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
             catch (Exception ex)
             {
                 Log($"✖ Erreur inattendue : {ex.Message}");
                 Journal.Erreur(CategorieLog.Mesure, "MESURE_EXCEPTION", ex.Message, new { ex.StackTrace });
+                MessageBox.Show(ex.Message, "Erreur inattendue",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
