@@ -15,9 +15,13 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
 	<PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.4" />
 	<PackageReference Include="WPF-UI" Version="3.0.4" />
+	<PackageReference Include="NationalInstruments.Visa" Version="25.3.0.11" />
   </ItemGroup>
 	<ItemGroup>
 		<None Update="Templates\METROLOGO.xltm">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Config\Metrologo.ini">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>

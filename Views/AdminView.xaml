@@ -212,11 +212,13 @@
         <Grid Grid.Row="3" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="10"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="10"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
@@ -295,6 +297,26 @@
                     <TextBlock Text="Journal &amp; maintenance" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
                     <TextBlock Text="Logs, audit, sauvegarde"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="8"
+                    Command="{Binding OuvrirGestionAppareilsCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="40" Height="40" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,12"
+                            Background="#FFE0E7FF">
+                        <ui:SymbolIcon Symbol="Toolbox24" FontSize="20"
+                                       Foreground="#FF4338CA"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Gérer les appareils" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Catalogue des modèles enregistrés"
                                FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.ObjectModel;
+using Metrologo.Services.Config;
 
 namespace Metrologo.Models
 {
@@ -10,6 +12,21 @@ namespace Metrologo.Models
     {
         private static Rubidium? _rubidiumActif;
         private static bool _chargeDepuisPreferences;
+
+        /// <summary>Configuration des appareils IEEE chargée depuis Metrologo.ini au démarrage.</summary>
+        public static ConfigAppareils? ConfigAppareils { get; set; }
+
+        /// <summary>
+        /// Appareils actuellement détectés sur le bus GPIB (rafraîchi après chaque scan).
+        /// Utilisé par la fenêtre de Configuration pour peupler la liste des fréquencemètres.
+        /// </summary>
+        public static ObservableCollection<AppareilDetecte> AppareilsDetectes { get; } = new();
+
+        /// <summary>Levé après chaque mise à jour de <see cref="AppareilsDetectes"/>.</summary>
+        public static event EventHandler? AppareilsDetectesChange;
+
+        public static void NotifierAppareilsDetectesChange()
+            => AppareilsDetectesChange?.Invoke(null, EventArgs.Empty);
 
         public static Rubidium? RubidiumActif
         {

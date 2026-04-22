@@ -142,5 +142,17 @@ namespace Metrologo.ViewModels
             var win = new JournalViewerWindow { Owner = Application.Current.MainWindow };
             win.ShowDialog();
         }
+
+        [RelayCommand]
+        private void OuvrirGestionAppareils()
+        {
+            Journal.Info(CategorieLog.Administration, "OUVERTURE_GESTION_APPAREILS",
+                "Accès à la gestion du catalogue d'appareils.");
+
+            string utilisateur = Journal.Utilisateur ?? "admin";
+            var vm = new GestionAppareilsViewModel(utilisateur);
+            var win = new GestionAppareilsWindow(vm) { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
     }
 }

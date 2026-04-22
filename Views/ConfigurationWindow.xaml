@@ -250,10 +250,16 @@
 
                         <TextBlock Text="FRÉQUENCEMÈTRE" Style="{StaticResource FormLabelStyle}"/>
                         <ComboBox ItemsSource="{Binding Appareils}"
-                                  SelectedItem="{Binding MesureConfig.Frequencemetre}"
+                                  SelectedItem="{Binding AppareilSelectionne, Mode=TwoWay}"
+                                  DisplayMemberPath="Libelle"
                                   SelectionChanged="ComboBox_SelectionChanged"
                                   Padding="10,6"
                                   Margin="0,0,0,14"/>
+                        <TextBlock Text="Les appareils détectés sur le bus GPIB apparaissent ici automatiquement (coche verte)."
+                                   FontSize="10"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,14"/>
 
                         <!-- Paramètres de mesure (gate) -->
                         <StackPanel Visibility="{Binding ShowGateSettings, Converter={StaticResource BoolToVis}}"

@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Metrologo.Models;
 
@@ -15,8 +16,82 @@ namespace Metrologo.ViewModels
         [ObservableProperty]
         private bool _estSurBaie = true;
 
-        // Menus déroulants
-        public IEnumerable<TypeAppareilIEEE> Appareils => Enum.GetValues(typeof(TypeAppareilIEEE)).Cast<TypeAppareilIEEE>();
+        public ConfigurationViewModel()
+        {
+            EtatApplication.AppareilsDetectesChange += (_, _) => RebuildAppareils();
+            RebuildAppareils();
+        }
+
+        /// <summary>
+        /// Liste unifiée des appareils disponibles dans la dropdown :
+        /// les 3 types catalogue (Stanford/Racal/EIP) + tout appareil détecté inconnu du catalogue.
+        /// Chaque type catalogue indique s'il est actuellement branché ou non.
+        /// </summary>
+        public ObservableCollection<OptionAppareil> Appareils { get; } = new();
+
+        private void RebuildAppareils()
+        {
+            Appareils.Clear();
+
+            // 1) Types catalogue — toujours présents, marqués "détecté" si on les voit sur le bus
+            foreach (TypeAppareilIEEE type in Enum.GetValues(typeof(TypeAppareilIEEE)))
+            {
+                var det = EtatApplication.AppareilsDetectes.FirstOrDefault(a => a.TypeReconnu == type);
+                string nom = NomCatalogue(type);
+                string suffixe = det != null ? $" — {det.AdresseCourte} ✓" : "  (non connecté)";
+                Appareils.Add(new OptionAppareil
+                {
+                    Libelle = nom + suffixe,
+                    Type = type,
+                    Detecte = det
+                });
+            }
+
+            // 2) Appareils détectés qui ne correspondent à aucun type catalogue (ex: Agilent 53131A)
+            foreach (var det in EtatApplication.AppareilsDetectes.Where(a => a.TypeReconnu == null))
+            {
+                Appareils.Add(new OptionAppareil
+                {
+                    Libelle = $"{det.Libelle} ✓  (hors catalogue)",
+                    Type = null,
+                    Detecte = det
+                });
+            }
+
+            // 3) Resynchronise la sélection courante
+            OnPropertyChanged(nameof(AppareilSelectionne));
+        }
+
+        private static string NomCatalogue(TypeAppareilIEEE t) => t switch
+        {
+            TypeAppareilIEEE.Stanford => "Stanford SR620",
+            TypeAppareilIEEE.Racal    => "Racal-Dana 1996",
+            TypeAppareilIEEE.EIP      => "EIP 545",
+            _ => t.ToString()
+        };
+
+        /// <summary>
+        /// Sélection courante dans la ComboBox. Binding bidirectionnel : en lecture on retrouve l'option
+        /// qui correspond au <c>MesureConfig.Frequencemetre</c>, en écriture on met à jour ce dernier.
+        /// </summary>
+        public OptionAppareil? AppareilSelectionne
+        {
+            get => Appareils.FirstOrDefault(o => o.Type == MesureConfig.Frequencemetre)
+                   ?? Appareils.FirstOrDefault();
+            set
+            {
+                if (value == null) return;
+                if (value.Type.HasValue)
+                {
+                    MesureConfig.Frequencemetre = value.Type.Value;
+                }
+                // Si Type == null (appareil hors catalogue), on garde Frequencemetre inchangé
+                // — une prochaine étape gèrera la configuration à la volée.
+                OnPropertyChanged(nameof(MesureConfig));
+                RefreshAll();
+            }
+        }
+
         public IEnumerable<TypeMesure> TypesMesure => Enum.GetValues(typeof(TypeMesure)).Cast<TypeMesure>();
 
         public List<string> StanfordRanges => new() { "1 MΩ (A)", "50 Ω (A)", "UHF (C)" };

@@ -14,6 +14,8 @@ namespace Metrologo.Services
     {
         Task InitialiserRapportAsync(string numeroFI, Mesure configuration, Rubidium rubidium);
         Task AjouterResultatsAsync(List<double> resultats);
+        Task MettreAJourRecapFreqAsync(Mesure mesure);
+        Task MettreAJourRecapStabAsync(Mesure mesure);
         Task SauvegarderEtOuvrirAsync();
         void FermerExcel();
     }
@@ -22,9 +24,18 @@ namespace Metrologo.Services
     {
         // Nom de la feuille modèle — jamais modifiée.
         private const string NOM_MODELE = "ModFeuille";
+        private const string NOM_RECAP = "Récap.";
 
         // Première ligne de mesures dans le template
         private const int LIGNE_DEBUT_MESURES = 9;
+
+        // Zones nommées indiquant l'emplacement d'insertion des lignes Recap (cf. template xltm).
+        private const string ZN_RECAPF_DEBZONE = "ZNRecapF_DebZone";
+        private const string ZN_RECAPS_DEBZONE = "ZNRecapS_DebZone";
+
+        // Lignes de fallback si les zones ZNRecapF/S_DebZone sont absentes (valeurs par défaut du template).
+        private const int LIGNE_FALLBACK_RECAPF = 19;
+        private const int LIGNE_FALLBACK_RECAPS = 19;
 
         private XLWorkbook? _workbook;
         private IXLWorksheet? _feuilleMesure;   // feuille NOUVELLEMENT créée pour cette mesure
@@ -76,7 +87,7 @@ namespace Metrologo.Services
                 string nomFeuille = TrouverNomFeuilleUnique(config.TypeMesure);
                 _feuilleMesure = modFeuille.CopyTo(nomFeuille);
 
-                try { _feuilleMesure.Unprotect(); } catch { }
+                DeprotegerFeuille(_feuilleMesure);
 
                 _feuilleMesure.Column("B").Width = 30;
                 _feuilleMesure.Column("C").Width = 28;
@@ -178,6 +189,136 @@ namespace Metrologo.Services
             });
         }
 
+        /// <summary>
+        /// Ajoute une ligne de récapitulatif Fréquence dans la feuille <c>Récap.</c>.
+        /// Portage de <c>TfrmMain.MajRecapFreq</c> (F_Main.pas:2421) — la structure de Recap
+        /// n'est pas modifiée, seules de nouvelles lignes de données sont insérées au point
+        /// défini par la zone nommée <c>ZNRecapF_DebZone</c>.
+        /// </summary>
+        public async Task MettreAJourRecapFreqAsync(Mesure mesure)
+        {
+            if (_workbook == null || _feuilleMesure == null) return;
+            string nomFeuille = _feuilleMesure.Name;
+
+            await Task.Run(() => EcrireLigneRecap(
+                nomFeuille,
+                ZN_RECAPF_DEBZONE, LIGNE_FALLBACK_RECAPF,
+                new[]
+                {
+                    $"='{nomFeuille}'!ZNFreqMoyReel",       // Col 1 : fréquence moyenne
+                    $"='{nomFeuille}'!ZNLibGate",           // Col 2 : temps de mesure (libellé gate)
+                    $"='{nomFeuille}'!ZNFreqCorr",          // Col 3 : fréquence corrigée
+                    $"='{nomFeuille}'!ZNEcartType",         // Col 4 : écart-type
+                    null,                                    // Col 5 : fréquence indiquée (valeur directe)
+                    $"='{nomFeuille}'!ZNIncertResol",       // Col 6 : incertitude de résolution
+                    $"='{nomFeuille}'!ZNIncertSup",         // Col 7 : incertitude supplémentaire
+                    $"='{nomFeuille}'!ZNIncertAccreditee",  // Col 8 : incertitude accréditée
+                    $"='{nomFeuille}'!ZNIncertGlobale"      // Col 9 : incertitude globale
+                },
+                colValeurDirecte: 5,
+                valeurDirecte: mesure.SourceMesure == SourceMesure.Generateur
+                    ? (object)"Géné."
+                    : mesure.FNominale));
+        }
+
+        /// <summary>
+        /// Ajoute une ligne de récapitulatif Stabilité dans la feuille <c>Récap.</c>.
+        /// Portage de <c>TfrmMain.MajRecapStab</c> (F_Main.pas:2470).
+        /// </summary>
+        public async Task MettreAJourRecapStabAsync(Mesure mesure)
+        {
+            if (_workbook == null || _feuilleMesure == null) return;
+            string nomFeuille = _feuilleMesure.Name;
+
+            await Task.Run(() => EcrireLigneRecap(
+                nomFeuille,
+                ZN_RECAPS_DEBZONE, LIGNE_FALLBACK_RECAPS,
+                new[]
+                {
+                    $"='{nomFeuille}'!ZNValGateSecondes",   // Col 1 : gate en secondes
+                    $"='{nomFeuille}'!ZNFreqMoyReel",       // Col 2 : fréquence moyenne
+                    $"='{nomFeuille}'!ZNEcartType",         // Col 3 : écart-type
+                    $"='{nomFeuille}'!ZNIncertEcartType",   // Col 4 : incertitude sur l'écart-type
+                    $"='{nomFeuille}'!ZNIncertAccreditee",  // Col 5 : incertitude accréditée
+                    $"='{nomFeuille}'!ZNIncertGlobale"      // Col 6 : incertitude globale
+                }));
+        }
+
+        // Ligne d'entête des colonnes dans le template Récap. (observé dans METROLOGO.xltm).
+        // Toute nouvelle mesure est insérée juste en dessous (row 6) pour avoir "newest on top".
+        private const int LIGNE_ENTETE_RECAP = 5;
+
+        /// <summary>
+        /// Insère une nouvelle ligne en tête de la zone de données Récap. et la remplit avec
+        /// des formules cross-sheet vers la feuille de mesure. Les anciennes mesures descendent
+        /// d'une unité ; la plus récente reste ainsi toujours au sommet.
+        /// </summary>
+        private void EcrireLigneRecap(
+            string nomFeuilleMesure,
+            string zoneDebZone,
+            int ligneFallback,
+            string?[] formulesParColonne,
+            int colValeurDirecte = -1,
+            object? valeurDirecte = null)
+        {
+            if (_workbook == null) return;
+            if (!_workbook.Worksheets.Any(w => w.Name == NOM_RECAP)) return;
+
+            var recap = _workbook.Worksheet(NOM_RECAP);
+
+            DeprotegerFeuille(recap);
+
+            // 1. Nettoyage des lignes "fantômes" héritées du template : ces lignes contiennent
+            //    des formules =[0]!ZNxxx qui pointent vers ModFeuille (toujours vide) et
+            //    produisent une plage de zéros sans intérêt juste sous l'entête.
+            NettoyerLignesGhost(recap);
+
+            // 2. Insertion de la nouvelle ligne directement sous l'entête — la plus récente en haut.
+            int nouvelleLigne = LIGNE_ENTETE_RECAP + 1;
+            recap.Row(nouvelleLigne).InsertRowsAbove(1);
+
+            // 3. Remplissage des colonnes
+            for (int i = 0; i < formulesParColonne.Length; i++)
+            {
+                int col = i + 1;
+                if (col == colValeurDirecte && valeurDirecte != null)
+                {
+                    recap.Cell(nouvelleLigne, col).SetValue(XLCellValue.FromObject(valeurDirecte));
+                    continue;
+                }
+                var formule = formulesParColonne[i];
+                if (!string.IsNullOrEmpty(formule))
+                    recap.Cell(nouvelleLigne, col).FormulaA1 = formule;
+            }
+        }
+
+        /// <summary>
+        /// Supprime les lignes de la zone de données qui ne contiennent que des formules
+        /// <c>=[0]!ZNxxx</c> (placeholders du template pointant vers ModFeuille, toujours vide).
+        /// Le <c>[0]!</c> est un indicateur sans ambiguïté de ces lignes issues du template xltm.
+        /// Itération descendante pour ne pas décaler les indices pendant la suppression.
+        /// </summary>
+        private static void NettoyerLignesGhost(IXLWorksheet recap)
+        {
+            int derniereLigne = recap.LastRowUsed()?.RowNumber() ?? LIGNE_ENTETE_RECAP;
+            for (int row = derniereLigne; row > LIGNE_ENTETE_RECAP; row--)
+            {
+                if (LigneEstGhost(recap, row))
+                    recap.Row(row).Delete();
+            }
+        }
+
+        private static bool LigneEstGhost(IXLWorksheet recap, int row)
+        {
+            foreach (var cell in recap.Row(row).CellsUsed())
+            {
+                if (!cell.HasFormula) continue;
+                var f = cell.FormulaA1 ?? string.Empty;
+                if (f.Contains("[0]!")) return true;
+            }
+            return false;
+        }
+
         public async Task SauvegarderEtOuvrirAsync()
         {
             if (_workbook == null) return;
@@ -248,6 +389,25 @@ namespace Metrologo.Services
         }
 
         // ---------- Utilitaires ----------
+
+        // Mots de passe connus appliqués à ModFeuille dans les templates métier.
+        private static readonly string[] _motsDePasseFeuille = { "METROL", "metrol" };
+
+        private static void DeprotegerFeuille(IXLWorksheet feuille)
+        {
+            try { feuille.Unprotect(); return; }
+            catch { /* feuille protégée par mot de passe — on essaie ci-dessous */ }
+
+            foreach (var mdp in _motsDePasseFeuille)
+            {
+                try { feuille.Unprotect(mdp); return; }
+                catch { /* mauvais mot de passe — on essaie le suivant */ }
+            }
+
+            throw new InvalidOperationException(
+                $"Impossible de déprotéger la feuille « {feuille.Name} » : "
+                + "aucun mot de passe connu ne correspond. Vérifiez le template.");
+        }
 
         private void SetNamed(string name, object value)
         {

@@ -27,6 +27,9 @@ namespace Metrologo.Models
         public double Resolution { get; set; } = 0.01;
         public double IncertSupp { get; set; } = 0.0;
 
+        // Voie du multiplexeur (1..4). 0 = pas de multiplexeur.
+        public int VoieMux { get; set; } = 0;
+
         public Mesure()
         {
             TypeMesure = TypeMesure.Frequence;

@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Services;
+using Metrologo.Services.Ieee;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
 using System;
@@ -13,7 +14,9 @@ namespace Metrologo.ViewModels
 {
     public partial class AccueilViewModel : ObservableObject
     {
-        private readonly IIeeeService _ieeeService = new SimulationIeeeService();
+        // Driver IEEE bas niveau — pour l'instant la simulation, à remplacer par VisaIeeeDriver
+        // quand le driver NI-VISA sera branché.
+        private readonly IIeeeDriver _ieeeDriver = new SimulationIeeeDriver();
         private readonly IExcelService _excelService = new ExcelService();
         private readonly MesureOrchestrator _orchestrator;
 
@@ -36,7 +39,7 @@ namespace Metrologo.ViewModels
 
         public AccueilViewModel()
         {
-            _orchestrator = new MesureOrchestrator(_ieeeService, _excelService);
+            _orchestrator = new MesureOrchestrator(_ieeeDriver, _excelService);
 
             // Se tient à jour si l'administrateur change le rubidium actif
             EtatApplication.RubidiumActifChange += (_, _) =>
@@ -46,6 +49,15 @@ namespace Metrologo.ViewModels
         }
 
         // -------- Commandes --------
+
+        [RelayCommand]
+        private void OuvrirDiagnosticGpib()
+        {
+            Journal.Info(CategorieLog.Systeme, "OUVERTURE_DIAGNOSTIC_GPIB",
+                "Accès au diagnostic du bus GPIB depuis l'accueil.");
+            var win = new DiagnosticGpibWindow { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
 
         [RelayCommand]
         private void OuvrirConfiguration()
@@ -110,10 +122,15 @@ namespace Metrologo.ViewModels
                 }
             }
 
-            // 3) Sélection du gate / procédure
-            var gateWin = new SelectionGateWindow(MesureConfig) { Owner = Application.Current.MainWindow };
-            if (gateWin.ShowDialog() != true) { Log("✖ Mesure annulée (gate)."); return; }
-            MesureConfig.GateIndex = gateWin.ViewModel.IndexGateResultat;
+            // 3) Gate — déjà sélectionné dans la fenêtre Configuration (MesureConfig.GateIndex).
+            //    Pour les mesures de Stabilité avec procédure auto (sentinelles -1 / -2 / -3),
+            //    on ouvre quand même le dialogue car la Configuration ne gère pas encore ces procédures.
+            if (MesureConfig.TypeMesure == TypeMesure.Stabilite)
+            {
+                var gateWin = new SelectionGateWindow(MesureConfig) { Owner = Application.Current.MainWindow };
+                if (gateWin.ShowDialog() != true) { Log("✖ Mesure annulée (procédure)."); return; }
+                MesureConfig.GateIndex = gateWin.ViewModel.IndexGateResultat;
+            }
             Log($"⏱ Gate : index {MesureConfig.GateIndex}");
 
             // 4) Saisie fréquence nominale si mode Indirect ou source Générateur
