@@ -59,6 +59,13 @@ namespace Metrologo.Services.Ieee
         public Task DefinirRemoteLocalAsync(int adresse, bool remote, CancellationToken ct = default)
             => Task.CompletedTask;
 
+        public void ReinitialiserSessions()
+        {
+            // Pas de session persistante à invalider en mode simulation.
+            _derniereCommande.Clear();
+            _gateSecondes.Clear();
+        }
+
         // --------------- Internes ---------------
 
         private static bool EstCommandeMesure(string cmd)

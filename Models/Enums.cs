@@ -36,4 +36,15 @@ namespace Metrologo.Models
         Simulation,
         Validation
     }
+
+    /// <summary>
+    /// Voie active sur laquelle porte la mesure. Seuls les réglages (impédance, couplage, filtre, trigger)
+    /// de cette voie seront appliqués à l'appareil — les autres voies restent intactes.
+    /// </summary>
+    public enum VoieActive
+    {
+        A,
+        B,
+        C
+    }
 }

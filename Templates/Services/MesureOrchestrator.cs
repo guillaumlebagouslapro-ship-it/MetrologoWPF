@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Metrologo.Models;
+using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;
@@ -63,15 +65,35 @@ namespace Metrologo.Services
 
             try
             {
-                // 1. Résolution de l'appareil depuis la config chargée depuis Metrologo.ini
-                var configApp = EtatApplication.ConfigAppareils;
-                if (configApp == null)
+                // 0. Réinitialise les sessions GPIB cachées par le driver VISA — évite les
+                //    timeouts quand un appareil a été éteint/rallumé entre deux mesures.
+                _driver.ReinitialiserSessions();
+
+                // 1. Résolution de l'appareil :
+                //    - priorité au catalogue local si mesure.IdModeleCatalogue est défini (ex: Agilent 53131A)
+                //    - sinon fallback sur Metrologo.ini (Stanford / Racal / EIP historiques)
+                AppareilIEEE appareil;
+                if (!string.IsNullOrWhiteSpace(mesure.IdModeleCatalogue))
                 {
-                    result.Erreur = "Configuration des appareils non chargée. "
-                        + "Vérifiez que Metrologo.ini est présent dans le dossier Config.";
-                    return result;
+                    var (appareilCatalogue, erreur) = ResolverDepuisCatalogue(mesure.IdModeleCatalogue);
+                    if (appareilCatalogue == null)
+                    {
+                        result.Erreur = erreur;
+                        return result;
+                    }
+                    appareil = appareilCatalogue;
                 }
-                var appareil = configApp.Par(mesure.Frequencemetre);
+                else
+                {
+                    var configApp = EtatApplication.ConfigAppareils;
+                    if (configApp == null)
+                    {
+                        result.Erreur = "Configuration des appareils non chargée. "
+                            + "Vérifiez que Metrologo.ini est présent dans le dossier Config.";
+                        return result;
+                    }
+                    appareil = configApp.Par(mesure.Frequencemetre);
+                }
 
                 progress?.Report(new ProgressionMesure
                 {
@@ -84,7 +106,39 @@ namespace Metrologo.Services
                 await appareil.InitialiserAsync(_driver, ct);
 
                 // 3. Configuration : IFC + MUX + ConfEntree + activation SRQ
-                await appareil.ConfigurerAsync(_driver, mesure, configApp.Mux, commandesMux: null, ct);
+                //    MUX uniquement disponible pour les appareils legacy (chargé depuis Metrologo.ini).
+                var mux = EtatApplication.ConfigAppareils?.Mux;
+                await appareil.ConfigurerAsync(_driver, mesure, mux, commandesMux: null, ct);
+
+                // 3 bis. Rejoue les commandes SCPI des réglages dynamiques choisis dans Configuration
+                //        (Impédance, Couplage, Filtre, Trigger, Mode…). Sans ça le *RST de la ChaineInit
+                //        efface tous les réglages que l'utilisateur a validés avant de lancer la mesure.
+                //        Chaque commande est wrappée : si une timeout, on logge et on continue les
+                //        suivantes (plutôt que de planter toute la mesure). Un petit délai entre
+                //        commandes évite de saturer le handshake GPIB sur les appareils lents.
+                if (mesure.CommandesScpiReglages != null && mesure.CommandesScpiReglages.Count > 0)
+                {
+                    foreach (var cmd in mesure.CommandesScpiReglages)
+                    {
+                        if (string.IsNullOrWhiteSpace(cmd)) continue;
+
+                        try
+                        {
+                            await _driver.EcrireAsync(appareil.Adresse, cmd, appareil.WriteTerm, ct);
+                            JournalLog.Info(CategorieLog.Mesure, "SCPI_REJEU",
+                                $"GPIB0::{appareil.Adresse} ← {cmd} (réapplication post-RST)");
+                        }
+                        catch (Ivi.Visa.IOTimeoutException)
+                        {
+                            JournalLog.Warn(CategorieLog.Mesure, "SCPI_REJEU_TIMEOUT",
+                                $"Timeout sur l'envoi de « {cmd } » à GPIB0::{appareil.Adresse} — "
+                                + "commande ignorée, la mesure continue.");
+                        }
+
+                        // Laisse l'appareil digérer (50 ms est un compromis testé pour 53131A / Stanford SR620).
+                        await Task.Delay(50, ct);
+                    }
+                }
 
                 // Saisie de la fréquence nominale si nécessaire
                 if (fNominaleOuReference.HasValue)
@@ -111,14 +165,18 @@ namespace Metrologo.Services
                 });
                 await appareil.AppliquerGateAsync(_driver, mesure.GateIndex, mesure.TypeMesure, ct);
 
-                // 6. Boucle de mesures
+                // 6. Boucle de mesures — on mémorise le timestamp RÉEL juste après chaque lecture
+                //    GPIB pour qu'Excel affiche les vrais horodatages (et non une heure + i secondes
+                //    factice calculée à la fin).
                 var valeurs = new List<double>();
+                var horodatages = new List<DateTime>();
                 for (int i = 0; i < mesure.NbMesures; i++)
                 {
                     ct.ThrowIfCancellationRequested();
 
                     double val = await appareil.MesurerAsync(_driver, mesure, ct);
                     valeurs.Add(val);
+                    horodatages.Add(DateTime.Now);
 
                     progress?.Report(new ProgressionMesure
                     {
@@ -154,7 +212,7 @@ namespace Metrologo.Services
                     EtapeActuelle = mesure.NbMesures + 3,
                     EtapesTotales = mesure.NbMesures + 3
                 });
-                await _excel.AjouterResultatsAsync(valeurs);
+                await _excel.AjouterResultatsAsync(valeurs, horodatages);
                 await _excel.SauvegarderEtOuvrirAsync();
 
                 JournalLog.Info(CategorieLog.Mesure, "Execute",
@@ -180,6 +238,32 @@ namespace Metrologo.Services
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Retrouve le modèle catalogue + l'adresse GPIB détectée sur le bus, et construit
+        /// un <see cref="AppareilIEEE"/> via <see cref="CatalogueAdapter"/>. Retourne un message
+        /// d'erreur explicite si le modèle est introuvable ou si l'appareil n'est pas détecté.
+        /// </summary>
+        private static (AppareilIEEE?, string?) ResolverDepuisCatalogue(string idModele)
+        {
+            var modele = CatalogueAppareilsService.Instance.Modeles
+                .FirstOrDefault(m => m.Id == idModele);
+            if (modele == null)
+            {
+                return (null, $"Le modèle catalogue « {idModele} » est introuvable. "
+                    + "Le catalogue a peut-être été modifié — rouvrez la Configuration.");
+            }
+
+            var detecte = EtatApplication.AppareilsDetectes
+                .FirstOrDefault(d => modele.Correspond(d.Fabricant, d.Modele));
+            if (detecte == null)
+            {
+                return (null, $"Le modèle « {modele.Nom } » n'est pas détecté sur le bus GPIB. "
+                    + "Lancez un scan depuis Diagnostic GPIB pour le retrouver.");
+            }
+
+            return (CatalogueAdapter.VersAppareilIEEE(modele, detecte.Adresse), null);
         }
     }
 }

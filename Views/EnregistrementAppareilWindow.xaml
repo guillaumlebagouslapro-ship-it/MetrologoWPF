@@ -2,8 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:vm="clr-namespace:Metrologo.ViewModels"
         Title="Enregistrer un appareil"
-        Height="720" Width="720"
+        Height="820" Width="760"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
         ExtendsContentIntoTitleBar="True">
@@ -83,101 +84,353 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Commandes SCPI -->
+                <!-- Commandes de base : init, mesure, gate. Les valeurs par défaut conviennent à la
+                     majorité des fréquencemètres SCPI modernes. À adapter pour un appareil exotique. -->
                 <Border Style="{StaticResource FormSectionStyle}">
                     <StackPanel>
-                        <TextBlock Text="Commandes SCPI / IEEE" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Commandes de base"
+                                   Style="{StaticResource SectionTitleStyle}"/>
 
-                        <TextBlock Text="CHAÎNE D'INITIALISATION" Style="{StaticResource FormLabelStyle}"/>
-                        <TextBox Text="{Binding ChaineInit, UpdateSourceTrigger=PropertyChanged}"
-                                 FontFamily="Cascadia Mono, Consolas" Padding="10,6" Margin="0,0,0,12"/>
+                        <TextBlock TextWrapping="Wrap"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Margin="0,0,0,10">
+                            <Run Text="Valeurs SCPI standard pré-remplies. Pour la plupart des fréquencemètres modernes, rien à changer. Consulte la doc de ton appareil si les mesures ne partent pas."/>
+                        </TextBlock>
 
-                        <TextBlock Text="CONFIGURATION D'ENTRÉE (optionnel)" Style="{StaticResource FormLabelStyle}"/>
-                        <TextBox Text="{Binding ConfEntree, UpdateSourceTrigger=PropertyChanged}"
-                                 FontFamily="Cascadia Mono, Consolas" Padding="10,6" Margin="0,0,0,12"/>
+                        <TextBlock Text="CHAÎNE D'INITIALISATION (envoyée au début de chaque mesure)"
+                                   Style="{StaticResource FormLabelStyle}"/>
+                        <ui:TextBox Text="{Binding ChaineInit, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="*RST;*CLS"
+                                    FontFamily="Cascadia Mono, Consolas"
+                                    Padding="8,4" Margin="0,0,0,12"/>
 
                         <TextBlock Text="COMMANDE DE MESURE (déclenche et retourne la valeur)"
                                    Style="{StaticResource FormLabelStyle}"/>
-                        <TextBox Text="{Binding ExeMesure, UpdateSourceTrigger=PropertyChanged}"
-                                 FontFamily="Cascadia Mono, Consolas" Padding="10,6" Margin="0,0,0,12"/>
+                        <ui:TextBox Text="{Binding ExeMesure, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText=":READ?"
+                                    FontFamily="Cascadia Mono, Consolas"
+                                    Padding="8,4" Margin="0,0,0,12"/>
 
-                        <TextBlock Text="COMMANDE POUR PROGRAMMER LE GATE — utiliser {0} pour le temps en secondes"
+                        <TextBlock Text="COMMANDE DE GATE (template, {0} = temps en secondes)"
                                    Style="{StaticResource FormLabelStyle}"/>
-                        <TextBox Text="{Binding CommandeGate, UpdateSourceTrigger=PropertyChanged}"
-                                 FontFamily="Cascadia Mono, Consolas" Padding="10,6" Margin="0,0,0,12"/>
+                        <ui:TextBox Text="{Binding CommandeGate, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText=":FREQ:APER {0}"
+                                    FontFamily="Cascadia Mono, Consolas"
+                                    Padding="8,4" Margin="0,0,0,12"/>
+
+                        <TextBlock Text="TEMPS DE PORTE DISPONIBLES (séparés par virgules, ex: 10 ms, 100 ms, 1 s, 10 s)"
+                                   Style="{StaticResource FormLabelStyle}"/>
+                        <ui:TextBox Text="{Binding GatesTexte, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="10 ms, 100 ms, 1 s, 10 s"
+                                    Padding="8,4"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Terminateurs et SRQ -->
+                <!-- Réglages fréquencemètre : formulaire structuré (voies A, B, C + modes) -->
                 <Border Style="{StaticResource FormSectionStyle}">
                     <StackPanel>
-                        <TextBlock Text="Terminateurs et SRQ" Style="{StaticResource SectionTitleStyle}"/>
-
-                        <Grid Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="10"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="10"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="TERM WRITE" Style="{StaticResource FormLabelStyle}"/>
-                                <TextBox Text="{Binding TermWrite}" Padding="10,6"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="TERM READ" Style="{StaticResource FormLabelStyle}"/>
-                                <TextBox Text="{Binding TermRead}" Padding="10,6"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="4">
-                                <TextBlock Text="TAILLE HEADER" Style="{StaticResource FormLabelStyle}"/>
-                                <TextBox Text="{Binding TailleHeader}" Padding="10,6"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <CheckBox Content="L'appareil gère le SRQ (Service Request)"
-                                  IsChecked="{Binding GereSrq}" Margin="0,0,0,10"/>
-
-                        <Grid Visibility="{Binding GereSrq, Converter={StaticResource BoolToVis}}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="10"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="COMMANDE SRQ ON" Style="{StaticResource FormLabelStyle}"/>
-                                <TextBox Text="{Binding SrqOn}"
-                                         FontFamily="Cascadia Mono, Consolas" Padding="10,6"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="COMMANDE SRQ OFF" Style="{StaticResource FormLabelStyle}"/>
-                                <TextBox Text="{Binding SrqOff}"
-                                         FontFamily="Cascadia Mono, Consolas" Padding="10,6"/>
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <!-- Options UI -->
-                <Border Style="{StaticResource FormSectionStyle}">
-                    <StackPanel>
-                        <TextBlock Text="Options pour la fenêtre de configuration"
+                        <TextBlock Text="Réglages fréquencemètre"
                                    Style="{StaticResource SectionTitleStyle}"/>
 
-                        <TextBlock Text="TEMPS DE PORTE DISPONIBLES (séparés par virgules)"
-                                   Style="{StaticResource FormLabelStyle}"/>
-                        <TextBox Text="{Binding GatesTexte, UpdateSourceTrigger=PropertyChanged}"
-                                 Padding="10,6" Margin="0,0,0,12"/>
+                        <TextBlock TextWrapping="Wrap"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Margin="0,0,0,14">
+                            <Run Text="Remplis uniquement les commandes SCPI dont ton appareil a besoin."/>
+                            <LineBreak/>
+                            <Run Text="Tout champ laissé vide sera automatiquement masqué dans la fenêtre Configuration."/>
+                            <LineBreak/>
+                            <Run Text="Pour le Trigger, le template doit contenir {0} à l'emplacement de la valeur en volts."/>
+                        </TextBlock>
 
-                        <TextBlock Text="ENTRÉES / CANAUX (séparés par virgules, vide = pas de choix)"
-                                   Style="{StaticResource FormLabelStyle}"/>
-                        <TextBox Text="{Binding EntreesTexte, UpdateSourceTrigger=PropertyChanged}"
-                                 Padding="10,6" Margin="0,0,0,12"/>
+                        <!-- ============ Voie A ============ -->
+                        <Border BorderBrush="{StaticResource AsertiNavyLightBrush}"
+                                BorderThickness="0,0,0,2"
+                                Margin="0,0,0,8">
+                            <TextBlock Text="VOIE A / CANAL 1"
+                                       FontSize="12" FontWeight="Bold"
+                                       Foreground="{StaticResource AsertiNavyBrush}"
+                                       Margin="0,0,0,6"/>
+                        </Border>
 
-                        <TextBlock Text="COUPLAGES (séparés par virgules, vide = pas de choix)"
-                                   Style="{StaticResource FormLabelStyle}"/>
-                        <TextBox Text="{Binding CouplagesTexte, UpdateSourceTrigger=PropertyChanged}"
-                                 Padding="10,6"/>
+                        <Grid Margin="0,4,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Label"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Impédance"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="1"
+                                        Text="{Binding ImpedanceA50, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="50 Ω → :INP1:IMP 50"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="3"
+                                        Text="{Binding ImpedanceA1M, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="1 MΩ → :INP1:IMP 1E6"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Couplage"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="1"
+                                        Text="{Binding CouplageAAc, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="AC → :INP1:COUP AC"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="3"
+                                        Text="{Binding CouplageADc, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="DC → :INP1:COUP DC"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Filtre"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="1"
+                                        Text="{Binding FiltreAOn, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ON → :INP1:FILT ON"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="3"
+                                        Text="{Binding FiltreAOff, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="OFF → :INP1:FILT OFF"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                        </Grid>
+
+                        <TextBlock Text="Trigger (template, {0} = valeur en volts)"
+                                   FontSize="11" FontWeight="SemiBold"
+                                   Margin="0,0,0,4"/>
+                        <ui:TextBox Text="{Binding TriggerA, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText=":SENS:EVEN1:LEV {0}"
+                                    FontFamily="Cascadia Mono, Consolas"
+                                    Padding="8,4" Margin="0,0,0,16"/>
+
+                        <!-- ============ Voie B ============ -->
+                        <Border BorderBrush="{StaticResource AsertiNavyLightBrush}"
+                                BorderThickness="0,0,0,2"
+                                Margin="0,0,0,8">
+                            <TextBlock Text="VOIE B / CANAL 2"
+                                       FontSize="12" FontWeight="Bold"
+                                       Foreground="{StaticResource AsertiNavyBrush}"
+                                       Margin="0,0,0,6"/>
+                        </Border>
+
+                        <Grid Margin="0,4,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Label"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Impédance"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="1"
+                                        Text="{Binding ImpedanceB50, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="50 Ω → :INP2:IMP 50"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="3"
+                                        Text="{Binding ImpedanceB1M, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="1 MΩ → :INP2:IMP 1E6"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Couplage"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="1"
+                                        Text="{Binding CouplageBAc, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="AC → :INP2:COUP AC"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="3"
+                                        Text="{Binding CouplageBDc, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="DC → :INP2:COUP DC"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Filtre"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="1"
+                                        Text="{Binding FiltreBOn, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ON → :INP2:FILT ON"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="3"
+                                        Text="{Binding FiltreBOff, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="OFF → :INP2:FILT OFF"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                        </Grid>
+
+                        <TextBlock Text="Trigger (template, {0} = valeur en volts)"
+                                   FontSize="11" FontWeight="SemiBold"
+                                   Margin="0,0,0,4"/>
+                        <ui:TextBox Text="{Binding TriggerB, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText=":SENS:EVEN2:LEV {0}"
+                                    FontFamily="Cascadia Mono, Consolas"
+                                    Padding="8,4" Margin="0,0,0,16"/>
+
+                        <!-- ============ Voie C (optionnelle, pour appareils avec 3e voie HF) ============ -->
+                        <Border BorderBrush="{StaticResource AsertiNavyLightBrush}"
+                                BorderThickness="0,0,0,2"
+                                Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="VOIE C / CANAL 3"
+                                           FontSize="12" FontWeight="Bold"
+                                           Foreground="{StaticResource AsertiNavyBrush}"
+                                           Margin="0,0,0,6"/>
+                                <TextBlock Text="(optionnelle — pour appareils équipés d'une voie HF)"
+                                           FontSize="10" FontStyle="Italic"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                           Margin="8,0,0,6"
+                                           VerticalAlignment="Bottom"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,4,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Label"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Impédance"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="1"
+                                        Text="{Binding ImpedanceC50, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="50 Ω → :INP3:IMP 50"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="3"
+                                        Text="{Binding ImpedanceC1M, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="1 MΩ → :INP3:IMP 1E6"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Couplage"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="1"
+                                        Text="{Binding CouplageCAc, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="AC → :INP3:COUP AC"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="3"
+                                        Text="{Binding CouplageCDc, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="DC → :INP3:COUP DC"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Filtre"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="1"
+                                        Text="{Binding FiltreCOn, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ON → :INP3:FILT ON"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="3"
+                                        Text="{Binding FiltreCOff, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="OFF → :INP3:FILT OFF"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                        </Grid>
+
+                        <TextBlock Text="Trigger (template, {0} = valeur en volts)"
+                                   FontSize="11" FontWeight="SemiBold"
+                                   Margin="0,0,0,4"/>
+                        <ui:TextBox Text="{Binding TriggerC, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText=":SENS:EVEN3:LEV {0}"
+                                    FontFamily="Cascadia Mono, Consolas"
+                                    Padding="8,4" Margin="0,0,0,16"/>
+
+                        <!-- ============ Modes de mesure ============ -->
+                        <Border BorderBrush="{StaticResource AsertiNavyLightBrush}"
+                                BorderThickness="0,0,0,2"
+                                Margin="0,0,0,8">
+                            <TextBlock Text="MODES DE MESURE"
+                                       FontSize="12" FontWeight="Bold"
+                                       Foreground="{StaticResource AsertiNavyBrush}"
+                                       Margin="0,0,0,6"/>
+                        </Border>
+
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Mode FREQ Voie A"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="1"
+                                        Text="{Binding ModeFreqA, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":FUNC &quot;FREQ 1&quot;"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Mode FREQ Voie B"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="1"
+                                        Text="{Binding ModeFreqB, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":FUNC &quot;FREQ 2&quot;"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Mode FREQ Voie C"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="1"
+                                        Text="{Binding ModeFreqC, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":FUNC &quot;FREQ 3&quot; (optionnel)"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Mode TIAB"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="3" Grid.Column="1"
+                                        Text="{Binding ModeTiab, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":FUNC &quot;TINT 1,2&quot;"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                        </Grid>
                     </StackPanel>
                 </Border>
 

@@ -155,28 +155,56 @@
             </Button>
 
             <!-- Diagnostic GPIB -->
-            <Button Grid.Column="8"
-                    Command="{Binding OuvrirDiagnosticGpibCommand}"
-                    Style="{StaticResource ActionCardStyle}">
-                <StackPanel>
-                    <Border Width="44" Height="44" CornerRadius="10"
-                            HorizontalAlignment="Left" Margin="0,0,0,14"
-                            Background="#FFDCFCE7">
-                        <ui:SymbolIcon Symbol="PlugConnected24" FontSize="22"
-                                       Foreground="#FF16A34A"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="APPAREILS" FontSize="11" FontWeight="Bold"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
-                    <TextBlock Text="Diagnostic GPIB"
-                               FontSize="16" FontWeight="SemiBold"
-                               Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Détecter les appareils branchés sur le bus"
-                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
-            </Button>
+            <Grid Grid.Column="8">
+                <Button Command="{Binding OuvrirDiagnosticGpibCommand}"
+                        Style="{StaticResource ActionCardStyle}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,14">
+                            <Border Width="44" Height="44" CornerRadius="10"
+                                    HorizontalAlignment="Left"
+                                    Background="#FFDCFCE7">
+                                <ui:SymbolIcon Symbol="PlugConnected24" FontSize="22"
+                                               Foreground="#FF16A34A"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                            </Border>
+                            <!-- Badge compteur : nombre d'appareils détectés sur le bus -->
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    MinWidth="26" Height="22" CornerRadius="11"
+                                    Padding="8,0"
+                                    Background="{StaticResource AsertiOrangeBrush}">
+                                <TextBlock Text="{Binding NbAppareilsDetectes}"
+                                           Foreground="White"
+                                           FontWeight="Bold" FontSize="12"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                        <TextBlock Text="APPAREILS" FontSize="11" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                        <TextBlock Text="Diagnostic GPIB"
+                                   FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{StaticResource AsertiNavyBrush}"/>
+                        <TextBlock Text="{Binding ResumeScanGpib}"
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- Bouton Rescanner en bas à droite de la carte : relance un scan sans ouvrir Diagnostic -->
+                <Button Command="{Binding RescannerCommand}"
+                        ToolTip="Relancer un scan GPIB maintenant"
+                        Cursor="Hand"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                        Margin="0,0,8,8"
+                        Padding="6"
+                        Background="White"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="14"
+                                   Foreground="#FF16A34A"/>
+                </Button>
+            </Grid>
 
         </Grid>
 
@@ -198,31 +226,58 @@
                         BorderThickness="0,0,0,1"
                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                         Background="{DynamicResource LayerFillColorDefaultBrush}">
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="28" Height="28" CornerRadius="6"
-                                Background="{StaticResource AsertiNavyBrush}"
-                                Margin="0,0,10,0">
-                            <ui:SymbolIcon Symbol="DocumentBulletList24" FontSize="16"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                        </Border>
-                        <TextBlock Text="Informations générales"
-                                   FontSize="15" FontWeight="SemiBold"
-                                   Foreground="{StaticResource AsertiNavyBrush}"
-                                   VerticalAlignment="Center"/>
-                        <Border Background="#FFDCFCE7" CornerRadius="10"
-                                Padding="8,2" Margin="14,0,0,0"
-                                VerticalAlignment="Center">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <Border Width="28" Height="28" CornerRadius="6"
+                                    Background="{StaticResource AsertiNavyBrush}"
+                                    Margin="0,0,10,0">
+                                <ui:SymbolIcon Symbol="DocumentBulletList24" FontSize="16"
+                                               Foreground="White"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Informations générales"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{StaticResource AsertiNavyBrush}"
+                                       VerticalAlignment="Center"/>
+                            <Border Background="#FFDCFCE7" CornerRadius="10"
+                                    Padding="8,2" Margin="14,0,0,0"
+                                    VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="6" Height="6" Fill="#FF16A34A"
+                                             VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Prêt" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="#FF166534"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Bouton : ouvre le dossier Documents\Metrologo dans l'Explorateur -->
+                        <Button Grid.Column="1"
+                                Command="{Binding OuvrirDossierMesuresCommand}"
+                                ToolTip="Ouvrir le dossier contenant les fichiers Excel de mesure"
+                                Cursor="Hand"
+                                Padding="10,6"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Background="White">
                             <StackPanel Orientation="Horizontal">
-                                <Ellipse Width="6" Height="6" Fill="#FF16A34A"
-                                         VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="Prêt" FontSize="11" FontWeight="SemiBold"
-                                           Foreground="#FF166534"
+                                <ui:SymbolIcon Symbol="FolderOpen24" FontSize="14"
+                                               Foreground="{StaticResource AsertiNavyBrush}"
+                                               Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Dossier des mesures"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{StaticResource AsertiNavyBrush}"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
-                        </Border>
-                    </StackPanel>
+                        </Button>
+                    </Grid>
                 </Border>
 
                 <TextBox Grid.Row="1"

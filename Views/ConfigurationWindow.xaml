@@ -13,6 +13,53 @@
     <ui:FluentWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+
+        <!-- DataTemplate unique pour un réglage dynamique — rendu switch entre Radio/ComboBox/TextBox
+             selon EstBinaire / EstChoixMultiple / EstNumerique. -->
+        <DataTemplate x:Key="ReglageTemplate">
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock Text="{Binding Nom}"
+                           Style="{StaticResource FormLabelStyle}"/>
+
+                <!-- Binaire (2 options) : deux RadioButtons -->
+                <StackPanel Orientation="Horizontal"
+                            Visibility="{Binding EstBinaire, Converter={StaticResource BoolToVis}}">
+                    <RadioButton Content="{Binding LibellePremiereOption}"
+                                 IsChecked="{Binding EstPremiereOption, Mode=TwoWay}"
+                                 GroupName="{Binding GroupeRadio}"
+                                 FontWeight="SemiBold"
+                                 Margin="0,0,20,0"/>
+                    <RadioButton Content="{Binding LibelleSecondeOption}"
+                                 IsChecked="{Binding EstSecondeOption, Mode=TwoWay}"
+                                 GroupName="{Binding GroupeRadio}"
+                                 FontWeight="SemiBold"/>
+                </StackPanel>
+
+                <!-- Choix 3+ options : ComboBox -->
+                <ComboBox ItemsSource="{Binding Options}"
+                          SelectedItem="{Binding OptionSelectionnee, Mode=TwoWay}"
+                          DisplayMemberPath="Libelle"
+                          Padding="10,6"
+                          Visibility="{Binding EstChoixMultiple, Converter={StaticResource BoolToVis}}"/>
+
+                <!-- Numerique (Trigger) : TextBox + unité -->
+                <Grid Visibility="{Binding EstNumerique, Converter={StaticResource BoolToVis}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Grid.Column="0"
+                                Text="{Binding Valeur, UpdateSourceTrigger=PropertyChanged}"
+                                Padding="10,6"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Unite}"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
     </ui:FluentWindow.Resources>
 
     <Grid>
@@ -280,7 +327,7 @@
                                           IsChecked="{Binding MesureConfig.InitManu}"
                                           Margin="0,0,0,12"/>
 
-                                <StackPanel Visibility="{Binding IsStanford, Converter={StaticResource BoolToVis}}"
+                                <StackPanel Visibility="{Binding AfficherGammeStanford, Converter={StaticResource BoolToVis}}"
                                             Margin="0,0,0,10">
                                     <TextBlock Text="GAMME D'ENTRÉE" Style="{StaticResource FormLabelStyle}"/>
                                     <ComboBox ItemsSource="{Binding StanfordRanges}"
@@ -289,7 +336,7 @@
                                               Padding="10,6"/>
                                 </StackPanel>
 
-                                <StackPanel Visibility="{Binding IsRacal, Converter={StaticResource BoolToVis}}"
+                                <StackPanel Visibility="{Binding AfficherGammeRacal, Converter={StaticResource BoolToVis}}"
                                             Margin="0,0,0,10">
                                     <TextBlock Text="ENTRÉE SÉLECTIONNÉE" Style="{StaticResource FormLabelStyle}"/>
                                     <ComboBox ItemsSource="{Binding RacalRanges}"
@@ -298,7 +345,7 @@
                                               Padding="10,6"/>
                                 </StackPanel>
 
-                                <StackPanel Visibility="{Binding IsEip, Converter={StaticResource BoolToVis}}"
+                                <StackPanel Visibility="{Binding AfficherGammeEip, Converter={StaticResource BoolToVis}}"
                                             Margin="0,0,0,10">
                                     <TextBlock Text="BANDE DE FRÉQUENCE" Style="{StaticResource FormLabelStyle}"/>
                                     <ComboBox ItemsSource="{Binding EipRanges}"
@@ -314,6 +361,124 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
+
+                        <!-- Réglages dynamiques définis dans le catalogue : regroupés par voie + mode
+                             pour un rendu structuré. RadioButtons pour les choix binaires, ComboBox sinon. -->
+                        <StackPanel Visibility="{Binding AReglagesDynamiques, Converter={StaticResource BoolToVis}}"
+                                    Margin="0,12,0,0">
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <ui:SymbolIcon Symbol="Options24" FontSize="16"
+                                               Foreground="{StaticResource AsertiOrangeBrush}"
+                                               Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Réglages spécifiques à l'appareil"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource AsertiNavyBrush}"/>
+                            </StackPanel>
+
+                            <!-- Sélection de la voie active : seuls les réglages de la voie choisie
+                                 seront envoyés à l'appareil. Évite de modifier une voie non utilisée. -->
+                            <Border Background="{DynamicResource LayerFillColorDefaultBrush}"
+                                    CornerRadius="6"
+                                    Padding="14"
+                                    Margin="0,0,0,8">
+                                <StackPanel>
+                                    <TextBlock Text="VOIE ACTIVE"
+                                               FontSize="12" FontWeight="Bold"
+                                               Foreground="{StaticResource AsertiNavyBrush}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="Choisis la voie sur laquelle la mesure sera effectuée. Seuls ses réglages seront envoyés à l'appareil."
+                                               FontSize="10"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Margin="0,0,0,10"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Content="Voie A"
+                                                     IsChecked="{Binding EstVoieA, Mode=TwoWay}"
+                                                     IsEnabled="{Binding AReglagesVoieA}"
+                                                     GroupName="VoieActive"
+                                                     FontWeight="SemiBold"
+                                                     Margin="0,0,24,0"/>
+                                        <RadioButton Content="Voie B"
+                                                     IsChecked="{Binding EstVoieB, Mode=TwoWay}"
+                                                     IsEnabled="{Binding AReglagesVoieB}"
+                                                     GroupName="VoieActive"
+                                                     FontWeight="SemiBold"
+                                                     Margin="0,0,24,0"/>
+                                        <RadioButton Content="Voie C"
+                                                     IsChecked="{Binding EstVoieC, Mode=TwoWay}"
+                                                     IsEnabled="{Binding AReglagesVoieC}"
+                                                     GroupName="VoieActive"
+                                                     FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Voie A - visible uniquement si la voie A est active -->
+                            <Border Background="{DynamicResource LayerFillColorDefaultBrush}"
+                                    CornerRadius="6"
+                                    Padding="14"
+                                    Margin="0,0,0,8"
+                                    Visibility="{Binding AfficherVoieA, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="VOIE A"
+                                               FontSize="12" FontWeight="Bold"
+                                               Foreground="{StaticResource AsertiNavyBrush}"
+                                               Margin="0,0,0,10"/>
+                                    <ItemsControl ItemsSource="{Binding ReglagesVoieA}"
+                                                  ItemTemplate="{StaticResource ReglageTemplate}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Voie B - visible uniquement si la voie B est active -->
+                            <Border Background="{DynamicResource LayerFillColorDefaultBrush}"
+                                    CornerRadius="6"
+                                    Padding="14"
+                                    Margin="0,0,0,8"
+                                    Visibility="{Binding AfficherVoieB, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="VOIE B"
+                                               FontSize="12" FontWeight="Bold"
+                                               Foreground="{StaticResource AsertiNavyBrush}"
+                                               Margin="0,0,0,10"/>
+                                    <ItemsControl ItemsSource="{Binding ReglagesVoieB}"
+                                                  ItemTemplate="{StaticResource ReglageTemplate}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Voie C - visible uniquement si la voie C est active -->
+                            <Border Background="{DynamicResource LayerFillColorDefaultBrush}"
+                                    CornerRadius="6"
+                                    Padding="14"
+                                    Margin="0,0,0,8"
+                                    Visibility="{Binding AfficherVoieC, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="VOIE C"
+                                               FontSize="12" FontWeight="Bold"
+                                               Foreground="{StaticResource AsertiNavyBrush}"
+                                               Margin="0,0,0,10"/>
+                                    <ItemsControl ItemsSource="{Binding ReglagesVoieC}"
+                                                  ItemTemplate="{StaticResource ReglageTemplate}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Mode de mesure -->
+                            <Border Background="{DynamicResource LayerFillColorDefaultBrush}"
+                                    CornerRadius="6"
+                                    Padding="14"
+                                    Margin="0,0,0,0"
+                                    Visibility="{Binding AReglagesMode, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="MODE DE MESURE"
+                                               FontSize="12" FontWeight="Bold"
+                                               Foreground="{StaticResource AsertiNavyBrush}"
+                                               Margin="0,0,0,10"/>
+                                    <ItemsControl ItemsSource="{Binding ReglagesMode}"
+                                                  ItemTemplate="{StaticResource ReglageTemplate}"/>
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

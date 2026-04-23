@@ -31,6 +31,13 @@ namespace Metrologo.Models
         /// <summary>Couplages proposés (ex: "AC", "DC"). Vide = pas de choix.</summary>
         public List<string> Couplages { get; set; } = new();
 
+        /// <summary>
+        /// Réglages dynamiques affichés dans la fenêtre Configuration et envoyés à l'appareil
+        /// lors de la validation (ex: impédance, filtre, atténuation). Permet d'étendre la UI
+        /// sans recompiler : chaque réglage porte ses options + leurs commandes SCPI.
+        /// </summary>
+        public List<ReglageAppareil> Reglages { get; set; } = new();
+
         public DateTime DateCreation { get; set; } = DateTime.Now;
         public string CreePar { get; set; } = string.Empty;
 

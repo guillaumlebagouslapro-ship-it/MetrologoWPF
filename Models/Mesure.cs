@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Metrologo.Models
 {
@@ -6,6 +7,25 @@ namespace Metrologo.Models
     {
         public string NumFI { get; set; } = string.Empty;
         public TypeAppareilIEEE Frequencemetre { get; set; }
+
+        /// <summary>
+        /// Id du modèle catalogue sélectionné (prioritaire sur <see cref="Frequencemetre"/> à l'exécution).
+        /// Vide = utiliser les 3 types historiques chargés depuis Metrologo.ini.
+        /// </summary>
+        public string IdModeleCatalogue { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Commandes SCPI correspondant aux réglages choisis dans la fenêtre Configuration
+        /// (Impédance, Couplage, Filtre, Trigger, Mode). L'orchestrator les rejoue après le
+        /// <c>*RST</c> pour que l'appareil retrouve l'état configuré avant la boucle de mesures.
+        /// </summary>
+        public List<string> CommandesScpiReglages { get; set; } = new();
+
+        /// <summary>
+        /// Voie active pour la mesure. Les réglages des autres voies (A/B/C) ne sont pas envoyés
+        /// à l'appareil, pour éviter de modifier une voie que l'utilisateur n'utilise pas.
+        /// </summary>
+        public VoieActive VoieActive { get; set; } = VoieActive.A;
         public TypeMesure TypeMesure { get; set; }
         public ModeMesure ModeMesure { get; set; }
         public SourceMesure SourceMesure { get; set; } = SourceMesure.Frequencemetre;

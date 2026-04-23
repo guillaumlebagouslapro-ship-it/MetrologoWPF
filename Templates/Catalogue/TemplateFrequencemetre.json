@@ -1,0 +1,59 @@
+{
+  "_README": [
+    "Template à remplir pour enregistrer un nouveau fréquencemètre.",
+    "Règle : tout champ laissé vide (\"\") ne sera PAS affiché dans la fenêtre Configuration.",
+    "Pour Trigger : utilise {0} à l'endroit où la valeur en volts sera insérée (ex: \":SENS:EVEN1:LEV {0}\").",
+    "Pour Mode TIAB : une seule commande car l'intervalle va de la voie A vers la voie B."
+  ],
+
+  "Identification": {
+    "Nom": "",
+    "FabricantIdn": "",
+    "ModeleIdn": ""
+  },
+
+  "Impedance": {
+    "VoieA": {
+      "50 Ohm":  "",
+      "1 MOhm":  ""
+    },
+    "VoieB": {
+      "50 Ohm":  "",
+      "1 MOhm":  ""
+    }
+  },
+
+  "Couplage": {
+    "VoieA": {
+      "AC": "",
+      "DC": ""
+    },
+    "VoieB": {
+      "AC": "",
+      "DC": ""
+    }
+  },
+
+  "Filtre": {
+    "VoieA": {
+      "ON":  "",
+      "OFF": ""
+    },
+    "VoieB": {
+      "ON":  "",
+      "OFF": ""
+    }
+  },
+
+  "Trigger": {
+    "VoieA": "",
+    "VoieB": ""
+  },
+
+  "ModeFreq": {
+    "VoieA": "",
+    "VoieB": ""
+  },
+
+  "ModeTiab": ""
+}

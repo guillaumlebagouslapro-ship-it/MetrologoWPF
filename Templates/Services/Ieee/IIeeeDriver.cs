@@ -32,5 +32,12 @@ namespace Metrologo.Services.Ieee
 
         /// <summary>Positionne la ligne REN (Remote Enable) — true = remote, false = local.</summary>
         Task DefinirRemoteLocalAsync(int adresse, bool remote, CancellationToken ct = default);
+
+        /// <summary>
+        /// Ferme toutes les sessions GPIB en cache — les prochaines écritures/lectures en rouvriront
+        /// de fraîches. À appeler quand un appareil a été éteint/rallumé ou qu'on soupçonne un
+        /// état bus GPIB bloqué. N'a pas d'effet pour un driver sans cache (simulation).
+        /// </summary>
+        void ReinitialiserSessions();
     }
 }

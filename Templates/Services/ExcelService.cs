@@ -13,7 +13,15 @@ namespace Metrologo.Services
     public interface IExcelService
     {
         Task InitialiserRapportAsync(string numeroFI, Mesure configuration, Rubidium rubidium);
-        Task AjouterResultatsAsync(List<double> resultats);
+
+        /// <summary>
+        /// Écrit les résultats de mesure dans la feuille Excel.
+        /// Si <paramref name="horodatages"/> est fourni, ses timestamps (un par mesure) sont
+        /// écrits en colonne HEURE tels quels. Sinon, l'ancien comportement (heure courante + i s)
+        /// est utilisé — conservé pour rétrocompat, à éviter pour les nouvelles mesures.
+        /// </summary>
+        Task AjouterResultatsAsync(List<double> resultats, List<DateTime>? horodatages = null);
+
         Task MettreAJourRecapFreqAsync(Mesure mesure);
         Task MettreAJourRecapStabAsync(Mesure mesure);
         Task SauvegarderEtOuvrirAsync();
@@ -41,16 +49,31 @@ namespace Metrologo.Services
         private IXLWorksheet? _feuilleMesure;   // feuille NOUVELLEMENT créée pour cette mesure
         private string _cheminFichier = string.Empty;
 
+        /// <summary>
+        /// Chemin du fichier Excel réellement utilisé pour cette mesure (peut différer de
+        /// <c>Mesures_{FI}.xlsm</c> si un fallback timestampé a été appliqué — cf. Excel verrouillé).
+        /// Exposé pour que la UI puisse en informer l'utilisateur.
+        /// </summary>
+        public string CheminFichierGenere => _cheminFichier;
+
+        /// <summary>Vrai si le fichier a dû être écrit sous un nom de fallback au lieu du nom principal.</summary>
+        public bool FallbackTimestampUtilise { get; private set; }
+
         public async Task InitialiserRapportAsync(string numeroFI, Mesure config, Rubidium rubidium)
         {
             await Task.Run(() =>
             {
                 // --- 1. Détermination du dossier et du fichier (un fichier par FI) ---
+                //    Sanitize le numéro FI : Windows interdit < > : " / \ | ? * dans les noms
+                //    de dossier/fichier. On remplace chaque caractère interdit par « _ ».
+                string numFISafe = SanitizerNomFichier(numeroFI);
+
                 string dossier = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    "Metrologo", numeroFI);
+                    "Metrologo", numFISafe);
                 Directory.CreateDirectory(dossier);
-                _cheminFichier = Path.Combine(dossier, $"Mesures_{numeroFI}.xlsm");
+                _cheminFichier = Path.Combine(dossier, $"Mesures_{numFISafe}.xlsm");
+                FallbackTimestampUtilise = false;
 
                 // --- 2. Ouverture : fichier existant ou copie du template ---
                 string templatePath = Path.Combine(
@@ -58,23 +81,45 @@ namespace Metrologo.Services
 
                 if (File.Exists(_cheminFichier))
                 {
+                    bool partirDuTemplate = false;
+
                     if (FichierEstVerrouille(_cheminFichier))
                     {
+                        // Tentative 1 : fermer Excel poliment via WM_CLOSE (marche si pas de dialogue bloquant).
                         WindowHelper.FermerFenetresExcel(Path.GetFileName(_cheminFichier));
                         var sw = System.Diagnostics.Stopwatch.StartNew();
-                        while (FichierEstVerrouille(_cheminFichier) && sw.ElapsedMilliseconds < 5000)
+                        while (FichierEstVerrouille(_cheminFichier) && sw.ElapsedMilliseconds < 3000)
                         {
                             System.Threading.Thread.Sleep(150);
                         }
+
                         if (FichierEstVerrouille(_cheminFichier))
                         {
-                            throw new InvalidOperationException(
-                                $"Le fichier « {Path.GetFileName(_cheminFichier)} » est toujours ouvert dans Excel."
-                                + Environment.NewLine + Environment.NewLine
-                                + "Fermez Excel manuellement (y compris tout dialogue « Enregistrer ? ») puis réessayez.");
+                            // Tentative 2 : fallback sur un nom de fichier timestampé — on n'interrompt
+                            //                ni la mesure ni le travail de l'utilisateur dans Excel.
+                            string cheminAlternatif = Path.Combine(
+                                dossier,
+                                $"Mesures_{numeroFI}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsm");
+
+                            // On tente de copier le fichier existant pour garder Récap. + historique.
+                            // Si Excel bloque aussi la lecture, on repart du template vierge.
+                            try
+                            {
+                                File.Copy(_cheminFichier, cheminAlternatif, overwrite: false);
+                            }
+                            catch (IOException)
+                            {
+                                partirDuTemplate = true;
+                            }
+
+                            _cheminFichier = cheminAlternatif;
+                            FallbackTimestampUtilise = true;
                         }
                     }
-                    _workbook = new XLWorkbook(_cheminFichier);
+
+                    _workbook = partirDuTemplate
+                        ? new XLWorkbook(templatePath)
+                        : new XLWorkbook(_cheminFichier);
                 }
                 else
                 {
@@ -134,13 +179,14 @@ namespace Metrologo.Services
             });
         }
 
-        public async Task AjouterResultatsAsync(List<double> resultats)
+        public async Task AjouterResultatsAsync(List<double> resultats, List<DateTime>? horodatages = null)
         {
             if (_feuilleMesure == null || _workbook == null || resultats.Count == 0) return;
 
             await Task.Run(() =>
             {
                 int n = resultats.Count;
+                bool utiliserHorodatagesReels = horodatages != null && horodatages.Count == n;
 
                 // *** KEY FIX ***
                 // Le template a 2 lignes de mesures (9 et 10) et les labels commencent en 13.
@@ -153,13 +199,16 @@ namespace Metrologo.Services
                     _feuilleMesure.Row(pointInsertionRow).InsertRowsAbove(n - 2);
                 }
 
-                // Écrit les valeurs : HEURE en A, mesure brute en B.
-                var maintenant = DateTime.Now;
+                // Écrit les valeurs : HEURE en A (timestamp réel de la lecture GPIB si fourni),
+                // mesure brute en B.
+                var maintenantFallback = DateTime.Now;
                 for (int i = 0; i < n; i++)
                 {
                     int row = LIGNE_DEBUT_MESURES + i;
-                    _feuilleMesure.Cell($"A{row}").SetValue(
-                        maintenant.AddSeconds(i).ToString("HH:mm:ss"));
+                    DateTime heure = utiliserHorodatagesReels
+                        ? horodatages![i]
+                        : maintenantFallback.AddSeconds(i);
+                    _feuilleMesure.Cell($"A{row}").SetValue(heure.ToString("HH:mm:ss"));
                     _feuilleMesure.Cell($"B{row}").SetValue(resultats[i]);
 
                     // Pour les lignes créées par InsertRowsAbove, pas de formule héritée
@@ -344,6 +393,25 @@ namespace Metrologo.Services
                     UseShellExecute = true
                 });
             });
+        }
+
+        /// <summary>
+        /// Remplace les caractères interdits par Windows dans les noms de fichier/dossier
+        /// (<c>&lt; &gt; : " / \ | ? *</c> + caractères de contrôle) par un underscore. Utilisé
+        /// pour transformer un numéro FI saisi par l'utilisateur en nom de dossier sûr.
+        /// </summary>
+        private static string SanitizerNomFichier(string nom)
+        {
+            if (string.IsNullOrWhiteSpace(nom)) return "sans-nom";
+
+            var invalides = new HashSet<char>(Path.GetInvalidFileNameChars());
+            var sb = new System.Text.StringBuilder(nom.Length);
+            foreach (var c in nom)
+            {
+                sb.Append(invalides.Contains(c) ? '_' : c);
+            }
+            string resultat = sb.ToString().Trim(' ', '.');
+            return string.IsNullOrEmpty(resultat) ? "sans-nom" : resultat;
         }
 
         /// <summary>

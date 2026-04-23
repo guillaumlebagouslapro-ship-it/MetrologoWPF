@@ -97,6 +97,24 @@ namespace Metrologo.Services.Ieee
             _disposed = true;
         }
 
+        /// <summary>
+        /// Ferme les sessions GPIB en cache sans toucher au <c>ResourceManager</c>. Les prochaines
+        /// opérations en rouvriront de fraîches — utile si un appareil a été éteint/rallumé ou
+        /// que le bus est dans un état bancal après un timeout.
+        /// </summary>
+        public void ReinitialiserSessions()
+        {
+            if (_disposed) return;
+            lock (_lock)
+            {
+                foreach (var s in _sessions.Values)
+                {
+                    try { s.Dispose(); } catch { /* best-effort */ }
+                }
+                _sessions.Clear();
+            }
+        }
+
         // ---------------- Interne ----------------
 
         private GpibSession ObtenirSession(int adresse)
