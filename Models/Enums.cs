@@ -1,12 +1,5 @@
 namespace Metrologo.Models
 {
-    public enum TypeAppareilIEEE
-    {
-        Stanford,
-        Racal,
-        EIP
-    }
-
     public enum TypeMesure
     {
         Frequence,

@@ -47,26 +47,41 @@ namespace Metrologo.Services.Catalogue
             return appareil;
         }
 
+        // Échelle canonique 0..12 utilisée par l'UI (ConfigurationViewModel.GateTimes,
+        // SelectionGateViewModel.GateTimes) et par ConfigAppareilsLoader._gates pour les
+        // appareils legacy. Les gates du catalogue doivent se ranger dans ces mêmes slots,
+        // sinon Mesure.GateIndex venant de l'UI ne tombe pas sur l'entrée correspondante.
+        private static readonly double[] _secondesSlotsUi =
+        {
+            0.010, 0.020, 0.050, 0.100, 0.200, 0.500,
+            1.0, 2.0, 5.0, 10.0, 20.0, 50.0,
+            100.0, 200.0, 500.0, 1000.0 
+        };
+
         /// <summary>
         /// Transforme la liste de libellés (ex: <c>["10 ms", "100 ms", "1 s"]</c>) en dictionnaire
-        /// indexé par position, avec commande SCPI formatée via le template <c>CommandeGate</c>.
-        /// Si <c>CommandeGate</c> est vide, la commande est laissée vide (l'orchestrator sautera
-        /// la programmation de gate — cas Racal en mode Interval par ex.).
+        /// dont les clés sont les indices de l'échelle UI à 13 slots (0=10 ms … 12=100 s).
+        /// Un libellé "1 s" du catalogue va dans le slot 6, "10 s" dans le slot 9, etc. — comme
+        /// les appareils legacy. Sans cet alignement, l'index envoyé par la UI ne correspond pas
+        /// aux clés du dict et <c>AppliquerGateAsync</c> ne trouve pas la gate.
+        /// Si <c>CommandeGate</c> est vide, la commande reste vide (l'orchestrator sautera la
+        /// programmation — cas Racal en mode Interval par ex.).
         /// </summary>
         private static Dictionary<int, GateConfig> ConstruireGates(
             List<string> libellesGates, string templateCommande)
         {
             var dict = new Dictionary<int, GateConfig>();
-            for (int i = 0; i < libellesGates.Count; i++)
+            foreach (var libelle in libellesGates)
             {
-                var libelle = libellesGates[i];
                 double secondes = ParserGateEnSecondes(libelle);
+                int slot = TrouverSlotUi(secondes);
+                if (slot < 0) continue;  // Valeur non-standard, pas mappable sur l'UI.
 
                 string commande = string.IsNullOrWhiteSpace(templateCommande)
                     ? string.Empty
                     : string.Format(CultureInfo.InvariantCulture, templateCommande, secondes);
 
-                dict[i] = new GateConfig
+                dict[slot] = new GateConfig
                 {
                     Libelle = libelle,
                     Commande = commande,
@@ -74,6 +89,15 @@ namespace Metrologo.Services.Catalogue
                 };
             }
             return dict;
+        }
+
+        private static int TrouverSlotUi(double secondes)
+        {
+            for (int i = 0; i < _secondesSlotsUi.Length; i++)
+            {
+                if (Math.Abs(_secondesSlotsUi[i] - secondes) < 1e-6) return i;
+            }
+            return -1;
         }
 
         /// <summary>

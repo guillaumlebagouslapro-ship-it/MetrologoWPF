@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Ivi.Visa;
+using Metrologo.Services.Journal;
 using NationalInstruments.Visa;
+using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.Services.Ieee
 {
@@ -48,7 +50,31 @@ namespace Metrologo.Services.Ieee
             var session = ObtenirSession(adresse);
             AppliquerTerminateurs(session, readTerm: null);
 
-            return Task.Run(() => session.RawIO.Write(commande), ct);
+            // Respect de WriteTerm (cf. Metrologo.ini / catalogue) :
+            //   0 = rien (pas de LF, pas d'EOI)
+            //   1 = NL (LF) en fin de commande + EOI — convention Delphi la plus courante
+            //   2 = EOI uniquement (pas de LF)
+            // Certaines firmwares (53131A en particulier) attendent explicitement le LF pour
+            // valider la fin de commande, même avec EOI asserté.
+            session.SendEndEnabled = writeTerm != 0;
+            string aEcrire = writeTerm == 1 ? commande + "\n" : commande;
+
+            return Task.Run(() =>
+            {
+                try
+                {
+                    session.RawIO.Write(aEcrire);
+                }
+                catch (IOTimeoutException)
+                {
+                    // Timeout en écriture = l'appareil refuse la commande parce qu'il a typiquement
+                    // encore une réponse en attente dans son buffer de sortie (suite à un :READ?
+                    // dont la lecture a expiré par exemple). On émet un Device Clear pour remettre
+                    // l'appareil dans un état propre, et on relaie l'exception à l'appelant.
+                    TenterDeviceClear(session, adresse, "EcrireAsync");
+                    throw;
+                }
+            }, ct);
         }
 
         public Task<string> LireAsync(int adresse, int readTerm, CancellationToken ct = default)
@@ -60,8 +86,33 @@ namespace Metrologo.Services.Ieee
             return Task.Run(() =>
             {
                 try { return session.RawIO.ReadString(); }
-                catch (IOTimeoutException) { return string.Empty; }
+                catch (IOTimeoutException)
+                {
+                    // Lecture qui timeout = la mesure n'a pas rendu la main. Si on laisse en l'état,
+                    // le Write suivant se bloque car l'appareil produit toujours sa réponse (ou
+                    // l'a mise dans son buffer de sortie qui n'a pas été drainé). Device Clear
+                    // réinitialise l'état I/O de l'appareil sans affecter les réglages utilisateur.
+                    TenterDeviceClear(session, adresse, "LireAsync");
+                    return string.Empty;
+                }
             }, ct);
+        }
+
+        private static void TenterDeviceClear(GpibSession session, int adresse, string origine)
+        {
+            try
+            {
+                session.Clear();  // SDC : Selected Device Clear (IEEE-488.2)
+                JournalLog.Warn(CategorieLog.Mesure, "GPIB_TIMEOUT_SDC",
+                    $"Timeout sur {origine} GPIB0::{adresse} — Device Clear envoyé pour ré-aligner la session.",
+                    new { Adresse = adresse, Origine = origine });
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Mesure, "GPIB_TIMEOUT_SDC_ECHEC",
+                    $"Timeout sur {origine} GPIB0::{adresse} + échec Device Clear : {ex.GetType().Name}.",
+                    new { Adresse = adresse, Origine = origine, Erreur = ex.Message });
+            }
         }
 
         public Task<byte> LireStatusByteAsync(int adresse, CancellationToken ct = default)
@@ -95,6 +146,16 @@ namespace Metrologo.Services.Ieee
                 try { _rm.Dispose(); } catch { /* ignore */ }
             }
             _disposed = true;
+        }
+
+        public void DefinirTimeout(int adresse, int timeoutMs)
+        {
+            EnsureNotDisposed();
+            var session = ObtenirSession(adresse);
+            lock (_lock)
+            {
+                session.TimeoutMilliseconds = timeoutMs;
+            }
         }
 
         /// <summary>

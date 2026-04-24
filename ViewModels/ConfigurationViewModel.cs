@@ -86,18 +86,31 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Liste unifiée des appareils disponibles dans la dropdown :
-        /// les 3 types catalogue (Stanford/Racal/EIP) + tout appareil détecté inconnu du catalogue.
-        /// Chaque type catalogue indique s'il est actuellement branché ou non.
+        /// Déclenché quand <see cref="MesureConfig"/> est réassigné (typiquement par
+        /// AcceuilViewModel qui passe la config persistée entre deux ouvertures de la fenêtre).
+        /// Rebuild la liste des appareils et les réglages dynamiques pour restaurer l'état
+        /// précédent (appareil sélectionné, options SCPI choisies) sans que l'utilisateur
+        /// ait à tout re-saisir.
+        /// </summary>
+        partial void OnMesureConfigChanged(Mesure value)
+        {
+            RebuildAppareils();
+            RebuildReglagesDynamiques();
+            RefreshAll();
+        }
+
+        /// <summary>
+        /// Liste des appareils **détectés** sur le bus GPIB et disponibles pour être sélectionnés.
+        /// Chaque appareil est marqué "catalogue" (prêt à l'emploi) ou "hors catalogue" (à enregistrer
+        /// via Administration → Gérer les appareils avant utilisation).
         /// </summary>
         public ObservableCollection<OptionAppareil> Appareils { get; } = new();
 
         private void RebuildAppareils()
         {
             // Mémoriser la sélection courante pour la retrouver après reconstruction de la liste.
-            var selType = _appareilSelectionne?.Type;
-            var selIdnFab = _appareilSelectionne?.Detecte?.Fabricant;
-            var selIdnMod = _appareilSelectionne?.Detecte?.Modele;
+            var selFab = _appareilSelectionne?.Detecte?.Fabricant;
+            var selMod = _appareilSelectionne?.Detecte?.Modele;
 
             // Re-synchronise ModeleReconnu pour chaque appareil détecté (le catalogue peut avoir changé).
             foreach (var det in EtatApplication.AppareilsDetectes)
@@ -107,48 +120,35 @@ namespace Metrologo.ViewModels
 
             Appareils.Clear();
 
-            // 1) Types catalogue — toujours présents, marqués "détecté" si on les voit sur le bus
-            foreach (TypeAppareilIEEE type in Enum.GetValues(typeof(TypeAppareilIEEE)))
-            {
-                var det = EtatApplication.AppareilsDetectes.FirstOrDefault(a => a.TypeReconnu == type);
-                string nom = NomCatalogue(type);
-                string suffixe = det != null ? $" — {det.AdresseCourte} ✓" : "  (non connecté)";
-                Appareils.Add(new OptionAppareil
-                {
-                    Libelle = nom + suffixe,
-                    Type = type,
-                    Detecte = det
-                });
-            }
-
-            // 2) Appareils détectés qui ne correspondent à aucun des 3 types catalogue historiques.
-            //    Si présents au catalogue local → "catalogue", sinon "hors catalogue" (à enregistrer).
-            foreach (var det in EtatApplication.AppareilsDetectes.Where(a => a.TypeReconnu == null))
+            // On n'affiche QUE les appareils réellement détectés sur le bus, pour éviter de
+            // laisser l'utilisateur configurer une mesure sur un instrument qui n'est pas branché.
+            foreach (var det in EtatApplication.AppareilsDetectes)
             {
                 string suffixe = det.ModeleReconnu != null
                     ? $" ✓  (catalogue)"
-                    : $" ✓  (hors catalogue)";
+                    : $" ✓  (hors catalogue — à enregistrer)";
 
                 Appareils.Add(new OptionAppareil
                 {
                     Libelle = $"{det.Libelle}{suffixe}",
-                    Type = null,
                     Detecte = det
                 });
             }
 
-            // 3) Retrouver la sélection courante dans la nouvelle liste (par Type pour les 3 types
-            //    historiques, sinon par IDN fabricant+modèle pour les appareils catalogue).
-            if (selType.HasValue)
-            {
-                _appareilSelectionne = Appareils.FirstOrDefault(o => o.Type == selType);
-            }
-            else if (selIdnFab != null || selIdnMod != null)
+            // Retrouver la sélection courante — par IDN fabricant+modèle d'abord (cas d'un
+            // simple refresh après scan), sinon par l'Id du modèle catalogue persisté dans
+            // la Mesure (cas d'une réouverture de la fenêtre avec une config déjà validée).
+            if (selFab != null || selMod != null)
             {
                 _appareilSelectionne = Appareils.FirstOrDefault(o =>
                     o.Detecte != null
-                    && o.Detecte.Fabricant == selIdnFab
-                    && o.Detecte.Modele == selIdnMod);
+                    && o.Detecte.Fabricant == selFab
+                    && o.Detecte.Modele == selMod);
+            }
+            else if (!string.IsNullOrEmpty(MesureConfig?.IdModeleCatalogue))
+            {
+                _appareilSelectionne = Appareils.FirstOrDefault(o =>
+                    o.Detecte?.ModeleReconnu?.Id == MesureConfig.IdModeleCatalogue);
             }
 
             OnPropertyChanged(nameof(AppareilSelectionne));
@@ -156,52 +156,30 @@ namespace Metrologo.ViewModels
             RefreshAll();
         }
 
-        private static string NomCatalogue(TypeAppareilIEEE t) => t switch
-        {
-            TypeAppareilIEEE.Stanford => "Stanford SR620",
-            TypeAppareilIEEE.Racal    => "Racal-Dana 1996",
-            TypeAppareilIEEE.EIP      => "EIP 545",
-            _ => t.ToString()
-        };
-
         private OptionAppareil? _appareilSelectionne;
 
         /// <summary>
-        /// Sélection courante dans la ComboBox. Stockée explicitement pour supporter les appareils
-        /// hors des 3 types historiques (Type == null) — on ne peut pas se contenter de dériver
-        /// la sélection depuis <c>MesureConfig.Frequencemetre</c>.
+        /// Sélection courante dans la ComboBox. Pointe vers un appareil détecté sur le bus ; le
+        /// modèle catalogue associé (si présent) est utilisé par l'orchestrator pour piloter la mesure.
         /// </summary>
         public OptionAppareil? AppareilSelectionne
         {
             get
             {
-                // Si on a une sélection explicite et qu'elle est toujours dans la liste, on la garde.
                 if (_appareilSelectionne != null && Appareils.Contains(_appareilSelectionne))
                     return _appareilSelectionne;
-
-                // Sinon fallback sur l'option catalogue correspondant au Frequencemetre courant.
-                return Appareils.FirstOrDefault(o => o.Type == MesureConfig.Frequencemetre)
-                       ?? Appareils.FirstOrDefault();
+                return Appareils.FirstOrDefault();
             }
             set
             {
                 if (ReferenceEquals(_appareilSelectionne, value)) return;
                 _appareilSelectionne = value;
 
-                if (value?.Type.HasValue == true)
-                {
-                    MesureConfig.Frequencemetre = value.Type.Value;
-                    // Sélection d'un des 3 types historiques : pas de modèle catalogue explicite,
-                    // l'orchestrator utilisera Metrologo.ini.
-                    MesureConfig.IdModeleCatalogue = string.Empty;
-                }
-                else
-                {
-                    // Appareil hors des 3 types historiques → on vise le modèle catalogue si présent,
-                    // sinon rien (l'orchestrator retombera en erreur explicite au lancement).
-                    var modele = ModeleCatalogueSelectionne();
-                    MesureConfig.IdModeleCatalogue = modele?.Id ?? string.Empty;
-                }
+                // Si le modèle catalogue est présent, on mémorise son Id pour l'orchestrator ;
+                // sinon chaîne vide — l'orchestrator refusera de lancer et invitera l'utilisateur
+                // à enregistrer l'appareil.
+                var modele = ModeleCatalogueSelectionne();
+                MesureConfig.IdModeleCatalogue = modele?.Id ?? string.Empty;
 
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(MesureConfig));
@@ -225,9 +203,24 @@ namespace Metrologo.ViewModels
             var modele = ModeleCatalogueSelectionne();
             if (modele != null)
             {
+                // Commandes SCPI persistées depuis la dernière validation de la Config.
+                // Permet de restaurer la sélection précédente de l'utilisateur (impédance,
+                // couplage, filtre, trigger, mode) quand il rouvre la fenêtre.
+                var commandesPersistees = MesureConfig?.CommandesScpiReglages ?? new List<string>();
+
                 foreach (var reglage in modele.Reglages)
                 {
                     var vm = new ReglageDynamiqueViewModel(reglage);
+
+                    // Si une des commandes persistées correspond à une des options de ce réglage,
+                    // on pré-sélectionne cette option au lieu de rester sur le défaut (1ère option).
+                    var optionPersistee = reglage.Options
+                        .FirstOrDefault(o => commandesPersistees.Any(c => c == o.CommandeScpi));
+                    if (optionPersistee != null)
+                    {
+                        vm.OptionSelectionnee = optionPersistee;
+                    }
+
                     ReglagesDynamiques.Add(vm);
 
                     // Dispatch dans la bonne sous-collection selon le nom canonique du réglage.
@@ -244,6 +237,9 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(AReglagesVoieB));
             OnPropertyChanged(nameof(AReglagesVoieC));
             OnPropertyChanged(nameof(AReglagesMode));
+            // La liste des temps de porte dépend du catalogue de l'appareil sélectionné.
+            OnPropertyChanged(nameof(GateTimes));
+            OnPropertyChanged(nameof(GateLibelleSelectionne));
             NotifierVoiesActives();
         }
 
@@ -265,44 +261,78 @@ namespace Metrologo.ViewModels
 
         public IEnumerable<TypeMesure> TypesMesure => Enum.GetValues(typeof(TypeMesure)).Cast<TypeMesure>();
 
-        public List<string> StanfordRanges => new() { "1 MΩ (A)", "50 Ω (A)", "UHF (C)" };
-        public List<string> RacalRanges => new() { "Entrée A", "Entrée B", "Entrée C" };
-        public List<string> EipRanges => new() { "Bande 1", "Bande 2", "Bande 3" };
-        public List<string> Couplings => new() { "AC", "DC" };
-        public List<string> GateTimes => new()
+        /// <summary>Échelle canonique complète des temps de porte (doit rester alignée avec
+        /// <c>CatalogueAdapter._secondesSlotsUi</c> et <c>EnTetesMesureHelper._libellesGate</c>).</summary>
+        private static readonly string[] _libellesGateCanoniques =
         {
-            "10 ms", "20 ms", "50 ms",
-            "100 ms", "200 ms", "500 ms",
-            "1 s", "2 s", "5 s",
-            "10 s", "20 s", "50 s", "100 s"
+            "10 ms", "20 ms", "50 ms", "100 ms", "200 ms", "500 ms",
+            "1 s", "2 s", "5 s", "10 s", "20 s", "50 s",
+            "100 s", "200 s", "500 s", "1000 s"
         };
+
+        /// <summary>
+        /// Temps de porte disponibles dans la ComboBox : **filtrés** sur ceux que l'utilisateur
+        /// a cochés dans le catalogue pour l'appareil actuellement sélectionné. Si aucun appareil
+        /// catalogue n'est sélectionné, renvoie la liste canonique complète.
+        /// </summary>
+        public List<string> GateTimes
+        {
+            get
+            {
+                var modele = ModeleCatalogueSelectionne();
+                if (modele == null || modele.Gates.Count == 0)
+                    return _libellesGateCanoniques.ToList();
+                return modele.Gates.ToList();
+            }
+        }
+
+        /// <summary>
+        /// Libellé de la gate sélectionnée — binding <c>SelectedItem</c> de la ComboBox. La
+        /// conversion vers <c>MesureConfig.GateIndex</c> (slot canonique 0..15) se fait ici
+        /// pour que <c>AppliquerGateAsync</c> retrouve bien la commande SCPI correspondante
+        /// dans le dictionnaire du catalogue.
+        /// </summary>
+        public string? GateLibelleSelectionne
+        {
+            get
+            {
+                int idx = MesureConfig?.GateIndex ?? -1;
+                return (idx >= 0 && idx < _libellesGateCanoniques.Length)
+                    ? _libellesGateCanoniques[idx]
+                    : null;
+            }
+            set
+            {
+                if (value == null || MesureConfig == null) return;
+                int slot = Array.IndexOf(_libellesGateCanoniques, value);
+                if (slot < 0) return;
+                if (MesureConfig.GateIndex == slot) return;
+                MesureConfig.GateIndex = slot;
+                OnPropertyChanged();
+            }
+        }
 
         public List<int> MeasurementCounts => Enumerable.Range(1, 100).ToList();
 
-        public bool IsStanford => MesureConfig.Frequencemetre == TypeAppareilIEEE.Stanford;
-        public bool IsRacal => MesureConfig.Frequencemetre == TypeAppareilIEEE.Racal;
-        public bool IsEip => MesureConfig.Frequencemetre == TypeAppareilIEEE.EIP;
-
-        /// <summary>Vrai si l'appareil sélectionné est dans le catalogue local (hors 3 types historiques).</summary>
-        public bool EstAppareilCatalogue => AppareilSelectionne?.Detecte?.ModeleReconnu != null
-                                            || (AppareilSelectionne?.Detecte != null
-                                                && CatalogueAppareilsService.Instance.EstDansCatalogue(
-                                                    AppareilSelectionne.Detecte.Fabricant,
-                                                    AppareilSelectionne.Detecte.Modele));
-
-        // Les options hardcodées (GAMME D'ENTRÉE, COUPLAGE legacy) ne s'affichent QUE pour un
-        // des 3 types historiques ET seulement si l'appareil n'a pas ses propres réglages dans le catalogue.
-        public bool AfficherGammeStanford => IsStanford && !EstAppareilCatalogue;
-        public bool AfficherGammeRacal    => IsRacal    && !EstAppareilCatalogue;
-        public bool AfficherGammeEip      => IsEip      && !EstAppareilCatalogue;
+        /// <summary>
+        /// Coefficients multiplicateurs proposés en mode Indirect. Index 0..4 correspond à
+        /// l'exposant de 10 (×10⁰ … ×10⁴), utilisé par la formule Excel
+        /// <c>POWER(10, ZNCoeffMult)</c> pour convertir la mesure en fréquence réelle.
+        /// </summary>
+        public List<string> CoefsMultiplicateurs => new()
+        {
+            "×1 (10⁰)", "×10 (10¹)", "×100 (10²)", "×1000 (10³)", "×10000 (10⁴)"
+        };
 
         public bool ShowGateSettings =>
             MesureConfig.TypeMesure == TypeMesure.Frequence ||
             MesureConfig.TypeMesure == TypeMesure.Stabilite;
 
-        public bool ShowCoupling => ((IsStanford && MesureConfig.InputIndex != 2) ||
-                                     (IsRacal && MesureConfig.InputIndex != 2))
-                                    && !EstAppareilCatalogue;
+        /// <summary>
+        /// Init manuelle disponible uniquement pour TypeMesure=Fréquence (conforme Delphi,
+        /// TfrmConfigStanford.chkInitManu.Enabled := FMesure.TypeMesure = etFrequence).
+        /// </summary>
+        public bool InitManuDisponible => MesureConfig.TypeMesure == TypeMesure.Frequence;
 
         // Source du signal : visible seulement pour le type "Fréquence"
         public bool ShowSourceMesure => MesureConfig.TypeMesure == TypeMesure.Frequence;
@@ -319,10 +349,9 @@ namespace Metrologo.ViewModels
             set { if (value) { MesureConfig.SourceMesure = SourceMesure.Generateur; RefreshAll(); } }
         }
 
-        // Indirect disponible : pas en paillasse, pas EIP, pas intervalle / tachy / stroboscope
+        // Indirect disponible : pas en paillasse, pas intervalle / tachy / stroboscope
         public bool IndirectDisponible =>
             EstSurBaie
-            && !IsEip
             && MesureConfig.TypeMesure != TypeMesure.Interval
             && MesureConfig.TypeMesure != TypeMesure.TachyContact
             && MesureConfig.TypeMesure != TypeMesure.Stroboscope;
@@ -345,21 +374,14 @@ namespace Metrologo.ViewModels
 
         public void RefreshAll()
         {
-            OnPropertyChanged(nameof(IsStanford));
-            OnPropertyChanged(nameof(IsRacal));
-            OnPropertyChanged(nameof(IsEip));
-            OnPropertyChanged(nameof(EstAppareilCatalogue));
-            OnPropertyChanged(nameof(AfficherGammeStanford));
-            OnPropertyChanged(nameof(AfficherGammeRacal));
-            OnPropertyChanged(nameof(AfficherGammeEip));
             OnPropertyChanged(nameof(IsModeDirect));
             OnPropertyChanged(nameof(IsModeIndirect));
             OnPropertyChanged(nameof(ShowGateSettings));
-            OnPropertyChanged(nameof(ShowCoupling));
             OnPropertyChanged(nameof(ShowSourceMesure));
             OnPropertyChanged(nameof(IsSourceFrequencemetre));
             OnPropertyChanged(nameof(IsSourceGenerateur));
             OnPropertyChanged(nameof(IndirectDisponible));
+            OnPropertyChanged(nameof(InitManuDisponible));
         }
 
         public void OnTypeMesureChanged()

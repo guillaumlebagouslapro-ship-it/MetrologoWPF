@@ -6,11 +6,10 @@ namespace Metrologo.Models
     public class Mesure
     {
         public string NumFI { get; set; } = string.Empty;
-        public TypeAppareilIEEE Frequencemetre { get; set; }
 
         /// <summary>
-        /// Id du modèle catalogue sélectionné (prioritaire sur <see cref="Frequencemetre"/> à l'exécution).
-        /// Vide = utiliser les 3 types historiques chargés depuis Metrologo.ini.
+        /// Id du modèle catalogue sélectionné — source unique de l'appareil utilisé pour la mesure.
+        /// Vide uniquement lors de la construction initiale, obligatoire au moment de lancer la mesure.
         /// </summary>
         public string IdModeleCatalogue { get; set; } = string.Empty;
 
@@ -53,7 +52,6 @@ namespace Metrologo.Models
         public Mesure()
         {
             TypeMesure = TypeMesure.Frequence;
-            Frequencemetre = TypeAppareilIEEE.Stanford;
             ModeMesure = ModeMesure.Direct;
         }
     }

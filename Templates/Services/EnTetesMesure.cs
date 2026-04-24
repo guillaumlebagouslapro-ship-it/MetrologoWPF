@@ -93,30 +93,24 @@ namespace Metrologo.Services
             _ => t.ToString()
         };
 
-        public static string NomAppareil(TypeAppareilIEEE a) => a switch
-        {
-            TypeAppareilIEEE.Stanford => "Stanford SR620",
-            TypeAppareilIEEE.Racal => "Racal-Dana 1996",
-            TypeAppareilIEEE.EIP => "EIP 545",
-            _ => a.ToString()
-        };
-
-        // Gate time helpers (index → libellé et secondes)
+        // Gate time helpers (index → libellé et secondes). L'échelle doit rester alignée avec la
+        // combo GateTimes de ConfigurationViewModel/SelectionGateViewModel et avec CatalogueAdapter.
         private static readonly string[] _libellesGate =
         {
             "10 ms", "20 ms", "50 ms", "100 ms", "200 ms", "500 ms",
-            "1 s", "2 s", "5 s", "10 s", "20 s", "50 s", "100 s"
+            "1 s", "2 s", "5 s", "10 s", "20 s", "50 s",
+            "100 s", "200 s", "500 s", "1000 s"
         };
 
         private static readonly double[] _secondesGate =
         {
             0.010, 0.020, 0.050, 0.100, 0.200, 0.500,
-            1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0
+            1.0, 2.0, 5.0, 10.0, 20.0, 50.0,
+            100.0, 200.0, 500.0, 1000.0
         };
 
         public static string LibelleGate(int index) => index switch
         {
-            -3 => "Procédure auto EIP",
             -2 => "Procédure auto (10 ms → 10 s)",
             -1 => "Procédure auto (10 ms → 100 s)",
             >= 0 and var i when i < _libellesGate.Length => _libellesGate[i],

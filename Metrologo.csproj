@@ -21,9 +21,6 @@
 		<None Update="Templates\METROLOGO.xltm">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
-		<None Update="Config\Metrologo.ini">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
 	</ItemGroup>
 
 	<ItemGroup>

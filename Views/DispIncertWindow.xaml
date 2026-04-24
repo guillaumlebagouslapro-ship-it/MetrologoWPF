@@ -158,125 +158,36 @@
             <!-- Tab Fréquence -->
             <TabItem Header="Fréquence">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="12"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
-                            <StackPanel>
-                                <TextBlock Text="Fréquences fixes" Style="{StaticResource GridSectionTitle}"/>
-                                <DataGrid ItemsSource="{Binding FreqFixes}" MinHeight="160">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Plage" Binding="{Binding Plage}" Width="*"/>
-                                        <DataGridTextColumn Header="Raccord" Binding="{Binding Raccord}" Width="Auto"/>
-                                        <DataGridTextColumn Header="a" Binding="{Binding CoeffA, StringFormat={}{0:E2}}" Width="Auto"/>
-                                        <DataGridTextColumn Header="b" Binding="{Binding CoeffB, StringFormat={}{0:E2}}" Width="Auto"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
-                            <StackPanel>
-                                <TextBlock Text="Stanford SR620" Style="{StaticResource GridSectionTitle}"/>
-                                <DataGrid ItemsSource="{Binding FreqStanford}" MinHeight="160">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Plage" Binding="{Binding Plage}" Width="*"/>
-                                        <DataGridTextColumn Header="Raccord" Binding="{Binding Raccord}" Width="Auto"/>
-                                        <DataGridTextColumn Header="a" Binding="{Binding CoeffA, StringFormat={}{0:E2}}" Width="Auto"/>
-                                        <DataGridTextColumn Header="b" Binding="{Binding CoeffB, StringFormat={}{0:E2}}" Width="Auto"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
-                            <StackPanel>
-                                <TextBlock Text="Racal-Dana 1996" Style="{StaticResource GridSectionTitle}"/>
-                                <DataGrid ItemsSource="{Binding FreqRacal}" MinHeight="160">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Plage" Binding="{Binding Plage}" Width="*"/>
-                                        <DataGridTextColumn Header="Raccord" Binding="{Binding Raccord}" Width="Auto"/>
-                                        <DataGridTextColumn Header="a" Binding="{Binding CoeffA, StringFormat={}{0:E2}}" Width="Auto"/>
-                                        <DataGridTextColumn Header="b" Binding="{Binding CoeffB, StringFormat={}{0:E2}}" Width="Auto"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
-                            <StackPanel>
-                                <TextBlock Text="EIP 545" Style="{StaticResource GridSectionTitle}"/>
-                                <DataGrid ItemsSource="{Binding FreqEip}" MinHeight="160">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Plage" Binding="{Binding Plage}" Width="*"/>
-                                        <DataGridTextColumn Header="Raccord" Binding="{Binding Raccord}" Width="Auto"/>
-                                        <DataGridTextColumn Header="a" Binding="{Binding CoeffA, StringFormat={}{0:E2}}" Width="Auto"/>
-                                        <DataGridTextColumn Header="b" Binding="{Binding CoeffB, StringFormat={}{0:E2}}" Width="Auto"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
+                    <Border Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Fréquences fixes" Style="{StaticResource GridSectionTitle}"/>
+                            <DataGrid ItemsSource="{Binding FreqFixes}" MinHeight="220">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Plage" Binding="{Binding Plage}" Width="*"/>
+                                    <DataGridTextColumn Header="Raccord" Binding="{Binding Raccord}" Width="Auto"/>
+                                    <DataGridTextColumn Header="a" Binding="{Binding CoeffA, StringFormat={}{0:E2}}" Width="Auto"/>
+                                    <DataGridTextColumn Header="b" Binding="{Binding CoeffB, StringFormat={}{0:E2}}" Width="Auto"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
                 </ScrollViewer>
             </TabItem>
 
             <!-- Tab Stabilité -->
             <TabItem Header="Stabilité">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Border Grid.Column="0" Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
-                            <StackPanel>
-                                <TextBlock Text="Fréquences fixes" Style="{StaticResource GridSectionTitle}"/>
-                                <DataGrid ItemsSource="{Binding StabFixes}" MinHeight="220">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Temps de mesure" Binding="{Binding TempsDeMesure}" Width="*"/>
-                                        <DataGridTextColumn Header="Valeur" Binding="{Binding Valeur, StringFormat={}{0:E2}}" Width="*"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Column="2" Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
-                            <StackPanel>
-                                <TextBlock Text="Stanford SR620" Style="{StaticResource GridSectionTitle}"/>
-                                <DataGrid ItemsSource="{Binding StabStanford}" MinHeight="220">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Temps de mesure" Binding="{Binding TempsDeMesure}" Width="*"/>
-                                        <DataGridTextColumn Header="Valeur" Binding="{Binding Valeur, StringFormat={}{0:E2}}" Width="*"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Column="4" Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
-                            <StackPanel>
-                                <TextBlock Text="Racal-Dana 1996" Style="{StaticResource GridSectionTitle}"/>
-                                <DataGrid ItemsSource="{Binding StabRacal}" MinHeight="220">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Temps de mesure" Binding="{Binding TempsDeMesure}" Width="*"/>
-                                        <DataGridTextColumn Header="Valeur" Binding="{Binding Valeur, StringFormat={}{0:E2}}" Width="*"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
+                    <Border Style="{StaticResource FormSectionStyle}" Margin="0,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Fréquences fixes" Style="{StaticResource GridSectionTitle}"/>
+                            <DataGrid ItemsSource="{Binding StabFixes}" MinHeight="260">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Temps de mesure" Binding="{Binding TempsDeMesure}" Width="*"/>
+                                    <DataGridTextColumn Header="Valeur" Binding="{Binding Valeur, StringFormat={}{0:E2}}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
                 </ScrollViewer>
             </TabItem>
 

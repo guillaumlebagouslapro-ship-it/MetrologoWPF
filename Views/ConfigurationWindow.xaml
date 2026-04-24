@@ -50,6 +50,7 @@
                     </Grid.ColumnDefinitions>
                     <ui:TextBox Grid.Column="0"
                                 Text="{Binding Valeur, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Laisser vide si non utilisé"
                                 Padding="10,6"/>
                     <TextBlock Grid.Column="1"
                                Text="{Binding Unite}"
@@ -313,7 +314,7 @@
                                     Margin="0,0,0,14">
                             <TextBlock Text="TEMPS DE PORTE (GATE)" Style="{StaticResource FormLabelStyle}"/>
                             <ComboBox ItemsSource="{Binding GateTimes}"
-                                      SelectedIndex="{Binding MesureConfig.GateIndex}"
+                                      SelectedItem="{Binding GateLibelleSelectionne, Mode=TwoWay}"
                                       Padding="10,6"/>
                         </StackPanel>
 
@@ -325,40 +326,9 @@
                             <StackPanel>
                                 <CheckBox Content="Initialisation manuelle"
                                           IsChecked="{Binding MesureConfig.InitManu}"
+                                          IsEnabled="{Binding InitManuDisponible}"
+                                          Visibility="{Binding InitManuDisponible, Converter={StaticResource BoolToVis}}"
                                           Margin="0,0,0,12"/>
-
-                                <StackPanel Visibility="{Binding AfficherGammeStanford, Converter={StaticResource BoolToVis}}"
-                                            Margin="0,0,0,10">
-                                    <TextBlock Text="GAMME D'ENTRÉE" Style="{StaticResource FormLabelStyle}"/>
-                                    <ComboBox ItemsSource="{Binding StanfordRanges}"
-                                              SelectedIndex="{Binding MesureConfig.InputIndex}"
-                                              SelectionChanged="ComboBox_SelectionChanged"
-                                              Padding="10,6"/>
-                                </StackPanel>
-
-                                <StackPanel Visibility="{Binding AfficherGammeRacal, Converter={StaticResource BoolToVis}}"
-                                            Margin="0,0,0,10">
-                                    <TextBlock Text="ENTRÉE SÉLECTIONNÉE" Style="{StaticResource FormLabelStyle}"/>
-                                    <ComboBox ItemsSource="{Binding RacalRanges}"
-                                              SelectedIndex="{Binding MesureConfig.InputIndex}"
-                                              SelectionChanged="ComboBox_SelectionChanged"
-                                              Padding="10,6"/>
-                                </StackPanel>
-
-                                <StackPanel Visibility="{Binding AfficherGammeEip, Converter={StaticResource BoolToVis}}"
-                                            Margin="0,0,0,10">
-                                    <TextBlock Text="BANDE DE FRÉQUENCE" Style="{StaticResource FormLabelStyle}"/>
-                                    <ComboBox ItemsSource="{Binding EipRanges}"
-                                              SelectedIndex="{Binding MesureConfig.InputIndex}"
-                                              Padding="10,6"/>
-                                </StackPanel>
-
-                                <StackPanel Visibility="{Binding ShowCoupling, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Text="COUPLAGE" Style="{StaticResource FormLabelStyle}"/>
-                                    <ComboBox ItemsSource="{Binding Couplings}"
-                                              SelectedIndex="{Binding MesureConfig.CouplingIndex}"
-                                              Padding="10,6"/>
-                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -581,7 +551,13 @@
                             <TextBlock Text="FRÉQUENCE NOMINALE (HZ)" Style="{StaticResource FormLabelStyle}"/>
                             <ui:TextBox Text="{Binding MesureConfig.FNominale}"
                                         PlaceholderText="Ex: 10000000"
-                                        Padding="10,8"/>
+                                        Padding="10,8"
+                                        Margin="0,0,0,12"/>
+
+                            <TextBlock Text="COEFFICIENT MULTIPLICATEUR D'ÉCART" Style="{StaticResource FormLabelStyle}"/>
+                            <ComboBox ItemsSource="{Binding CoefsMultiplicateurs}"
+                                      SelectedIndex="{Binding MesureConfig.IndexMultiplicateur}"
+                                      Padding="10,6"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>

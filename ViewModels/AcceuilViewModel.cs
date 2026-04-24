@@ -32,6 +32,7 @@ namespace Metrologo.ViewModels
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(RelancerMesureCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopperMesureCommand))]
         private bool _mesureEnCours;
 
         [ObservableProperty]
@@ -114,7 +115,6 @@ namespace Metrologo.ViewModels
                             Modele = r.Modele,
                             NumeroSerie = r.NumeroSerie,
                             Firmware = r.Firmware,
-                            TypeReconnu = AppareilDetecte.DeviquerType(r.Fabricant, r.Modele),
                             ModeleReconnu = modeleReconnu
                         };
                     })
@@ -176,9 +176,8 @@ namespace Metrologo.ViewModels
             Log($"🔌 Scan GPIB initial : {list.Count} appareil(s) détecté(s) :");
             foreach (var app in list)
             {
-                string statut = app.EstReconnu
-                    ? app.ModeleReconnu != null ? $"catalogue : {app.ModeleReconnu.Nom}"
-                                                 : $"type historique : {app.TypeReconnu}"
+                string statut = app.ModeleReconnu != null
+                    ? $"catalogue : {app.ModeleReconnu.Nom}"
                     : "non enregistré";
                 Log($"   • {app.AdresseCourte} — {app.Fabricant} {app.Modele} ({statut})");
             }
@@ -237,17 +236,19 @@ namespace Metrologo.ViewModels
             if (win.ShowDialog() == true)
             {
                 MesureConfig = vm.MesureConfig;
+                string nomAppareil = vm.AppareilSelectionne?.Detecte?.Libelle ?? "(aucun)";
                 Log($"⚙ Configuration : FI {MesureConfig.NumFI} · {MesureConfig.TypeMesure} · "
-                  + $"{MesureConfig.Frequencemetre} · {MesureConfig.NbMesures} mesures · "
+                  + $"{nomAppareil} · {MesureConfig.NbMesures} mesures · "
                   + $"Mode {MesureConfig.ModeMesure}");
 
                 Journal.Info(CategorieLog.Configuration, "CONFIG_VALIDEE",
-                    $"FI {MesureConfig.NumFI} · {MesureConfig.TypeMesure} · {MesureConfig.Frequencemetre}",
+                    $"FI {MesureConfig.NumFI} · {MesureConfig.TypeMesure} · {nomAppareil}",
                     new
                     {
                         numFI = MesureConfig.NumFI,
                         type = MesureConfig.TypeMesure.ToString(),
-                        appareil = MesureConfig.Frequencemetre.ToString(),
+                        appareil = nomAppareil,
+                        idModele = MesureConfig.IdModeleCatalogue,
                         nbMesures = MesureConfig.NbMesures,
                         mode = MesureConfig.ModeMesure.ToString(),
                         source = MesureConfig.SourceMesure.ToString(),
@@ -299,27 +300,11 @@ namespace Metrologo.ViewModels
             }
             Log($"⏱ Gate : index {MesureConfig.GateIndex}");
 
-            // 4) Saisie fréquence nominale si mode Indirect ou source Générateur
-            double? fNominale = null;
-            bool besoinNominale = MesureConfig.ModeMesure == ModeMesure.Indirect
-                               || MesureConfig.SourceMesure == SourceMesure.Generateur;
-
-            if (besoinNominale)
-            {
-                var saisieVm = new SaisieValFreqViewModel(
-                    MesureConfig.FNominale,
-                    titre: MesureConfig.SourceMesure == SourceMesure.Generateur
-                        ? "Fréquence du générateur"
-                        : "Fréquence nominale",
-                    sousTitre: "Saisissez la valeur de référence en Hertz",
-                    libelle: "VALEUR (HZ)");
-
-                var saisieWin = new SaisieValFreqWindow(saisieVm) { Owner = Application.Current.MainWindow };
-                if (saisieWin.ShowDialog() != true) { Log("✖ Mesure annulée (saisie fréquence)."); return; }
-
-                fNominale = saisieVm.ValeurLue;
-                Log($"📝 Fréquence nominale : {fNominale:N3} Hz");
-            }
+            // 4) La fréquence nominale est déjà saisie dans ConfigurationWindow (bloc Indirect),
+            //    conforme au Delphi d'origine (pas de dialog pré-mesure pour FNominale).
+            double? fNominale = MesureConfig.ModeMesure == ModeMesure.Indirect
+                ? MesureConfig.FNominale
+                : (double?)null;
 
             await LancerMesureAsync(MesureConfig, rubi, fNominale, preambule: "▶ Lancement");
         }
@@ -341,23 +326,33 @@ namespace Metrologo.ViewModels
 
         private bool PeutRelancer() => DerniereMesureDisponible && !MesureEnCours;
 
+        private static string ResolvedNomAppareil(Mesure config)
+        {
+            if (string.IsNullOrEmpty(config.IdModeleCatalogue)) return "(aucun)";
+            var modele = CatalogueAppareilsService.Instance.Modeles
+                .FirstOrDefault(m => m.Id == config.IdModeleCatalogue);
+            return modele?.Nom ?? $"({config.IdModeleCatalogue})";
+        }
+
         private async Task LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
         {
             _cts = new CancellationTokenSource();
             MesureEnCours = true;
 
+            string nomAppareilLog = ResolvedNomAppareil(config);
             Log("═══════════════════════════════════════════");
-            Log($"{preambule} : {config.NbMesures} mesures sur {config.Frequencemetre}");
+            Log($"{preambule} : {config.NbMesures} mesures sur {nomAppareilLog}");
             Log($"   FI {config.NumFI} · Rubidium : {rubi.Designation} · "
               + (rubi.AvecGPS ? "GPS" : "Allouis"));
 
             Journal.Info(CategorieLog.Mesure, "MESURE_DEBUT",
-                $"{preambule} : {config.NbMesures} mesures sur {config.Frequencemetre} pour FI {config.NumFI}",
+                $"{preambule} : {config.NbMesures} mesures sur {nomAppareilLog} pour FI {config.NumFI}",
                 new
                 {
                     numFI = config.NumFI,
                     type = config.TypeMesure.ToString(),
-                    appareil = config.Frequencemetre.ToString(),
+                    appareil = nomAppareilLog,
+                    idModele = config.IdModeleCatalogue,
                     nbMesures = config.NbMesures,
                     mode = config.ModeMesure.ToString(),
                     source = config.SourceMesure.ToString(),
@@ -402,6 +397,10 @@ namespace Metrologo.ViewModels
                     Journal.Info(CategorieLog.Mesure, "MESURE_FIN",
                         $"Mesure terminée : moyenne {result.Moyenne:F6} Hz, σ {result.EcartType:E3} Hz",
                         new { result.Moyenne, result.EcartType, nbValeurs = result.Valeurs.Count });
+
+                    // Saisie post-mesure : fréquence lue + incertitudes — uniquement pour
+                    // Fréquence + Source=Fréquencemètre (conforme Delphi : skip si Générateur).
+                    await SaisiePostMesureAsync(config);
                 }
                 else
                 {
@@ -426,7 +425,54 @@ namespace Metrologo.ViewModels
             }
         }
 
-        [RelayCommand]
+        /// <summary>
+        /// Flux post-mesure conforme au Delphi (F_Main.pas:2283) : pour une mesure de Fréquence
+        /// avec le fréquencemètre comme source, demande à l'utilisateur la fréquence lue sur
+        /// l'afficheur puis les incertitudes (résolution + autres). Les valeurs sont écrites
+        /// dans les zones nommées du classeur Excel via Interop.
+        /// Skip pour Générateur (incertitudes à 0) et pour tous les autres types de mesure.
+        /// </summary>
+        private async Task SaisiePostMesureAsync(Mesure config)
+        {
+            if (config.TypeMesure != TypeMesure.Frequence) return;
+            if (config.SourceMesure != SourceMesure.Frequencemetre) return;
+
+            // 1) Fréquence lue sur l'afficheur
+            var saisieLue = new SaisieValFreqViewModel(
+                config.FNominale,
+                titre: "Fréquence lue",
+                sousTitre: "Saisissez la valeur affichée par le fréquencemètre",
+                libelle: "FRÉQUENCE LUE (HZ)");
+
+            var winLue = new SaisieValFreqWindow(saisieLue) { Owner = Application.Current.MainWindow };
+            if (winLue.ShowDialog() != true)
+            {
+                Log("ℹ Saisie post-mesure ignorée (fréquence lue).");
+                return;
+            }
+
+            // 2) Incertitude de résolution + autres incertitudes
+            var paramsVm = new ParamsIncertViewModel(config.Resolution, config.IncertSupp);
+            var winIncert = new ParamsIncertWindow(paramsVm) { Owner = Application.Current.MainWindow };
+            if (winIncert.ShowDialog() != true)
+            {
+                Log("ℹ Saisie post-mesure ignorée (incertitudes).");
+                return;
+            }
+
+            config.Resolution = paramsVm.Resolution;
+            config.IncertSupp = paramsVm.IncertSupp;
+
+            Log($"📝 Post-mesure : FLue={saisieLue.ValeurLue:F6} Hz · Résolution={paramsVm.Resolution:E3} · Autres={paramsVm.IncertSupp:E3}");
+
+            // Écrit via Interop dans le classeur actif (zones nommées du template).
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNFLue", saisieLue.ValeurLue);
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertResol", paramsVm.Resolution);
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertSup", paramsVm.IncertSupp);
+            await ExcelInteropHost.Instance.SauvegarderAsync();
+        }
+
+        [RelayCommand(CanExecute = nameof(PeutStopper))]
         private void StopperMesure()
         {
             if (_cts != null && !_cts.IsCancellationRequested)
@@ -435,11 +481,9 @@ namespace Metrologo.ViewModels
                 Log("⏹ Arrêt demandé — en cours…");
                 Journal.Warn(CategorieLog.Mesure, "MESURE_STOP", "Arrêt demandé par l'utilisateur.");
             }
-            else
-            {
-                Log("ℹ Aucune mesure en cours.");
-            }
         }
+
+        private bool PeutStopper() => MesureEnCours;
 
         // -------- Utilitaires --------
 

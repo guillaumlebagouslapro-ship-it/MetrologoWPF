@@ -2,7 +2,6 @@ using Metrologo;
 using Metrologo.Models;
 using Metrologo.Services;
 using Metrologo.Services.Catalogue;
-using Metrologo.Services.Config;
 using Metrologo.Services.Journal;
 using Metrologo.ViewModels;
 using Metrologo.Views;
@@ -25,11 +24,13 @@ namespace Metrologo
             // Initialisation du journal (SQLite local)
             Journal.Configurer(new SqliteJournalService());
 
-            // Chargement de la configuration des appareils IEEE depuis Metrologo.ini
-            ChargerConfigAppareils();
-
             // Chargement du catalogue local des modèles d'appareils enregistrés par les utilisateurs
             await CatalogueAppareilsService.Instance.ChargerAsync();
+
+            // Démarre une instance Excel cachée en arrière-plan dès le lancement de l'app
+            // (comportement hérité du Delphi) pour que l'ouverture du classeur au démarrage
+            // d'une mesure soit instantanée — plus de temps COM à payer dans la boucle chaude.
+            _ = ExcelInteropHost.Instance.DemarrerAsync();
 
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);
@@ -71,34 +72,12 @@ namespace Metrologo
             }
         }
 
-        private static void ChargerConfigAppareils()
+        protected override void OnExit(ExitEventArgs e)
         {
-            var chemin = Preferences.CheminFichierIni;
-            try
-            {
-                var config = ConfigAppareilsLoader.Charger(chemin);
-                EtatApplication.ConfigAppareils = config;
-
-                Journal.Info(CategorieLog.Configuration, "ChargementIni",
-                    $"Configuration des appareils chargée depuis « {chemin} ».",
-                    new
-                    {
-                        Stanford = $"@{config.Stanford.Adresse} ({config.Stanford.Gates.Count} gates)",
-                        Racal    = $"@{config.Racal.Adresse} ({config.Racal.Gates.Count} gates)",
-                        EIP      = $"@{config.Eip.Adresse} ({config.Eip.Gates.Count} gates)",
-                        Mux      = config.Mux == null ? "absent" : $"@{config.Mux.Adresse}"
-                    });
-
-                foreach (var avert in config.Avertissements)
-                    Journal.Warn(CategorieLog.Configuration, "ChargementIni", avert);
-            }
-            catch (Exception ex)
-            {
-                Journal.Erreur(CategorieLog.Configuration, "ChargementIni",
-                    $"Échec du chargement de « {chemin} » : {ex.Message}");
-                // Non bloquant pour le moment (driver IEEE pas encore branché).
-                // À durcir quand le VISA réel sera en place.
-            }
+            // Ferme proprement l'instance Excel cachée — sinon Excel.exe reste en tâche de fond
+            // et peut bloquer la sauvegarde de fichiers au prochain lancement.
+            ExcelInteropHost.Instance.Dispose();
+            base.OnExit(e);
         }
     }
 }

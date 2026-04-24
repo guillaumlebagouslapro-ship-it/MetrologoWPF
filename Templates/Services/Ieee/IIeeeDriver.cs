@@ -39,5 +39,13 @@ namespace Metrologo.Services.Ieee
         /// état bus GPIB bloqué. N'a pas d'effet pour un driver sans cache (simulation).
         /// </summary>
         void ReinitialiserSessions();
+
+        /// <summary>
+        /// Ajuste le timeout VISA sur la session de l'appareil. Utile avant une boucle de mesures
+        /// dont la gate dépasse le timeout par défaut (ex : gate 20 s → timeout ≥ 22 s), sinon
+        /// chaque <c>:READ?</c> renvoie une chaîne vide et l'appareil reste avec sa réponse dans
+        /// le buffer de sortie, ce qui bloque le <c>Write</c> suivant.
+        /// </summary>
+        void DefinirTimeout(int adresse, int timeoutMs);
     }
 }

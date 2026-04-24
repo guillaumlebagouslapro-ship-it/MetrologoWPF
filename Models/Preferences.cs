@@ -24,13 +24,6 @@ namespace Metrologo.Models
             set { _settings.CheminMacroXLA = value; Sauvegarder(); }
         }
 
-        public static string CheminFichierIni
-        {
-            get => _settings.CheminFichierIni
-                   ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "Metrologo.ini");
-            set { _settings.CheminFichierIni = value; Sauvegarder(); }
-        }
-
         public static void Charger()
         {
             try
@@ -73,7 +66,6 @@ namespace Metrologo.Models
         {
             public Rubidium? RubidiumActif { get; set; }
             public string? CheminMacroXLA { get; set; }
-            public string? CheminFichierIni { get; set; }
         }
     }
 }

@@ -108,7 +108,6 @@ namespace Metrologo.ViewModels
                         Modele = r.Modele,
                         NumeroSerie = r.NumeroSerie,
                         Firmware = r.Firmware,
-                        TypeReconnu = AppareilDetecte.DeviquerType(r.Fabricant, r.Modele),
                         ModeleReconnu = r.ModeleCatalogue
                     });
                 }

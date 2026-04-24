@@ -1,6 +1,5 @@
 using System;
 using System.Collections.ObjectModel;
-using Metrologo.Services.Config;
 
 namespace Metrologo.Models
 {
@@ -12,9 +11,6 @@ namespace Metrologo.Models
     {
         private static Rubidium? _rubidiumActif;
         private static bool _chargeDepuisPreferences;
-
-        /// <summary>Configuration des appareils IEEE chargée depuis Metrologo.ini au démarrage.</summary>
-        public static ConfigAppareils? ConfigAppareils { get; set; }
 
         /// <summary>
         /// Appareils actuellement détectés sur le bus GPIB (rafraîchi après chaque scan).

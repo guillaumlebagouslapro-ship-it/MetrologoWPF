@@ -1,8 +1,11 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Metrologo.Models;
+using Metrologo.Services.Journal;
+using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.Services.Ieee
 {
@@ -19,9 +22,6 @@ namespace Metrologo.Services.Ieee
     /// </summary>
     public static class AppareilIeeeOperations
     {
-        // Nom canonique du Racal — permet de détecter le cas spécial mesure d'intervalle.
-        public const string NomRacal = "Racal-Dana 1996";
-
         // Bit MAV (Message Available) de l'octet de statut IEEE-488.2.
         private const byte BitMav = 0x10;
 
@@ -70,15 +70,87 @@ namespace Metrologo.Services.Ieee
         /// <summary>
         /// Programme la gate courante sur l'appareil (sauf en mode Interval, cf. F_Main.pas:1211).
         /// </summary>
-        public static Task AppliquerGateAsync(
+        public static async Task AppliquerGateAsync(
             this AppareilIEEE appareil, IIeeeDriver driver, int gateIndex,
             TypeMesure typeMesure, CancellationToken ct = default)
         {
-            if (typeMesure == TypeMesure.Interval) return Task.CompletedTask;
-            if (!appareil.Gates.TryGetValue(gateIndex, out var gate)) return Task.CompletedTask;
-            if (string.IsNullOrEmpty(gate.Commande)) return Task.CompletedTask;
+            if (typeMesure == TypeMesure.Interval) return;
 
-            return driver.EcrireAsync(appareil.Adresse, gate.Commande, appareil.WriteTerm, ct);
+            if (!appareil.Gates.TryGetValue(gateIndex, out var gate))
+            {
+                // Silence = bug invisible : l'appareil reste en mode gate par défaut et
+                // la cadence observée ne correspond pas à ce que l'utilisateur a choisi.
+                JournalLog.Warn(CategorieLog.Mesure, "GATE_INTROUVABLE",
+                    $"Gate index {gateIndex} absent de {appareil.Nom} — commande de gate non envoyée, "
+                    + "l'appareil tournera en mode par défaut.",
+                    new
+                    {
+                        Nom = appareil.Nom,
+                        GateIndexDemande = gateIndex,
+                        GatesDisponibles = appareil.Gates.Keys.OrderBy(k => k).ToArray()
+                    });
+                return;
+            }
+
+            // Le timeout VISA par défaut (5 s) est trop court dès que la gate dépasse ~3 s :
+            // le :READ? ne rend la main qu'à la fin du gate, donc il faut que le driver attende
+            // au moins gate + marge handshake GPIB. Sinon, premier READ = 0 Hz (chaîne vide après
+            // timeout), puis le Write suivant se bloque car le 53131A n'a pas eu le temps de
+            // vider son buffer de sortie.
+            int timeoutMs = Math.Max(5000, (int)(gate.ValeurSecondes * 1000) + 2000);
+            driver.DefinirTimeout(appareil.Adresse, timeoutMs);
+
+            if (string.IsNullOrEmpty(gate.Commande)) return;
+
+            // Certains compteurs (notamment le 53131A) digèrent mal les commandes SCPI chaînées
+            // avec ";" dans un seul Write : la 1ère s'applique, les suivantes sont silencieusement
+            // ignorées. On scinde donc en writes successifs avec un petit délai pour laisser
+            // l'instrument internaliser chaque changement d'état d'arming.
+            var sousCommandes = gate.Commande
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            foreach (var sc in sousCommandes)
+            {
+                await driver.EcrireAsync(appareil.Adresse, sc, appareil.WriteTerm, ct);
+                JournalLog.Info(CategorieLog.Mesure, "GATE_ENVOI",
+                    $"GPIB0::{appareil.Adresse} ← {sc}",
+                    new { Nom = appareil.Nom, Adresse = appareil.Adresse, Commande = sc });
+                await Task.Delay(50, ct);
+            }
+
+            // Vérification : on relit les valeurs d'arming pour voir si le 53131A (ou équivalent)
+            // a réellement pris en compte nos changements. Si on obtient "DIG" (défaut) pour la
+            // source STOP alors qu'on vient d'écrire "TIM", c'est que les commandes ont été rejetées
+            // silencieusement — ce qui expliquerait que :READ? tourne ensuite en mode par défaut et
+            // ne réponde jamais dans le timeout.
+            await VerifierArmingAsync(appareil, driver, ct);
+        }
+
+        private static async Task VerifierArmingAsync(
+            AppareilIEEE appareil, IIeeeDriver driver, CancellationToken ct)
+        {
+            try
+            {
+                await driver.EcrireAsync(appareil.Adresse, ":FREQ:ARM:STOP:SOUR?", appareil.WriteTerm, ct);
+                var sour = (await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct))?.Trim() ?? "";
+
+                await driver.EcrireAsync(appareil.Adresse, ":FREQ:ARM:STOP:TIM?", appareil.WriteTerm, ct);
+                var tim = (await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct))?.Trim() ?? "";
+
+                // On requête aussi l'erreur SCPI en attente — si une commande a été rejetée plus tôt,
+                // elle sera dans la file d'erreur (ex : "-113,"Undefined header"").
+                await driver.EcrireAsync(appareil.Adresse, ":SYST:ERR?", appareil.WriteTerm, ct);
+                var err = (await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct))?.Trim() ?? "";
+
+                JournalLog.Info(CategorieLog.Mesure, "GATE_VERIF",
+                    $"Arming relu : STOP:SOUR={sour} · STOP:TIM={tim} · SYST:ERR={err}",
+                    new { StopSour = sour, StopTim = tim, SystErr = err });
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Mesure, "GATE_VERIF_ECHEC",
+                    $"Impossible de relire l'arming sur {appareil.Nom} : {ex.GetType().Name} — {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -102,16 +174,7 @@ namespace Metrologo.Services.Ieee
             Mesure mesure,
             CancellationToken ct = default)
         {
-            string reponse;
-
-            if (appareil.Nom == NomRacal && mesure.TypeMesure == TypeMesure.Interval)
-            {
-                reponse = await MesurerIntervalleRacalAsync(appareil, driver, ct);
-            }
-            else
-            {
-                reponse = await EcrireEtLireAsync(appareil, driver, appareil.ExeMesure, ct);
-            }
+            string reponse = await EcrireEtLireAsync(appareil, driver, appareil.ExeMesure, ct);
 
             if (string.IsNullOrEmpty(reponse)) return 0.0;
 
@@ -144,42 +207,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Portage fidèle de <c>MesureIntervalleRacalDana</c> (U_DeclarationsMETROLOGO.pas:1047).
-        /// </summary>
-        private static async Task<string> MesurerIntervalleRacalAsync(
-            AppareilIEEE appareil, IIeeeDriver driver, CancellationToken ct)
-        {
-            // 1. Inhibe SRQ et draine les messages en attente.
-            await driver.EcrireAsync(appareil.Adresse, "QM0", appareil.WriteTerm, ct);
-
-            while (true)
-            {
-                ct.ThrowIfCancellationRequested();
-                var status = await driver.LireStatusByteAsync(appareil.Adresse, ct);
-                if ((status & BitMav) != BitMav) break;
-                await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);  // drain
-            }
-
-            // 2. Déclenche une nouvelle mesure en mode local.
-            await driver.EcrireAsync(appareil.Adresse, "RE", appareil.WriteTerm, ct);
-            await driver.DefinirRemoteLocalAsync(appareil.Adresse, remote: false, ct);
-
-            // 3. Attend la disponibilité du résultat (polling toutes les 1s comme Delphi).
-            while (true)
-            {
-                ct.ThrowIfCancellationRequested();
-                var status = await driver.LireStatusByteAsync(appareil.Adresse, ct);
-                if ((status & BitMav) == BitMav) break;
-                await Task.Delay(1000, ct);
-            }
-
-            return await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
-        }
-
-        /// <summary>
         /// Saute l'entête de la réponse et parse le nombre.
         /// TailleHeaderReponse est la position 1-based du premier caractère numérique
-        /// (Stanford=1 → pas de saut ; Racal=3 → saute 2 caractères).
+        /// (1 = pas de saut, 3 = saute 2 caractères — ex. entêtes type "F:" sur certains compteurs).
         /// </summary>
         private static double ParserValeur(string reponse, int tailleHeader)
         {

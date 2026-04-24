@@ -290,7 +290,8 @@
                          FontSize="12"
                          Padding="18,14"
                          BorderThickness="0"
-                         Background="Transparent"/>
+                         Background="Transparent"
+                         TextChanged="LogTextBox_TextChanged"/>
             </Grid>
         </Border>
     </Grid>

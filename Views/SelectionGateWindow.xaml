@@ -65,9 +65,9 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Procédure automatique non-EIP -->
+                <!-- Procédure automatique (stabilité uniquement) -->
                 <Border Style="{StaticResource FormSectionStyle}"
-                        Visibility="{Binding AfficheProceduresStandard, Converter={StaticResource BoolToVis}}">
+                        Visibility="{Binding IsStabilite, Converter={StaticResource BoolToVis}}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
                             <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="18"
@@ -127,51 +127,6 @@
                                             <TextBlock Text="Procédure Auto 2" FontWeight="SemiBold"
                                                        Foreground="{StaticResource AsertiNavyBrush}"/>
                                             <TextBlock Text="Balayage 10 ms → 10 s (plus rapide)"
-                                                       FontSize="11"
-                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                       Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsChecked" Value="True">
-                                            <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
-                                            <Setter TargetName="b" Property="BorderThickness" Value="2"/>
-                                            <Setter TargetName="b" Property="Background">
-                                                <Setter.Value>
-                                                    <SolidColorBrush Color="{StaticResource AsertiOrangeColor}" Opacity="0.08"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </RadioButton.Template>
-                        </RadioButton>
-                    </StackPanel>
-                </Border>
-
-                <!-- Procédure EIP -->
-                <Border Style="{StaticResource FormSectionStyle}"
-                        Visibility="{Binding AfficheProcedureEip, Converter={StaticResource BoolToVis}}">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                            <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="18"
-                                           Foreground="{StaticResource AsertiOrangeBrush}"
-                                           Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Procédure automatique EIP 545" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
-                        </StackPanel>
-
-                        <RadioButton GroupName="ProcedureEip"
-                                     IsChecked="{Binding ProcedureEipChoisie, Mode=TwoWay}">
-                            <RadioButton.Template>
-                                <ControlTemplate TargetType="RadioButton">
-                                    <Border x:Name="b" CornerRadius="6" Padding="14,12"
-                                            Background="White"
-                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                                            BorderThickness="1">
-                                        <StackPanel>
-                                            <TextBlock Text="Balayage EIP" FontWeight="SemiBold"
-                                                       Foreground="{StaticResource AsertiNavyBrush}"/>
-                                            <TextBlock Text="3 paliers : 10 ms, 100 ms et 1 s"
                                                        FontSize="11"
                                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                                        Margin="0,2,0,0"/>

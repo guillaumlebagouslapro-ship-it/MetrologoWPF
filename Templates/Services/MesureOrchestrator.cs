@@ -69,30 +69,21 @@ namespace Metrologo.Services
                 //    timeouts quand un appareil a été éteint/rallumé entre deux mesures.
                 _driver.ReinitialiserSessions();
 
-                // 1. Résolution de l'appareil :
-                //    - priorité au catalogue local si mesure.IdModeleCatalogue est défini (ex: Agilent 53131A)
-                //    - sinon fallback sur Metrologo.ini (Stanford / Racal / EIP historiques)
-                AppareilIEEE appareil;
-                if (!string.IsNullOrWhiteSpace(mesure.IdModeleCatalogue))
+                // 1. Résolution de l'appareil via le catalogue local.
+                //    Chaque appareil utilisé (y compris les anciens SR620/1996/EIP545) doit avoir
+                //    été enregistré dans AppareilsCatalogue.json via la fenêtre « Gérer les appareils ».
+                if (string.IsNullOrWhiteSpace(mesure.IdModeleCatalogue))
                 {
-                    var (appareilCatalogue, erreur) = ResolverDepuisCatalogue(mesure.IdModeleCatalogue);
-                    if (appareilCatalogue == null)
-                    {
-                        result.Erreur = erreur;
-                        return result;
-                    }
-                    appareil = appareilCatalogue;
+                    result.Erreur = "Aucun appareil sélectionné pour la mesure. "
+                        + "Enregistrez le fréquencemètre via Administration → Gérer les appareils.";
+                    return result;
                 }
-                else
+
+                var (appareil, erreur) = ResolverDepuisCatalogue(mesure.IdModeleCatalogue);
+                if (appareil == null)
                 {
-                    var configApp = EtatApplication.ConfigAppareils;
-                    if (configApp == null)
-                    {
-                        result.Erreur = "Configuration des appareils non chargée. "
-                            + "Vérifiez que Metrologo.ini est présent dans le dossier Config.";
-                        return result;
-                    }
-                    appareil = configApp.Par(mesure.Frequencemetre);
+                    result.Erreur = erreur;
+                    return result;
                 }
 
                 progress?.Report(new ProgressionMesure
@@ -105,10 +96,8 @@ namespace Metrologo.Services
                 // 2. Initialisation de l'appareil (envoi ChaineInit)
                 await appareil.InitialiserAsync(_driver, ct);
 
-                // 3. Configuration : IFC + MUX + ConfEntree + activation SRQ
-                //    MUX uniquement disponible pour les appareils legacy (chargé depuis Metrologo.ini).
-                var mux = EtatApplication.ConfigAppareils?.Mux;
-                await appareil.ConfigurerAsync(_driver, mesure, mux, commandesMux: null, ct);
+                // 3. Configuration : IFC + ConfEntree + activation SRQ.
+                await appareil.ConfigurerAsync(_driver, mesure, mux: null, commandesMux: null, ct);
 
                 // 3 bis. Rejoue les commandes SCPI des réglages dynamiques choisis dans Configuration
                 //        (Impédance, Couplage, Filtre, Trigger, Mode…). Sans ça le *RST de la ChaineInit
@@ -135,7 +124,7 @@ namespace Metrologo.Services
                                 + "commande ignorée, la mesure continue.");
                         }
 
-                        // Laisse l'appareil digérer (50 ms est un compromis testé pour 53131A / Stanford SR620).
+                        // Laisse l'appareil digérer (50 ms est un compromis testé pour le 53131A).
                         await Task.Delay(50, ct);
                     }
                 }
@@ -156,6 +145,17 @@ namespace Metrologo.Services
                 });
                 await _excel.InitialiserRapportAsync(mesure.NumFI, mesure, rubidium);
 
+                // 4 bis. Pré-insère les lignes et formules pour les N mesures à venir.
+                await _excel.PreparerLignesMesureAsync(mesure.NbMesures);
+
+                // 4 ter. Sauvegarde le fichier ClosedXML sur le disque puis l'ouvre en
+                //        direct dans l'instance Excel cachée (ExcelInteropHost) et rend la
+                //        fenêtre visible à l'utilisateur. Les valeurs seront écrites cellule
+                //        par cellule au fur et à mesure que chaque :READ? revient.
+                string cheminFichier = await _excel.SauvegarderSurDisqueAsync();
+                _excel.FermerExcel();  // libère le handle ClosedXML avant Interop
+                await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, _excel.NomFeuilleMesure);
+
                 // 5. Programmation de la gate sur l'appareil (hors mesure d'intervalle, cf. F_Main:1211)
                 progress?.Report(new ProgressionMesure
                 {
@@ -165,9 +165,8 @@ namespace Metrologo.Services
                 });
                 await appareil.AppliquerGateAsync(_driver, mesure.GateIndex, mesure.TypeMesure, ct);
 
-                // 6. Boucle de mesures — on mémorise le timestamp RÉEL juste après chaque lecture
-                //    GPIB pour qu'Excel affiche les vrais horodatages (et non une heure + i secondes
-                //    factice calculée à la fin).
+                // 6. Boucle de mesures — chaque valeur est écrite en direct dans Excel via Interop
+                //    pour que l'utilisateur voie sa mesure se remplir au fil des secondes.
                 var valeurs = new List<double>();
                 var horodatages = new List<DateTime>();
                 for (int i = 0; i < mesure.NbMesures; i++)
@@ -175,8 +174,12 @@ namespace Metrologo.Services
                     ct.ThrowIfCancellationRequested();
 
                     double val = await appareil.MesurerAsync(_driver, mesure, ct);
+                    var ts = DateTime.Now;
                     valeurs.Add(val);
-                    horodatages.Add(DateTime.Now);
+                    horodatages.Add(ts);
+
+                    // Écriture live dans Excel (best-effort — ne bloque pas la mesure en cas d'échec)
+                    await ExcelInteropHost.Instance.EcrireValeurLiveAsync(i, val, ts);
 
                     progress?.Report(new ProgressionMesure
                     {
@@ -192,8 +195,18 @@ namespace Metrologo.Services
                 // 7. Désactivation SRQ — cf. F_Main:1263 (correctif blocage Racal 10ms↔20ms)
                 await appareil.DesactiverSrqAsync(_driver, ct);
 
-                // 8. Mise à jour de la feuille Récap. — portage des MajRecap* du Delphi (F_Main.pas:1276)
-                //    Une nouvelle ligne est insérée avec des formules cross-sheet vers la feuille de mesure.
+                // 8. Fin de boucle : ferme le classeur côté Excel (avec sauvegarde) pour que
+                //    ClosedXML puisse rouvrir le fichier et compléter Stats + Récap. L'utilisateur
+                //    verra brièvement le classeur se fermer puis se rouvrir avec les totaux.
+                await ExcelInteropHost.Instance.FermerClasseurActifAsync();
+
+                // Re-ouvre le classeur sauvegardé par Interop (qui contient les N valeurs live),
+                // puis écrit les stats + le Récap. On passe par ClosedXML plutôt qu'Interop ici
+                // pour réutiliser la logique déjà éprouvée (insertion de lignes Récap, cross-sheet
+                // formulas, patch du lien .xla).
+                await _excel.RouvrirClasseurAsync();
+                await _excel.EcrireStatsAsync(valeurs);
+
                 if (mesure.TypeMesure == TypeMesure.Frequence
                     || mesure.TypeMesure == TypeMesure.FreqAvantInterv
                     || mesure.TypeMesure == TypeMesure.FreqFinale)
@@ -205,15 +218,17 @@ namespace Metrologo.Services
                     await _excel.MettreAJourRecapStabAsync(mesure);
                 }
 
-                // 9. Transfert Excel
+                // 9. Sauvegarde finale + réouverture dans Excel visible pour l'utilisateur.
                 progress?.Report(new ProgressionMesure
                 {
-                    Message = "Transfert des résultats vers Excel...",
+                    Message = "Finalisation du rapport Excel...",
                     EtapeActuelle = mesure.NbMesures + 3,
                     EtapesTotales = mesure.NbMesures + 3
                 });
-                await _excel.AjouterResultatsAsync(valeurs, horodatages);
-                await _excel.SauvegarderEtOuvrirAsync();
+                await _excel.SauvegarderFinalAsync();
+                string nomFeuilleFinal = _excel.NomFeuilleMesure;
+                _excel.FermerExcel();
+                await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuilleFinal);
 
                 JournalLog.Info(CategorieLog.Mesure, "Execute",
                     $"Mesure terminée : {valeurs.Count} valeurs sur {appareil.Nom}.",

@@ -16,16 +16,9 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private bool _editionDebloquee;
         [ObservableProperty] private ParametresIncertitudeGlobaux _parametresGlobaux = new();
 
-        // Fréquence — une liste par appareil
+        // Fréquence / stabilité — coefficients d'incertitude fixes (indépendants de l'appareil).
         [ObservableProperty] private ObservableCollection<IncertitudeFrequence> _freqFixes = new();
-        [ObservableProperty] private ObservableCollection<IncertitudeFrequence> _freqStanford = new();
-        [ObservableProperty] private ObservableCollection<IncertitudeFrequence> _freqRacal = new();
-        [ObservableProperty] private ObservableCollection<IncertitudeFrequence> _freqEip = new();
-
-        // Stabilité
         [ObservableProperty] private ObservableCollection<IncertitudeStabilite> _stabFixes = new();
-        [ObservableProperty] private ObservableCollection<IncertitudeStabilite> _stabStanford = new();
-        [ObservableProperty] private ObservableCollection<IncertitudeStabilite> _stabRacal = new();
 
         // Autres mesures
         [ObservableProperty] private ObservableCollection<IncertitudeAutreMesure> _autresIntervalle = new();
@@ -69,12 +62,7 @@ namespace Metrologo.ViewModels
             // TODO : S_REQ_DISPINCERT_FREQ / S_REQ_DISPINCERT_STAB / S_REQ_DISPINCERT_AUTRES
             // Les coefficients seront chargés depuis SQL selon le rubidium sélectionné.
             FreqFixes.Clear();
-            FreqStanford.Clear();
-            FreqRacal.Clear();
-            FreqEip.Clear();
             StabFixes.Clear();
-            StabStanford.Clear();
-            StabRacal.Clear();
             AutresIntervalle.Clear();
             AutresTachyContact.Clear();
             AutresStroboscope.Clear();

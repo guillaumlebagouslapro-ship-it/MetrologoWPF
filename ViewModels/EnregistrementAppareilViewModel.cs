@@ -76,7 +76,20 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _srqOn = string.Empty;
         [ObservableProperty] private string _srqOff = string.Empty;
 
-        [ObservableProperty] private string _gatesTexte = "10 ms, 100 ms, 1 s, 10 s";
+        /// <summary>
+        /// Temps de porte proposés à l'utilisateur sous forme de cases à cocher. Liste fixe de
+        /// 14 valeurs standard (de 10 ms à 1000 s) — l'utilisateur coche celles que son appareil
+        /// supporte. Évite les coquilles d'une saisie libre (ex: "100ms" vs "100 ms").
+        /// </summary>
+        public System.Collections.ObjectModel.ObservableCollection<GateCochable> GatesOptions { get; } = new()
+        {
+            new("10 ms"), new("20 ms"), new("50 ms"),
+            new("100 ms"), new("200 ms"), new("500 ms"),
+            new("1 s"), new("2 s"), new("5 s"),
+            new("10 s"), new("20 s"), new("50 s"),
+            new("100 s"), new("200 s"), new("500 s"), new("1000 s")
+        };
+
         [ObservableProperty] private string _entreesTexte = string.Empty;
         [ObservableProperty] private string _couplagesTexte = "AC, DC";
 
@@ -138,7 +151,10 @@ namespace Metrologo.ViewModels
             ChaineInit = "*RST;*CLS";
             ExeMesure = ":READ?";
             CommandeGate = ":FREQ:APER {0}";
-            GatesTexte = "10 ms, 100 ms, 1 s, 10 s";
+
+            // Par défaut, tous les temps de porte standards sont cochés — l'utilisateur
+            // décoche ceux qui ne sont pas supportés par son appareil.
+            foreach (var g in GatesOptions) g.EstCoche = true;
         }
 
         /// <summary>Édition d'un modèle existant (flux Admin « Gérer les appareils »).</summary>
@@ -163,7 +179,13 @@ namespace Metrologo.ViewModels
             SrqOn = modeleExistant.Parametres.SrqOn;
             SrqOff = modeleExistant.Parametres.SrqOff;
 
-            GatesTexte = string.Join(", ", modeleExistant.Gates);
+            // Coche les gates déjà enregistrées pour ce modèle (match insensible aux espaces).
+            var gatesConnues = new HashSet<string>(
+                modeleExistant.Gates.Select(g => NormaliserLibelleGate(g)),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var g in GatesOptions)
+                g.EstCoche = gatesConnues.Contains(NormaliserLibelleGate(g.Libelle));
+
             EntreesTexte = string.Join(", ", modeleExistant.Entrees);
             CouplagesTexte = string.Join(", ", modeleExistant.Couplages);
 
@@ -186,7 +208,7 @@ namespace Metrologo.ViewModels
                     m.FabricantIdn = FabricantIdn.Trim();
                     m.ModeleIdn = ModeleIdn.Trim();
                     m.Parametres = ConstruireParametres();
-                    m.Gates = SplitCSV(GatesTexte);
+                    m.Gates = GatesCochees();
                     m.Entrees = SplitCSV(EntreesTexte);
                     m.Couplages = SplitCSV(CouplagesTexte);
                     m.Reglages = ConstruireReglages();
@@ -206,7 +228,7 @@ namespace Metrologo.ViewModels
                     FabricantIdn = FabricantIdn.Trim(),
                     ModeleIdn = ModeleIdn.Trim(),
                     Parametres = ConstruireParametres(),
-                    Gates = SplitCSV(GatesTexte),
+                    Gates = GatesCochees(),
                     Entrees = SplitCSV(EntreesTexte),
                     Couplages = SplitCSV(CouplagesTexte),
                     Reglages = ConstruireReglages(),
@@ -368,6 +390,20 @@ namespace Metrologo.ViewModels
             SrqOn = SrqOn ?? string.Empty,
             SrqOff = SrqOff ?? string.Empty
         };
+
+        private List<string> GatesCochees()
+        {
+            var liste = new List<string>();
+            foreach (var g in GatesOptions)
+            {
+                if (g.EstCoche) liste.Add(g.Libelle);
+            }
+            return liste;
+        }
+
+        /// <summary>Normalise un libellé de gate pour comparer "100ms" ≈ "100 ms" ≈ "100  ms".</summary>
+        private static string NormaliserLibelleGate(string libelle)
+            => string.Concat(libelle.Where(c => !char.IsWhiteSpace(c))).ToLowerInvariant();
 
         private static List<string> SplitCSV(string texte)
         {

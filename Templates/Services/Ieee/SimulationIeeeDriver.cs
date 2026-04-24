@@ -66,6 +66,11 @@ namespace Metrologo.Services.Ieee
             _gateSecondes.Clear();
         }
 
+        public void DefinirTimeout(int adresse, int timeoutMs)
+        {
+            // No-op en simulation.
+        }
+
         // --------------- Internes ---------------
 
         private static bool EstCommandeMesure(string cmd)

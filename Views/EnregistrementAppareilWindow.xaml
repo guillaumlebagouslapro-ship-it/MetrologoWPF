@@ -119,11 +119,23 @@
                                     FontFamily="Cascadia Mono, Consolas"
                                     Padding="8,4" Margin="0,0,0,12"/>
 
-                        <TextBlock Text="TEMPS DE PORTE DISPONIBLES (séparés par virgules, ex: 10 ms, 100 ms, 1 s, 10 s)"
+                        <TextBlock Text="TEMPS DE PORTE DISPONIBLES (cochez ceux supportés par l'appareil)"
                                    Style="{StaticResource FormLabelStyle}"/>
-                        <ui:TextBox Text="{Binding GatesTexte, UpdateSourceTrigger=PropertyChanged}"
-                                    PlaceholderText="10 ms, 100 ms, 1 s, 10 s"
-                                    Padding="8,4"/>
+                        <ItemsControl ItemsSource="{Binding GatesOptions}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Libelle}"
+                                              IsChecked="{Binding EstCoche, Mode=TwoWay}"
+                                              MinWidth="78"
+                                              Margin="0,4,12,4"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </Border>
 

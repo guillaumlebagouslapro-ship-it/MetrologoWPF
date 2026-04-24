@@ -1,5 +1,6 @@
 using ClosedXML.Excel;
 using Metrologo.Models;
+using Metrologo.Services.Catalogue;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,16 +16,43 @@ namespace Metrologo.Services
         Task InitialiserRapportAsync(string numeroFI, Mesure configuration, Rubidium rubidium);
 
         /// <summary>
-        /// Écrit les résultats de mesure dans la feuille Excel.
-        /// Si <paramref name="horodatages"/> est fourni, ses timestamps (un par mesure) sont
-        /// écrits en colonne HEURE tels quels. Sinon, l'ancien comportement (heure courante + i s)
-        /// est utilisé — conservé pour rétrocompat, à éviter pour les nouvelles mesures.
+        /// Pré-insère les lignes vides nécessaires pour les mesures à venir (au-delà des 2 lignes
+        /// par défaut du template). Les formules <c>Fréq. Réelle</c> et <c>F(i)-F(i+1)</c> sont
+        /// ajoutées. Les cellules HEURE et mesure restent vides — elles seront remplies en direct.
         /// </summary>
-        Task AjouterResultatsAsync(List<double> resultats, List<DateTime>? horodatages = null);
+        Task PreparerLignesMesureAsync(int nbMesures);
+
+        /// <summary>
+        /// Sauvegarde le classeur ClosedXML sur le disque (sans ouvrir Excel) pour qu'il puisse
+        /// être repris ensuite par <see cref="ExcelInteropHost"/> en écriture live.
+        /// </summary>
+        Task<string> SauvegarderSurDisqueAsync();
+
+        /// <summary>Nom de la feuille créée pour cette mesure (ex: Freq1, Stab1).</summary>
+        string NomFeuilleMesure { get; }
+
+        /// <summary>
+        /// Écrit la moyenne et la variance dans les zones nommées — à appeler après la boucle
+        /// de mesures, pour que le Récap. cross-sheet fonctionne.
+        /// </summary>
+        Task EcrireStatsAsync(List<double> resultats);
 
         Task MettreAJourRecapFreqAsync(Mesure mesure);
         Task MettreAJourRecapStabAsync(Mesure mesure);
-        Task SauvegarderEtOuvrirAsync();
+
+        /// <summary>
+        /// Re-ouvre depuis le disque un classeur déjà initialisé, après qu'Interop l'ait rempli
+        /// avec les valeurs live. Ne crée pas de nouvelle feuille : on récupère la feuille dont
+        /// le nom est <see cref="NomFeuilleMesure"/>.
+        /// </summary>
+        Task RouvrirClasseurAsync();
+
+        /// <summary>
+        /// Sauvegarde finale après Recap + stats. Le fichier reste ouvert par <see cref="ExcelInteropHost"/>
+        /// (l'utilisateur peut continuer à l'inspecter).
+        /// </summary>
+        Task SauvegarderFinalAsync();
+
         void FermerExcel();
     }
 
@@ -48,6 +76,9 @@ namespace Metrologo.Services
         private XLWorkbook? _workbook;
         private IXLWorksheet? _feuilleMesure;   // feuille NOUVELLEMENT créée pour cette mesure
         private string _cheminFichier = string.Empty;
+        private string _nomFeuilleMesure = string.Empty;
+
+        public string NomFeuilleMesure => _nomFeuilleMesure;
 
         /// <summary>
         /// Chemin du fichier Excel réellement utilisé pour cette mesure (peut différer de
@@ -129,8 +160,8 @@ namespace Metrologo.Services
                 var modFeuille = _workbook.Worksheet(NOM_MODELE);
 
                 // --- 3. Création d'une nouvelle feuille (copie de ModFeuille) ---
-                string nomFeuille = TrouverNomFeuilleUnique(config.TypeMesure);
-                _feuilleMesure = modFeuille.CopyTo(nomFeuille);
+                _nomFeuilleMesure = TrouverNomFeuilleUnique(config.TypeMesure);
+                _feuilleMesure = modFeuille.CopyTo(_nomFeuilleMesure);
 
                 DeprotegerFeuille(_feuilleMesure);
 
@@ -157,7 +188,7 @@ namespace Metrologo.Services
                 SetNamed("ZNNoFiche", numeroFI);
                 SetNamed("ZNDate", DateTime.Now.ToString("dd/MM/yyyy"));
                 SetNamed("ZNTypeMesure", EnTetesMesureHelper.LibelleType(config.TypeMesure));
-                SetNamed("ZNFreqUtilise", EnTetesMesureHelper.NomAppareil(config.Frequencemetre));
+                SetNamed("ZNFreqUtilise", NomAppareilDepuisCatalogue(config.IdModeleCatalogue));
                 SetNamed("ZNRubidium",
                     rubidium.Designation + (rubidium.AvecGPS ? " (raccord GPS)" : " (raccord Allouis)"));
                 SetNamed("ZNGate", EnTetesMesureHelper.LibelleGate(config.GateIndex));
@@ -179,50 +210,42 @@ namespace Metrologo.Services
             });
         }
 
-        public async Task AjouterResultatsAsync(List<double> resultats, List<DateTime>? horodatages = null)
+        public async Task PreparerLignesMesureAsync(int nbMesures)
+        {
+            if (_feuilleMesure == null || _workbook == null || nbMesures <= 0) return;
+
+            await Task.Run(() =>
+            {
+                // *** KEY FIX (identique à l'ancien AjouterResultatsAsync) ***
+                // Le template a 2 lignes de mesures (9 et 10) et les labels commencent en 13.
+                // Pour chaque mesure au-delà de la 2e, on insère une rangée AVANT ZNPointInsertion.
+                if (nbMesures > 2)
+                {
+                    int pointInsertionRow = TrouverLigneZone("ZNPointInsertion") ?? 11;
+                    _feuilleMesure.Row(pointInsertionRow).InsertRowsAbove(nbMesures - 2);
+                }
+
+                // Ajoute les formules Fréq. Réelle (col C) et delta (col D) pour les lignes
+                // créées par InsertRowsAbove. Les cellules HEURE/mesure restent vides — elles
+                // seront écrites en direct par ExcelInteropHost pendant la boucle de mesures.
+                for (int i = 2; i < nbMesures; i++)
+                {
+                    int row = LIGNE_DEBUT_MESURES + i;
+                    _feuilleMesure.Cell($"C{row}").FormulaA1 =
+                        $"IF(ISBLANK(ZNCoeffMult),B{row},"
+                        + $"(((B{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
+                    _feuilleMesure.Cell($"D{row}").FormulaA1 = $"C{row - 1}-C{row}";
+                }
+            });
+        }
+
+        public async Task EcrireStatsAsync(List<double> resultats)
         {
             if (_feuilleMesure == null || _workbook == null || resultats.Count == 0) return;
 
             await Task.Run(() =>
             {
                 int n = resultats.Count;
-                bool utiliserHorodatagesReels = horodatages != null && horodatages.Count == n;
-
-                // *** KEY FIX ***
-                // Le template a 2 lignes de mesures (9 et 10) et les labels commencent en 13.
-                // Pour chaque mesure au-delà de la 2e, on insère une rangée AVANT
-                // ZNPointInsertion (=A11) pour pousser les labels vers le bas, comme le
-                // faisait l'ancien Delphi.
-                if (n > 2)
-                {
-                    int pointInsertionRow = TrouverLigneZone("ZNPointInsertion") ?? 11;
-                    _feuilleMesure.Row(pointInsertionRow).InsertRowsAbove(n - 2);
-                }
-
-                // Écrit les valeurs : HEURE en A (timestamp réel de la lecture GPIB si fourni),
-                // mesure brute en B.
-                var maintenantFallback = DateTime.Now;
-                for (int i = 0; i < n; i++)
-                {
-                    int row = LIGNE_DEBUT_MESURES + i;
-                    DateTime heure = utiliserHorodatagesReels
-                        ? horodatages![i]
-                        : maintenantFallback.AddSeconds(i);
-                    _feuilleMesure.Cell($"A{row}").SetValue(heure.ToString("HH:mm:ss"));
-                    _feuilleMesure.Cell($"B{row}").SetValue(resultats[i]);
-
-                    // Pour les lignes créées par InsertRowsAbove, pas de formule héritée
-                    // → on ajoute la formule F réelle (col C) et delta (col D) à la main.
-                    if (i >= 2)
-                    {
-                        _feuilleMesure.Cell($"C{row}").FormulaA1 =
-                            $"IF(ISBLANK(ZNCoeffMult),B{row},"
-                            + $"(((B{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
-                        _feuilleMesure.Cell($"D{row}").FormulaA1 = $"C{row - 1}-C{row}";
-                    }
-                }
-
-                // Moyenne et variance — écrites via zones nommées qui ont suivi le shift.
                 double moyenne = resultats.Average();
                 double variance = 0;
                 if (n >= 2)
@@ -235,6 +258,66 @@ namespace Metrologo.Services
 
                 SetNamed("ZNFreqMoyReel", moyenne);
                 SetNamed("ZNVariance", variance);
+            });
+        }
+
+        public async Task<string> SauvegarderSurDisqueAsync()
+        {
+            if (_workbook == null) return string.Empty;
+            await Task.Run(() =>
+            {
+                try { _workbook.SaveAs(_cheminFichier); }
+                catch (IOException)
+                {
+                    throw new InvalidOperationException(
+                        $"Impossible de sauvegarder « {Path.GetFileName(_cheminFichier)} » : "
+                        + "le fichier est verrouillé. Fermez-le dans Excel et relancez la mesure.");
+                }
+
+                // Patche le lien vers Metrologo.xla dès la première sauvegarde pour que les formules
+                // d'incertitude soient résolues dès l'ouverture du fichier par Excel Interop.
+                try { PatcherLienMacroXLA(_cheminFichier, Preferences.CheminMacroXLA); }
+                catch { /* best-effort */ }
+            });
+            return _cheminFichier;
+        }
+
+        public async Task RouvrirClasseurAsync()
+        {
+            if (string.IsNullOrEmpty(_cheminFichier) || string.IsNullOrEmpty(_nomFeuilleMesure))
+                throw new InvalidOperationException(
+                    "RouvrirClasseurAsync appelée avant InitialiserRapportAsync — pas de classeur à rouvrir.");
+
+            await Task.Run(() =>
+            {
+                _workbook?.Dispose();
+                _workbook = new XLWorkbook(_cheminFichier);
+
+                // Récupère la feuille de mesure par son nom (créée à l'initialisation).
+                _feuilleMesure = _workbook.Worksheets
+                    .FirstOrDefault(w => string.Equals(w.Name, _nomFeuilleMesure, StringComparison.OrdinalIgnoreCase));
+
+                if (_feuilleMesure == null)
+                    throw new InvalidOperationException(
+                        $"Feuille « {_nomFeuilleMesure} » introuvable après réouverture de « {Path.GetFileName(_cheminFichier)} ».");
+            });
+        }
+
+        public async Task SauvegarderFinalAsync()
+        {
+            if (_workbook == null) return;
+            await Task.Run(() =>
+            {
+                try { _workbook.SaveAs(_cheminFichier); }
+                catch (IOException)
+                {
+                    throw new InvalidOperationException(
+                        $"Impossible de sauvegarder « {Path.GetFileName(_cheminFichier)} » : "
+                        + "le fichier est verrouillé. Fermez-le dans Excel et relancez la mesure.");
+                }
+
+                try { PatcherLienMacroXLA(_cheminFichier, Preferences.CheminMacroXLA); }
+                catch { /* best-effort */ }
             });
         }
 
@@ -368,32 +451,6 @@ namespace Metrologo.Services
             return false;
         }
 
-        public async Task SauvegarderEtOuvrirAsync()
-        {
-            if (_workbook == null) return;
-            await Task.Run(() =>
-            {
-                try { _workbook.SaveAs(_cheminFichier); }
-                catch (IOException)
-                {
-                    throw new InvalidOperationException(
-                        $"Impossible de sauvegarder « {Path.GetFileName(_cheminFichier)} » : "
-                        + "le fichier est verrouillé. Fermez-le dans Excel et relancez la mesure.");
-                }
-
-                // Patche la référence externe vers Metrologo.xla selon le chemin configuré.
-                // Nécessaire pour que les macros Cal_ecart_type, Cal_freq_corrigee, etc.
-                // soient résolues sur le poste utilisateur.
-                try { PatcherLienMacroXLA(_cheminFichier, Preferences.CheminMacroXLA); }
-                catch { /* best-effort — Excel affichera #NOM? si échec */ }
-
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = _cheminFichier,
-                    UseShellExecute = true
-                });
-            });
-        }
 
         /// <summary>
         /// Remplace les caractères interdits par Windows dans les noms de fichier/dossier
@@ -488,6 +545,14 @@ namespace Metrologo.Services
                 }
             }
             catch { /* zone nommée absente → silencieux */ }
+        }
+
+        private static string NomAppareilDepuisCatalogue(string idModele)
+        {
+            if (string.IsNullOrEmpty(idModele)) return string.Empty;
+            var modele = CatalogueAppareilsService.Instance.Modeles
+                .FirstOrDefault(m => m.Id == idModele);
+            return modele?.Nom ?? idModele;
         }
 
         private int? TrouverLigneZone(string name)

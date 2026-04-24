@@ -54,7 +54,11 @@ namespace Metrologo.ViewModels
             }
             else if (source.Type == TypeReglage.Numerique)
             {
-                Valeur = string.IsNullOrWhiteSpace(source.ValeurDefaut) ? "0" : source.ValeurDefaut;
+                // Laisse vide par défaut si aucune valeur n'est prévue : une TextBox vide signale
+                // clairement à l'utilisateur "je n'applique rien" (et CommandeSelectionnee renverra
+                // null en conséquence). Mettre "0" induirait en erreur — "0 V" est une valeur valide
+                // et on ne veut pas l'envoyer par accident si l'utilisateur n'a rien saisi.
+                Valeur = source.ValeurDefaut ?? string.Empty;
             }
         }
 
