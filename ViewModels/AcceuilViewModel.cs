@@ -290,15 +290,15 @@ namespace Metrologo.ViewModels
             }
 
             // 3) Gate — déjà sélectionné dans la fenêtre Configuration (MesureConfig.GateIndex).
-            //    Pour les mesures de Stabilité avec procédure auto (sentinelles -1 / -2 / -3),
-            //    on ouvre quand même le dialogue car la Configuration ne gère pas encore ces procédures.
+            //    Pour les mesures de Stabilité, on ouvre la fenêtre dédiée pour que l'utilisateur
+            //    choisisse les gates à balayer (1 ou plusieurs, via cases à cocher + presets).
             if (MesureConfig.TypeMesure == TypeMesure.Stabilite)
             {
                 var gateWin = new SelectionGateWindow(MesureConfig) { Owner = Application.Current.MainWindow };
-                if (gateWin.ShowDialog() != true) { Log("✖ Mesure annulée (procédure)."); return; }
-                MesureConfig.GateIndex = gateWin.ViewModel.IndexGateResultat;
+                if (gateWin.ShowDialog() != true) { Log("✖ Mesure annulée (sélection gates)."); return; }
+                MesureConfig.GateIndices = gateWin.ViewModel.IndicesGatesResultats;
             }
-            Log($"⏱ Gate : index {MesureConfig.GateIndex}");
+            Log($"⏱ Gates à balayer : {string.Join(", ", MesureConfig.GateIndices)}");
 
             // 4) La fréquence nominale est déjà saisie dans ConfigurationWindow (bloc Indirect),
             //    conforme au Delphi d'origine (pas de dialog pré-mesure pour FNominale).

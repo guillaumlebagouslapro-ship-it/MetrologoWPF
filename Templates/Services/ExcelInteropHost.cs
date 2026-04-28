@@ -1,5 +1,6 @@
 using Metrologo.Services.Journal;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -146,6 +147,184 @@ namespace Metrologo.Services
                         // Écriture live best-effort : une cellule plantée ne doit pas tuer la mesure.
                         JournalLog.Warn(CategorieLog.Excel, "EXCEL_ECRITURE_LIVE_ERREUR",
                             $"Écriture live impossible (i={indexMesure}) : {ex.Message}");
+                    }
+                }
+            });
+
+        /// <summary>
+        /// Écrit toutes les mesures d'une gate en un seul appel COM (Range.Value2 = matrix).
+        /// Beaucoup plus rapide que N appels <see cref="EcrireValeurLiveAsync"/> quand l'utilisateur
+        /// n'a pas besoin de voir les valeurs apparaître au fil de l'acquisition (ex: balayage de
+        /// stabilité où chaque gate fait 30 mesures à ~10 ms — la boucle complète prend ~1 s,
+        /// l'œil humain ne peut pas suivre, autant tout écrire d'un coup à la fin).
+        /// </summary>
+        /// <param name="ligneDebut">Ligne Excel où commence la zone (9 dans le template).</param>
+        /// <param name="mesures">Liste ordonnée (timestamp, valeur). Index 0 = ligneDebut.</param>
+        public Task EcrireValeursEnBlocAsync(int ligneDebut, IList<(DateTime ts, double valeur)> mesures)
+            => Task.Run(() =>
+            {
+                lock (_sync)
+                {
+                    var feuille = _feuilleMesure;
+                    if (feuille == null || mesures.Count == 0) return;
+                    try
+                    {
+                        // Construction de la matrice 2D : N lignes × 2 colonnes (HEURE, mesure).
+                        // Excel COM accepte object[,] indexé en 0-based pour Range.Value2.
+                        object[,] matrix = new object[mesures.Count, 2];
+                        for (int i = 0; i < mesures.Count; i++)
+                        {
+                            matrix[i, 0] = mesures[i].ts.ToString("HH:mm:ss");
+                            matrix[i, 1] = mesures[i].valeur;
+                        }
+
+                        // Range A{ligneDebut}:B{ligneDebut+N-1}
+                        int ligneFin = ligneDebut + mesures.Count - 1;
+                        dynamic plage = feuille.Range[
+                            feuille.Cells[ligneDebut, 1],
+                            feuille.Cells[ligneFin, 2]];
+                        plage.Value2 = matrix;
+                        Marshal.ReleaseComObject(plage);
+                    }
+                    catch (Exception ex)
+                    {
+                        JournalLog.Warn(CategorieLog.Excel, "EXCEL_BLOC_ECRITURE_ERREUR",
+                            $"Écriture en bloc impossible ({mesures.Count} valeurs) : {ex.Message}");
+                    }
+                }
+            });
+
+        /// <summary>
+        /// Ajoute un graphe de stabilité (XY Scatter) sur la feuille <c>Récap.</c> du classeur
+        /// actif, reproduisant la structure historique Stab1.xls : 3 séries (Écart type / Valeurs
+        /// Maxi / Valeurs Mini) en fonction du Temps de porte (col A). Idempotent : si un graphe
+        /// nommé <c>GrapheStab</c> existe déjà, ne fait rien.
+        /// </summary>
+        /// <param name="nomFeuilleRecap">Nom de la feuille Récap. (par convention « Récap. »).</param>
+        public Task AjouterGrapheStabiliteAsync(string nomFeuilleRecap = "Récap.")
+            => Task.Run(() =>
+            {
+                lock (_sync)
+                {
+                    if (_classeurActif == null) return;
+                    try
+                    {
+                        // Localise la feuille Récap.
+                        dynamic? recap = null;
+                        foreach (dynamic ws in _classeurActif.Worksheets)
+                        {
+                            if (string.Equals((string)ws.Name, nomFeuilleRecap, StringComparison.OrdinalIgnoreCase))
+                            {
+                                recap = ws;
+                                break;
+                            }
+                        }
+                        if (recap == null) return;
+
+                        // Idempotence : si un graphe « GrapheStab » est déjà présent, on n'en
+                        // recrée pas un (utile quand l'utilisateur relance un balayage sur le même FI).
+                        dynamic chartObjects = recap.ChartObjects();
+                        for (int i = 1; i <= (int)chartObjects.Count; i++)
+                        {
+                            dynamic existing = chartObjects.Item(i);
+                            if (string.Equals((string)existing.Name, "GrapheStab", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Marshal.ReleaseComObject(existing);
+                                Marshal.ReleaseComObject(chartObjects);
+                                Marshal.ReleaseComObject(recap);
+                                return;
+                            }
+                            Marshal.ReleaseComObject(existing);
+                        }
+                        Marshal.ReleaseComObject(chartObjects);
+
+                        // Position calquée sur Stab1.xls historique : sous la zone des données,
+                        // pleine largeur. L'utilisateur peut le déplacer/redimensionner.
+                        dynamic co = recap.ChartObjects().Add(0, 217, 509, 376); // L, T, W, H (pts)
+                        co.Name = "GrapheStab";
+                        dynamic chart = co.Chart;
+
+                        // xlXYScatter (65) : nuage de points seuls (sans lignes), comme dans
+                        // Stab1.xls. Pour un graphe de stabilité (Allan deviation), les points
+                        // sont plus lisibles que des lignes connectées.
+                        chart.ChartType = 65;
+
+                        chart.HasTitle = true;
+                        chart.ChartTitle.Text = "STABILITE";
+
+                        // Axe Y log + minor gridlines (aspect quadrillé typique des graphes Allan
+                        // deviation) ; titres d'axes et légende en bas alignés sur Stab1.xls.
+                        try
+                        {
+                            dynamic axeY = chart.Axes(2);  // 2 = xlValue
+                            axeY.ScaleType = -4133;            // xlScaleLogarithmic
+                            axeY.HasMajorGridlines = false;
+                            axeY.HasMinorGridlines = true;
+                            axeY.HasTitle = true;
+                            axeY.AxisTitle.Text = "Stabilité relative";
+                            Marshal.ReleaseComObject(axeY);
+
+                            dynamic axeX = chart.Axes(1);  // 1 = xlCategory
+                            axeX.HasMajorGridlines = false;
+                            axeX.HasMinorGridlines = false;
+                            axeX.HasTitle = true;
+                            axeX.AxisTitle.Text = "Temps de Mesure (s)";
+                            Marshal.ReleaseComObject(axeX);
+
+                            chart.HasLegend = true;
+                            chart.Legend.Position = -4107;     // xlLegendPositionBottom
+                        }
+                        catch { /* config axes/légende non bloquante */ }
+
+                        // 3 séries avec markers distincts pour les différencier visuellement,
+                        // alignés sur la convention Stab1.xls : Square / X / Dash.
+                        var sc = chart.SeriesCollection();
+
+                        dynamic s1 = sc.NewSeries();
+                        s1.Name = $"='{nomFeuilleRecap}'!$C$3";   // En-tête « Ecart type »
+                        s1.XValues = $"='{nomFeuilleRecap}'!$A$6:$A$15";
+                        s1.Values  = $"='{nomFeuilleRecap}'!$C$6:$C$15";
+                        try { s1.MarkerStyle = 2; s1.MarkerSize = 5; } catch { }   // xlMarkerStyleSquare
+
+                        dynamic s2 = sc.NewSeries();
+                        s2.Name = $"='{nomFeuilleRecap}'!$G$3";   // « Valeurs Maxi. »
+                        s2.XValues = $"='{nomFeuilleRecap}'!$A$6:$A$15";
+                        s2.Values  = $"='{nomFeuilleRecap}'!$G$6:$G$15";
+                        try { s2.MarkerStyle = -4115; s2.MarkerSize = 5; } catch { } // xlMarkerStyleX
+
+                        dynamic s3 = sc.NewSeries();
+                        s3.Name = $"='{nomFeuilleRecap}'!$H$3";   // « Valeurs Mini. »
+                        s3.XValues = $"='{nomFeuilleRecap}'!$A$6:$A$15";
+                        s3.Values  = $"='{nomFeuilleRecap}'!$H$6:$H$15";
+                        try { s3.MarkerStyle = -4118; s3.MarkerSize = 5; } catch { } // xlMarkerStyleDash
+
+                        // High-Low Lines : barres verticales reliant les 3 séries (Maxi / Mini /
+                        // Écart type) à chaque temps de porte — c'est ce qui donne l'aspect
+                        // « error bars » propre du Stab1.xls historique. Sans ça, on n'a que
+                        // 3 points isolés. La propriété est sur le ChartGroup, pas sur la série.
+                        try
+                        {
+                            dynamic groupe = chart.ChartGroups(1);
+                            groupe.HasHiLoLines = true;
+                            Marshal.ReleaseComObject(groupe);
+                        }
+                        catch { /* propriété non dispo selon firmware Excel — non bloquant */ }
+
+                        Marshal.ReleaseComObject(s1);
+                        Marshal.ReleaseComObject(s2);
+                        Marshal.ReleaseComObject(s3);
+                        Marshal.ReleaseComObject(sc);
+                        Marshal.ReleaseComObject(chart);
+                        Marshal.ReleaseComObject(co);
+                        Marshal.ReleaseComObject(recap);
+
+                        JournalLog.Info(CategorieLog.Excel, "EXCEL_GRAPHE_STAB",
+                            "Graphe de stabilité ajouté dans la feuille Récap.");
+                    }
+                    catch (Exception ex)
+                    {
+                        JournalLog.Warn(CategorieLog.Excel, "EXCEL_GRAPHE_STAB_ERR",
+                            $"Création du graphe de stabilité impossible : {ex.Message}");
                     }
                 }
             });

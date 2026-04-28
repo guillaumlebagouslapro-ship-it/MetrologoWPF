@@ -43,7 +43,20 @@ namespace Metrologo.Services.Ieee
                     new { modele.Nom, Adresse = adresse, Commande = cmd });
 
                 await driver.EcrireAsync(adresse, cmd, termWrite, ct);
+
+                // Le 53131A (et d'autres compteurs lents) ont besoin de ~50 ms pour digérer
+                // chaque commande avant la suivante — sans ça, certaines commandes sont
+                // rejetées silencieusement et l'instrument peut se retrouver dans un état
+                // bancal qui bloque les sessions VISA suivantes (ex: *RST de l'orchestrator
+                // au début d'une mesure).
+                await Task.Delay(50, ct);
             }
+
+            // Délai final avant que la session VISA ne soit libérée (le caller utilise
+            // souvent un `using var driver`). Évite que l'instrument soit encore en train
+            // de traiter la dernière commande quand on rouvre une session sur la même
+            // adresse pour la mesure (cause typique de timeout sur le premier :READ?).
+            await Task.Delay(200, ct);
         }
     }
 }

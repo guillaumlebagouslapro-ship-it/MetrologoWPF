@@ -65,6 +65,64 @@ namespace Metrologo.Services.Journal
                 CREATE INDEX IF NOT EXISTS idx_sessions_user  ON Sessions(Utilisateur);
             ";
             await cmd.ExecuteNonQueryAsync();
+
+            // Migration : ajoute la colonne Poste si absente. ALTER échoue si déjà présente
+            // (anciennes bases existantes), on ignore.
+            try
+            {
+                using var alter = c.CreateCommand();
+                alter.CommandText = "ALTER TABLE Sessions ADD COLUMN Poste TEXT;";
+                await alter.ExecuteNonQueryAsync();
+            }
+            catch { /* colonne déjà présente */ }
+        }
+
+        /// <summary>
+        /// Ferme les sessions laissées « ouvertes » par des arrêts non propres de l'app
+        /// (taskkill, crash, debug stop). Pour chaque session avec <c>Fin = NULL</c>, on
+        /// renseigne la <c>Fin</c> avec le timestamp de la dernière entrée connue, ou le
+        /// timestamp de début si la session était vide. À appeler au démarrage avant de
+        /// créer la nouvelle session.
+        /// </summary>
+        public async Task NettoyerSessionsZombiesAsync()
+        {
+            await _ecritureSema.WaitAsync();
+            try
+            {
+                using var c = new SqliteConnection(_connectionString);
+                await c.OpenAsync();
+                using var cmd = c.CreateCommand();
+                cmd.CommandText = @"
+                    UPDATE Sessions
+                    SET Fin = COALESCE(
+                        (SELECT MAX(Timestamp) FROM LogEntries WHERE SessionId = Sessions.SessionId),
+                        Debut
+                    )
+                    WHERE Fin IS NULL;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+            finally { _ecritureSema.Release(); }
+        }
+
+        /// <summary>
+        /// Met à jour le poste (Baie / Paillasse) de la session courante après que
+        /// l'utilisateur l'a choisi dans <c>SelectionPosteView</c>.
+        /// </summary>
+        public async Task DefinirPosteAsync(string poste)
+        {
+            if (SessionActuelleId == null) return;
+            await _ecritureSema.WaitAsync();
+            try
+            {
+                using var c = new SqliteConnection(_connectionString);
+                await c.OpenAsync();
+                using var cmd = c.CreateCommand();
+                cmd.CommandText = "UPDATE Sessions SET Poste = @p WHERE SessionId = @id;";
+                cmd.Parameters.AddWithValue("@p", poste);
+                cmd.Parameters.AddWithValue("@id", SessionActuelleId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            finally { _ecritureSema.Release(); }
         }
 
         public async Task DemarrerSessionAsync(string utilisateur)
@@ -167,7 +225,7 @@ namespace Metrologo.Services.Journal
                 if (filtre.Jusqu_a.HasValue) where += " AND Debut <= @jusqu";
                 if (!string.IsNullOrEmpty(filtre.Utilisateur)) where += " AND Utilisateur = @u";
 
-                cmd.CommandText = $"SELECT SessionId, Utilisateur, Machine, Debut, Fin FROM Sessions WHERE {where} ORDER BY Debut DESC LIMIT 200;";
+                cmd.CommandText = $"SELECT SessionId, Utilisateur, Machine, Debut, Fin, Poste FROM Sessions WHERE {where} ORDER BY Debut DESC LIMIT 200;";
                 if (filtre.Depuis.HasValue) cmd.Parameters.AddWithValue("@depuis", filtre.Depuis.Value.ToString("o"));
                 if (filtre.Jusqu_a.HasValue) cmd.Parameters.AddWithValue("@jusqu", filtre.Jusqu_a.Value.ToString("o"));
                 if (!string.IsNullOrEmpty(filtre.Utilisateur)) cmd.Parameters.AddWithValue("@u", filtre.Utilisateur);
@@ -181,7 +239,8 @@ namespace Metrologo.Services.Journal
                         Utilisateur = reader.GetString(1),
                         Machine = reader.GetString(2),
                         Debut = DateTime.Parse(reader.GetString(3)),
-                        Fin = reader.IsDBNull(4) ? null : DateTime.Parse(reader.GetString(4))
+                        Fin = reader.IsDBNull(4) ? null : DateTime.Parse(reader.GetString(4)),
+                        Poste = reader.IsDBNull(5) ? null : reader.GetString(5)
                     };
                     sessions[s.SessionId] = s;
                 }
@@ -220,6 +279,23 @@ namespace Metrologo.Services.Journal
                 {
                     where += " AND (Message LIKE @r OR Action LIKE @r OR Details LIKE @r)";
                     cmd.Parameters.AddWithValue("@r", $"%{filtre.Recherche}%");
+                }
+
+                // Filtre métier : restreint aux actions whitelist + sévérités élevées.
+                // Permet d'éviter de matérialiser des milliers d'entrées techniques en mode
+                // normal (chargement quasi-instantané au lieu de plusieurs secondes).
+                if (filtre.ActionsMetier != null && filtre.ActionsMetier.Count > 0)
+                {
+                    var actionPlaceholders = new List<string>();
+                    int j = 0;
+                    foreach (var action in filtre.ActionsMetier)
+                    {
+                        var p = $"@a{j++}";
+                        actionPlaceholders.Add(p);
+                        cmd.Parameters.AddWithValue(p, action);
+                    }
+                    where += $" AND (Action IN ({string.Join(",", actionPlaceholders)}) "
+                          + $"OR Severite IN ('{SeveriteLog.Avertissement}','{SeveriteLog.Erreur}'))";
                 }
 
                 cmd.CommandText = $"SELECT EntryId, SessionId, Timestamp, Categorie, Action, Message, Details, Severite FROM LogEntries WHERE {where} ORDER BY Timestamp ASC;";

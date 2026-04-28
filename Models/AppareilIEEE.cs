@@ -27,6 +27,19 @@ namespace Metrologo.Models
         public string ExeMesure { get; set; } = string.Empty;
         public string Monocoup { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Commande de mesure en lot (avec placeholder <c>{N}</c>). Si non vide, l'orchestrator
+        /// l'utilise pour récupérer N mesures en un seul aller-retour GPIB. Vide = fallback
+        /// sur :FETCh? boucle puis :READ?.
+        /// </summary>
+        public string CommandeMesureMultiple { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Commande SCPI qui bloque jusqu'à ce qu'une nouvelle mesure soit disponible.
+        /// Si non vide, supprime le Task.Delay entre fetches dans la boucle rapide.
+        /// </summary>
+        public string CommandeFetchFresh { get; set; } = string.Empty;
+
         // Gestion des interruptions (Service Request)
         public bool GereSRQ { get; set; }
         public string SRQOn { get; set; } = string.Empty;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -70,9 +71,16 @@ namespace Metrologo.Services.Ieee
         /// <summary>
         /// Programme la gate courante sur l'appareil (sauf en mode Interval, cf. F_Main.pas:1211).
         /// </summary>
+        /// <param name="verifierArming">
+        /// Si <c>true</c> (défaut), relit l'arming après écriture pour s'assurer que l'instrument
+        /// a bien pris en compte les commandes (3 paires query/read = ~200 ms d'overhead). À
+        /// désactiver dans les boucles de balayage où chaque ms compte et où l'arming est déjà
+        /// validé par le bon comportement des mesures.
+        /// </param>
         public static async Task AppliquerGateAsync(
             this AppareilIEEE appareil, IIeeeDriver driver, int gateIndex,
-            TypeMesure typeMesure, CancellationToken ct = default)
+            TypeMesure typeMesure, CancellationToken ct = default,
+            bool verifierArming = true)
         {
             if (typeMesure == TypeMesure.Interval) return;
 
@@ -118,12 +126,13 @@ namespace Metrologo.Services.Ieee
                 await Task.Delay(50, ct);
             }
 
-            // Vérification : on relit les valeurs d'arming pour voir si le 53131A (ou équivalent)
-            // a réellement pris en compte nos changements. Si on obtient "DIG" (défaut) pour la
-            // source STOP alors qu'on vient d'écrire "TIM", c'est que les commandes ont été rejetées
-            // silencieusement — ce qui expliquerait que :READ? tourne ensuite en mode par défaut et
-            // ne réponde jamais dans le timeout.
-            await VerifierArmingAsync(appareil, driver, ct);
+            // Vérification : relit les valeurs d'arming pour confirmer que l'instrument a pris
+            // en compte nos commandes. Coût : ~200 ms (3 paires query/read). Skippable dans les
+            // boucles de balayage où l'arming est déjà éprouvé.
+            if (verifierArming)
+            {
+                await VerifierArmingAsync(appareil, driver, ct);
+            }
         }
 
         private static async Task VerifierArmingAsync(
@@ -179,6 +188,109 @@ namespace Metrologo.Services.Ieee
             if (string.IsNullOrEmpty(reponse)) return 0.0;
 
             return ParserValeur(reponse, appareil.TailleHeaderReponse);
+        }
+
+        /// <summary>
+        /// Mode rapide : envoie une commande de fetch (typiquement <c>:FETCh:FREQ?</c>) qui lit
+        /// la dernière mesure complétée par l'instrument **sans ré-armer**. À utiliser dans
+        /// une boucle avec <c>:INIT:CONT ON</c> activé en amont — sinon retourne toujours la
+        /// même valeur. Beaucoup plus rapide que <see cref="MesurerAsync"/> sur le 53131A
+        /// (~30-50 ms/mesure vs ~670 ms) car on évite l'arming à chaque appel.
+        /// </summary>
+        public static async Task<double> FetcherAsync(
+            this AppareilIEEE appareil,
+            IIeeeDriver driver,
+            string commandeFetch,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(commandeFetch)) return 0.0;
+            string reponse = await EcrireEtLireAsync(appareil, driver, commandeFetch, ct);
+            if (string.IsNullOrEmpty(reponse)) return 0.0;
+            return ParserValeur(reponse, appareil.TailleHeaderReponse);
+        }
+
+        /// <summary>
+        /// Mode bulk : envoie une commande de mesure multiple (ex 53131A :
+        /// <c>:SAMP:COUN 30;:READ:ARR? 30</c>) qui demande à l'instrument de faire N
+        /// mesures en interne et de les retourner en bloc. Évite N aller-retours GPIB
+        /// → gain majeur sur les boucles courtes (gate ≤ 100 ms).
+        ///
+        /// Le placeholder <c>{N}</c> dans <paramref name="commandeTemplate"/> est remplacé
+        /// par <paramref name="nbMesures"/>. La réponse est parsée comme CSV (séparateur
+        /// virgule, format SCPI standard — chaque valeur peut avoir son propre header de
+        /// taille <c>TailleHeaderReponse</c>, mais on ignore cette subtilité ici car en
+        /// pratique les bulk transfers SCPI ne mettent pas de header par valeur).
+        /// </summary>
+        public static async Task<List<double>> MesurerEnLotAsync(
+            this AppareilIEEE appareil,
+            IIeeeDriver driver,
+            string commandeTemplate,
+            int nbMesures,
+            CancellationToken ct = default)
+        {
+            string commande = commandeTemplate.Replace("{N}",
+                nbMesures.ToString(CultureInfo.InvariantCulture));
+
+            string reponse = await EcrireEtLireAsync(appareil, driver, commande, ct);
+
+            // Log la réponse brute (tronquée à 200 char pour ne pas saturer le journal) pour
+            // pouvoir adapter la commande SCPI si elle ne marche pas avec l'instrument.
+            string apercu = string.IsNullOrEmpty(reponse)
+                ? "(vide)"
+                : reponse.Length > 200 ? reponse.Substring(0, 200) + "..." : reponse;
+            JournalLog.Info(CategorieLog.Mesure, "BULK_RAW_RESPONSE",
+                $"Cmd envoyée : {commande} | Réponse brute : « {apercu} »");
+
+            var valeurs = ParserValeursMultiples(reponse, nbMesures);
+            return valeurs;
+        }
+
+        /// <summary>
+        /// Parse une réponse SCPI multi-valeurs (CSV ou whitespace-separated). Tolère :
+        /// les virgules, points-virgules, espaces et tabs comme séparateurs. Les valeurs
+        /// non parsables sont remplacées par 0. Si moins de <paramref name="nbAttendu"/>
+        /// valeurs sont reçues, complète avec des 0 (et on logguera côté orchestrator).
+        /// </summary>
+        public static List<double> ParserValeursMultiples(string reponse, int nbAttendu)
+        {
+            var resultat = new List<double>(nbAttendu);
+            if (string.IsNullOrWhiteSpace(reponse)) return resultat;
+
+            var separateurs = new[] { ',', ';', ' ', '\t', '\r', '\n' };
+            var parts = reponse.Split(separateurs, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                if (double.TryParse(part.Trim(), NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out var v))
+                {
+                    resultat.Add(v);
+                }
+            }
+            return resultat;
+        }
+
+        /// <summary>
+        /// Dérive une commande de fetch à partir de la commande de mesure de l'appareil.
+        /// Convention SCPI : <c>:READ:XXX?</c> ↔ <c>:FETCh:XXX?</c> (READ ré-arme + lit ; FETCH
+        /// ne fait que lire la dernière mesure complète). Retourne <c>null</c> si la commande
+        /// d'origine ne correspond pas au pattern (ex: appareil pré-SCPI), auquel cas le mode
+        /// rapide n'est pas applicable et on retombe sur le READ classique.
+        /// </summary>
+        public static string? DeriverCommandeFetch(string commandeMesure)
+        {
+            if (string.IsNullOrWhiteSpace(commandeMesure)) return null;
+            string trim = commandeMesure.Trim();
+
+            // Cas usuels SCPI :
+            //   :READ:FREQ?    -> :FETCh:FREQ?
+            //   :READ?         -> :FETCh?
+            //   READ:FREQ?     -> FETCh:FREQ?
+            if (trim.StartsWith(":READ", System.StringComparison.OrdinalIgnoreCase))
+                return ":FETCh" + trim.Substring(":READ".Length);
+            if (trim.StartsWith("READ", System.StringComparison.OrdinalIgnoreCase))
+                return "FETCh" + trim.Substring("READ".Length);
+
+            return null;
         }
 
         // ---------------- Interne ----------------

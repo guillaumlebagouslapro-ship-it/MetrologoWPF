@@ -35,8 +35,30 @@ namespace Metrologo.Models
         public bool InitManu { get; set; }
         public int InputIndex { get; set; }    // Gamme/Entrée
         public int CouplingIndex { get; set; } // Couplage AC/DC
-                                               // Remplacez la ligne existante par celle-ci :
-        public int GateIndex { get; set; } = 6; // Index 6 correspond à "1 s" dans la nouvelle liste complète
+
+        /// <summary>
+        /// Liste des temps de porte à utiliser pour la mesure. Pour les types non-Stabilité
+        /// (Fréquence, Intervalle, Tachy…) : un unique élément. Pour la Stabilité, peut
+        /// contenir N gates : l'orchestrator créera une feuille Excel par gate et balaiera
+        /// la liste séquentiellement (équivalent moderne et générique des « procédures auto »
+        /// historiques).
+        ///
+        /// Index 6 (= « 1 s ») par défaut, conservé pour compat avec le flux Fréquence existant.
+        /// </summary>
+        public List<int> GateIndices { get; set; } = new() { 6 };
+
+        /// <summary>
+        /// Accès court-circuit à la première (et souvent unique) gate. Utilisé partout où une
+        /// seule gate est attendue (Fréquence, Intervalle, init Excel d'une feuille donnée,
+        /// zones nommées <c>ZNGate</c>/<c>ZNValGateSecondes</c>). En lecture, retourne le
+        /// premier indice. En écriture, remplace la liste par un unique élément — les usages
+        /// historiques continuent donc à fonctionner sans changement.
+        /// </summary>
+        public int GateIndex
+        {
+            get => GateIndices.Count > 0 ? GateIndices[0] : 6;
+            set => GateIndices = new List<int> { value };
+        }
 
         // Paramètres pour le mode Indirect
         public double FNominale { get; set; } = 10000000;

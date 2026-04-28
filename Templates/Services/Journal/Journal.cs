@@ -22,6 +22,12 @@ namespace Metrologo.Services.Journal
         public static Task TerminerSessionAsync()
             => _service?.TerminerSessionAsync() ?? Task.CompletedTask;
 
+        public static Task DefinirPosteAsync(string poste)
+            => _service?.DefinirPosteAsync(poste) ?? Task.CompletedTask;
+
+        public static Task NettoyerSessionsZombiesAsync()
+            => _service?.NettoyerSessionsZombiesAsync() ?? Task.CompletedTask;
+
         public static void Info(CategorieLog cat, string action, string message, object? details = null)
             => _service?.Log(cat, action, message, details, SeveriteLog.Info);
 

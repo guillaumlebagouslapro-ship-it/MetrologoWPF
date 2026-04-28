@@ -47,6 +47,7 @@ namespace Metrologo.Services.Ieee
         public Task EcrireAsync(int adresse, string commande, int writeTerm, CancellationToken ct = default)
         {
             EnsureNotDisposed();
+            ct.ThrowIfCancellationRequested();
             var session = ObtenirSession(adresse);
             AppliquerTerminateurs(session, readTerm: null);
 
@@ -54,48 +55,45 @@ namespace Metrologo.Services.Ieee
             //   0 = rien (pas de LF, pas d'EOI)
             //   1 = NL (LF) en fin de commande + EOI — convention Delphi la plus courante
             //   2 = EOI uniquement (pas de LF)
-            // Certaines firmwares (53131A en particulier) attendent explicitement le LF pour
-            // valider la fin de commande, même avec EOI asserté.
             session.SendEndEnabled = writeTerm != 0;
             string aEcrire = writeTerm == 1 ? commande + "\n" : commande;
 
-            return Task.Run(() =>
+            // Synchrone direct sur le thread d'orchestration (qui tourne déjà sur un thread pool
+            // hors UI). Évite l'overhead Task.Run/await (~10-20 ms par opération) qui se voit
+            // énormément quand on enchaîne 30 :FETCh? en mode rapide stabilité.
+            try
             {
-                try
-                {
-                    session.RawIO.Write(aEcrire);
-                }
-                catch (IOTimeoutException)
-                {
-                    // Timeout en écriture = l'appareil refuse la commande parce qu'il a typiquement
-                    // encore une réponse en attente dans son buffer de sortie (suite à un :READ?
-                    // dont la lecture a expiré par exemple). On émet un Device Clear pour remettre
-                    // l'appareil dans un état propre, et on relaie l'exception à l'appelant.
-                    TenterDeviceClear(session, adresse, "EcrireAsync");
-                    throw;
-                }
-            }, ct);
+                session.RawIO.Write(aEcrire);
+            }
+            catch (IOTimeoutException)
+            {
+                // Timeout en écriture = l'appareil refuse la commande parce qu'il a typiquement
+                // encore une réponse en attente dans son buffer de sortie. Device Clear pour
+                // remettre l'appareil dans un état propre, puis on relaie l'exception.
+                TenterDeviceClear(session, adresse, "EcrireAsync");
+                throw;
+            }
+            return Task.CompletedTask;
         }
 
         public Task<string> LireAsync(int adresse, int readTerm, CancellationToken ct = default)
         {
             EnsureNotDisposed();
+            ct.ThrowIfCancellationRequested();
             var session = ObtenirSession(adresse);
             AppliquerTerminateurs(session, readTerm: readTerm);
 
-            return Task.Run(() =>
+            // Synchrone direct (cf. EcrireAsync). Le thread d'orchestration est dédié, on peut
+            // le bloquer pendant l'IO GPIB sans impact UI.
+            try
             {
-                try { return session.RawIO.ReadString(); }
-                catch (IOTimeoutException)
-                {
-                    // Lecture qui timeout = la mesure n'a pas rendu la main. Si on laisse en l'état,
-                    // le Write suivant se bloque car l'appareil produit toujours sa réponse (ou
-                    // l'a mise dans son buffer de sortie qui n'a pas été drainé). Device Clear
-                    // réinitialise l'état I/O de l'appareil sans affecter les réglages utilisateur.
-                    TenterDeviceClear(session, adresse, "LireAsync");
-                    return string.Empty;
-                }
-            }, ct);
+                return Task.FromResult(session.RawIO.ReadString());
+            }
+            catch (IOTimeoutException)
+            {
+                TenterDeviceClear(session, adresse, "LireAsync");
+                return Task.FromResult(string.Empty);
+            }
         }
 
         private static void TenterDeviceClear(GpibSession session, int adresse, string origine)

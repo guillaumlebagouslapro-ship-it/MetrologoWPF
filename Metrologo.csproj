@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -13,20 +13,24 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Dapper" Version="2.1.72" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
-	<PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.4" />
-	<PackageReference Include="WPF-UI" Version="3.0.4" />
-	<PackageReference Include="NationalInstruments.Visa" Version="25.3.0.11" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.4" />
+    <PackageReference Include="WPF-UI" Version="3.0.4" />
+    <PackageReference Include="NationalInstruments.Visa" Version="25.3.0.11" />
   </ItemGroup>
-	<ItemGroup>
-		<None Update="Templates\METROLOGO.xltm">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
-	</ItemGroup>
 
-	<ItemGroup>
-		<Resource Include="Resources\*.png" />
-		<Resource Include="Resources\*.jpg" />
-		<Resource Include="Resources\*.ico" />
-	</ItemGroup>
+  <ItemGroup>
+    <None Update="Templates\METROLOGO.xltm">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Templates\METROLOGO_Stab.xltm">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\*.png" />
+    <Resource Include="Resources\*.jpg" />
+    <Resource Include="Resources\*.ico" />
+  </ItemGroup>
 
 </Project>

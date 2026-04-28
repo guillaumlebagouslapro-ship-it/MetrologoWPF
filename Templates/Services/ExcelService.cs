@@ -13,7 +13,14 @@ namespace Metrologo.Services
 {
     public interface IExcelService
     {
-        Task InitialiserRapportAsync(string numeroFI, Mesure configuration, Rubidium rubidium);
+        /// <summary>
+        /// Initialise une feuille de mesure dans le classeur du FI. Le paramètre optionnel
+        /// <paramref name="gateIndexOverride"/> permet de spécifier la gate à inscrire dans
+        /// les zones nommées (<c>ZNGate</c>/<c>ZNLibGate</c>/<c>ZNValGateSecondes</c>) — utile
+        /// pour les balayages de stabilité où chaque feuille est associée à une gate différente
+        /// sans qu'on souhaite muter <c>config.GateIndex</c> partout.
+        /// </summary>
+        Task InitialiserRapportAsync(string numeroFI, Mesure configuration, Rubidium rubidium, int? gateIndexOverride = null);
 
         /// <summary>
         /// Pré-insère les lignes vides nécessaires pour les mesures à venir (au-delà des 2 lignes
@@ -90,25 +97,33 @@ namespace Metrologo.Services
         /// <summary>Vrai si le fichier a dû être écrit sous un nom de fallback au lieu du nom principal.</summary>
         public bool FallbackTimestampUtilise { get; private set; }
 
-        public async Task InitialiserRapportAsync(string numeroFI, Mesure config, Rubidium rubidium)
+        public async Task InitialiserRapportAsync(string numeroFI, Mesure config, Rubidium rubidium, int? gateIndexOverride = null)
         {
+            int gateInscrite = gateIndexOverride ?? config.GateIndex;
+            bool estStab = config.TypeMesure == TypeMesure.Stabilite;
+
             await Task.Run(() =>
             {
-                // --- 1. Détermination du dossier et du fichier (un fichier par FI) ---
-                //    Sanitize le numéro FI : Windows interdit < > : " / \ | ? * dans les noms
-                //    de dossier/fichier. On remplace chaque caractère interdit par « _ ».
+                // --- 1. Détermination du dossier et du fichier ---
+                //    La Stabilité utilise un fichier séparé (Récap. à 8 colonnes spécifique)
+                //    pour ne pas polluer la Récap. Fréquence du fichier principal du FI.
                 string numFISafe = SanitizerNomFichier(numeroFI);
 
                 string dossier = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     "Metrologo", numFISafe);
                 Directory.CreateDirectory(dossier);
-                _cheminFichier = Path.Combine(dossier, $"Mesures_{numFISafe}.xlsm");
+
+                string suffixe = estStab ? "_Stab" : string.Empty;
+                _cheminFichier = Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}.xlsm");
                 FallbackTimestampUtilise = false;
 
                 // --- 2. Ouverture : fichier existant ou copie du template ---
+                //    Template Stab dédié pour la Stabilité (Récap. 8 cols + zones nommées
+                //    ZNRecapS_*), template Fréquence pour le reste.
+                string nomTemplate = estStab ? "METROLOGO_Stab.xltm" : "METROLOGO.xltm";
                 string templatePath = Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory, "Templates", "METROLOGO.xltm");
+                    AppDomain.CurrentDomain.BaseDirectory, "Templates", nomTemplate);
 
                 if (File.Exists(_cheminFichier))
                 {
@@ -163,6 +178,12 @@ namespace Metrologo.Services
                 _nomFeuilleMesure = TrouverNomFeuilleUnique(config.TypeMesure);
                 _feuilleMesure = modFeuille.CopyTo(_nomFeuilleMesure);
 
+                // ModFeuille est cachée dans le template (convention métier — c'est juste un
+                // modèle interne qui ne doit pas apparaître à l'utilisateur). Mais la copie
+                // hérite de cet attribut Hidden — il faut donc forcer la visibilité de chaque
+                // nouvelle feuille de mesure (1, 2, 3, … ou Freq1, Stab1, …).
+                _feuilleMesure.Visibility = XLWorksheetVisibility.Visible;
+
                 DeprotegerFeuille(_feuilleMesure);
 
                 _feuilleMesure.Column("B").Width = 30;
@@ -191,9 +212,9 @@ namespace Metrologo.Services
                 SetNamed("ZNFreqUtilise", NomAppareilDepuisCatalogue(config.IdModeleCatalogue));
                 SetNamed("ZNRubidium",
                     rubidium.Designation + (rubidium.AvecGPS ? " (raccord GPS)" : " (raccord Allouis)"));
-                SetNamed("ZNGate", EnTetesMesureHelper.LibelleGate(config.GateIndex));
-                SetNamed("ZNLibGate", EnTetesMesureHelper.LibelleGate(config.GateIndex));
-                SetNamed("ZNValGateSecondes", EnTetesMesureHelper.SecondesGate(config.GateIndex));
+                SetNamed("ZNGate", EnTetesMesureHelper.LibelleGate(gateInscrite));
+                SetNamed("ZNLibGate", EnTetesMesureHelper.LibelleGate(gateInscrite));
+                SetNamed("ZNValGateSecondes", EnTetesMesureHelper.SecondesGate(gateInscrite));
                 SetNamed("ZNModeMesure", config.ModeMesure == ModeMesure.Direct ? "Direct" : "Indirect");
                 SetNamed("ZNCoeffMult", config.IndexMultiplicateur);
                 SetNamed("ZNValFNominale", config.FNominale);
@@ -354,26 +375,67 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Ajoute une ligne de récapitulatif Stabilité dans la feuille <c>Récap.</c>.
-        /// Portage de <c>TfrmMain.MajRecapStab</c> (F_Main.pas:2470).
+        /// Ajoute une ligne dans la feuille <c>Récap.</c> du fichier Stabilité, en s'alignant
+        /// sur la structure historique (cf. Stab1.xls) :
+        /// <list type="bullet">
+        ///   <item>8 colonnes : Temps (s), Fréq Moyenne, Écart type, Incertitude, Incert accréditée, Incert globale, Valeurs Maxi, Valeurs Mini</item>
+        ///   <item>Insertion en ordre chronologique (gate 1 → L6, gate 2 → L7, …)</item>
+        ///   <item>Cols 7-8 = formules locales <c>=C{n}+F{n}</c> et <c>=C{n}-F{n}</c> (moyenne ± incert. globale)</item>
+        ///   <item>L1 mise à jour avec NumFI + date</item>
+        /// </list>
+        /// Le template Stab a déjà la ligne L5 comme template + L19 globaux (Max/Min).
         /// </summary>
         public async Task MettreAJourRecapStabAsync(Mesure mesure)
         {
             if (_workbook == null || _feuilleMesure == null) return;
             string nomFeuille = _feuilleMesure.Name;
 
-            await Task.Run(() => EcrireLigneRecap(
-                nomFeuille,
-                ZN_RECAPS_DEBZONE, LIGNE_FALLBACK_RECAPS,
-                new[]
+            await Task.Run(() =>
+            {
+                if (!_workbook.Worksheets.Any(w => w.Name == NOM_RECAP)) return;
+                var recap = _workbook.Worksheet(NOM_RECAP);
+                DeprotegerFeuille(recap);
+
+                // En-tête fiche : NumFI + date — idempotent à chaque itération de gate.
+                recap.Cell("B1").SetValue(mesure.NumFI);
+                recap.Cell("D1").SetValue(DateTime.Now.ToString("dd/MM/yyyy"));
+
+                // Numéro de la gate dans la séquence (1, 2, 3…). Le nommage des feuilles de
+                // mesure étant numérique pur en Stab, on parse directement le nom — sinon
+                // fallback : on compte les lignes déjà remplies dans la zone de données.
+                int numero;
+                if (!int.TryParse(nomFeuille, out numero))
                 {
-                    $"='{nomFeuille}'!ZNValGateSecondes",   // Col 1 : gate en secondes
-                    $"='{nomFeuille}'!ZNFreqMoyReel",       // Col 2 : fréquence moyenne
-                    $"='{nomFeuille}'!ZNEcartType",         // Col 3 : écart-type
-                    $"='{nomFeuille}'!ZNIncertEcartType",   // Col 4 : incertitude sur l'écart-type
-                    $"='{nomFeuille}'!ZNIncertAccreditee",  // Col 5 : incertitude accréditée
-                    $"='{nomFeuille}'!ZNIncertGlobale"      // Col 6 : incertitude globale
-                }));
+                    numero = CompterLignesStabRemplies(recap) + 1;
+                }
+
+                int ligne = 5 + numero;  // L6 = 1ère gate balayée, L7 = 2ème, etc.
+
+                recap.Cell(ligne, 1).FormulaA1 = $"='{nomFeuille}'!ZNValGateSecondes";
+                recap.Cell(ligne, 2).FormulaA1 = $"='{nomFeuille}'!ZNFreqMoyReel";
+                recap.Cell(ligne, 3).FormulaA1 = $"='{nomFeuille}'!ZNEcartType";
+                recap.Cell(ligne, 4).FormulaA1 = $"='{nomFeuille}'!ZNIncertEcartType";
+                recap.Cell(ligne, 5).FormulaA1 = $"='{nomFeuille}'!ZNIncertAccreditee";
+                recap.Cell(ligne, 6).FormulaA1 = $"='{nomFeuille}'!ZNIncertGlobale";
+                recap.Cell(ligne, 7).FormulaA1 = $"=C{ligne}+F{ligne}";
+                recap.Cell(ligne, 8).FormulaA1 =
+                    $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0,C{ligne}-F{ligne}))";
+            });
+        }
+
+        /// <summary>
+        /// Compte le nombre de lignes de données déjà remplies dans la zone Stab (L6+).
+        /// Une ligne est considérée remplie si sa colonne A (Temps) contient quelque chose.
+        /// </summary>
+        private static int CompterLignesStabRemplies(IXLWorksheet recap)
+        {
+            int compteur = 0;
+            for (int row = 6; row <= 18; row++)
+            {
+                var cell = recap.Cell(row, 1);
+                if (!cell.IsEmpty()) compteur++;
+            }
+            return compteur;
         }
 
         // Ligne d'entête des colonnes dans le template Récap. (observé dans METROLOGO.xltm).
@@ -587,21 +649,32 @@ namespace Metrologo.Services
             if (type == TypeMesure.FreqAvantInterv) return "F_Avant_Interv";
             if (type == TypeMesure.FreqFinale) return "F_Finale";
 
+            // Stabilité : nommage numérique pur (1, 2, 3…) — aligné sur la convention
+            // historique du Delphi/Stab1.xls. La feuille Récap. attend ce format pour
+            // ses formules cross-sheet ='1'!ZN…, ='2'!ZN…, etc.
+            if (type == TypeMesure.Stabilite)
+            {
+                int n = 1;
+                var existantsStab = _workbook!.Worksheets.Select(w => w.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                while (existantsStab.Contains(n.ToString())) n++;
+                return n.ToString();
+            }
+
             string prefixe = type switch
             {
                 TypeMesure.Frequence => "Freq",
-                TypeMesure.Stabilite => "Stab",
                 TypeMesure.Interval => "Interv",
                 TypeMesure.TachyContact => "TachyC",
                 TypeMesure.Stroboscope => "Strobo",
                 _ => "Mesure"
             };
 
-            int n = 1;
+            int idx = 1;
             var existants = _workbook!.Worksheets.Select(w => w.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            while (existants.Contains($"{prefixe}{n}")) n++;
-            return $"{prefixe}{n}";
+            while (existants.Contains($"{prefixe}{idx}")) idx++;
+            return $"{prefixe}{idx}";
         }
 
         private void ClonerZonesNommeesPourNouvelleFeuille(IXLWorksheet source, IXLWorksheet dest)

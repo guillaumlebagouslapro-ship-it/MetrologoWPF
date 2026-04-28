@@ -74,6 +74,31 @@ namespace Metrologo.Models
         /// </summary>
         public string CommandeGate { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Commande de mesure en lot — si l'appareil sait faire N mesures côté hardware
+        /// et les retourner d'un coup en CSV. <c>{N}</c> sera remplacé par le nombre de
+        /// mesures. Ex 53131A : <c>":SAMP:COUN {N};:READ:ARR? {N}"</c>.
+        ///
+        /// Si non vide, l'orchestrator utilise ce mode bulk au lieu du :FETCh? boucle —
+        /// gain massif sur les boucles courtes (10 ms × 30 → ~0,5 s vs ~6 s en :FETCh?
+        /// boucle), car les mesures se font côté instrument sans aller-retour GPIB.
+        ///
+        /// Vide = fallback automatique sur :INIT:CONT ON + :FETCh? (mode rapide), puis
+        /// sur :READ? si Fetch n'est pas dérivable. Pas de comportement spécifique à un
+        /// modèle en dur côté C# — la stratégie est entièrement décidée par le catalogue.
+        /// </summary>
+        public string CommandeMesureMultiple { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Commande SCPI qui retourne la **prochaine** mesure (et bloque jusqu'à ce
+        /// qu'elle soit dispo) au lieu de la dernière déjà lue. Permet d'éviter le
+        /// Task.Delay entre deux fetches dans la boucle de mesures rapides.
+        ///
+        /// Ex 53131A : <c>":DATA:FRESh:FREQ?"</c> ou similaire selon firmware. Vide =
+        /// fallback sur :FETCh? + Task.Delay = gate × 0,5 + détection doublons.
+        /// </summary>
+        public string CommandeFetchFresh { get; set; } = string.Empty;
+
         /// <summary>WriteTerm : 0=none, 1=NL (LF), 2=EOI. Cf. Metrologo.ini.</summary>
         public int TermWrite { get; set; } = 1;
 

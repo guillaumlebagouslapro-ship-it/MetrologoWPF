@@ -38,6 +38,8 @@ namespace Metrologo.Services.Catalogue
                 ConfEntree = p.ConfEntree ?? string.Empty,
                 ExeMesure = p.ExeMesure ?? string.Empty,
                 Monocoup = string.Empty,
+                CommandeMesureMultiple = p.CommandeMesureMultiple ?? string.Empty,
+                CommandeFetchFresh = p.CommandeFetchFresh ?? string.Empty,
                 GereSRQ = p.GereSrq,
                 SRQOn = p.SrqOn ?? string.Empty,
                 SRQOff = p.SrqOff ?? string.Empty,

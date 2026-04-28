@@ -324,9 +324,14 @@ namespace Metrologo.ViewModels
             "×1 (10⁰)", "×10 (10¹)", "×100 (10²)", "×1000 (10³)", "×10000 (10⁴)"
         };
 
+        // Le temps de porte unique se configure ici uniquement pour les mesures de Fréquence.
+        // Pour la Stabilité, la sélection se fait dans SelectionGateWindow (multi-gates à balayer
+        // via cases à cocher + presets) — afficher un combo « TEMPS DE PORTE » ici serait
+        // redondant et trompeur.
         public bool ShowGateSettings =>
             MesureConfig.TypeMesure == TypeMesure.Frequence ||
-            MesureConfig.TypeMesure == TypeMesure.Stabilite;
+            MesureConfig.TypeMesure == TypeMesure.FreqAvantInterv ||
+            MesureConfig.TypeMesure == TypeMesure.FreqFinale;
 
         /// <summary>
         /// Init manuelle disponible uniquement pour TypeMesure=Fréquence (conforme Delphi,

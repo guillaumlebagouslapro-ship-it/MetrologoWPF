@@ -16,6 +16,13 @@ namespace Metrologo.ViewModels
 
         [ObservableProperty] private bool _estCoche;
 
+        /// <summary>
+        /// Index canonique du libellé dans l'échelle 0..15 (10 ms → 1000 s). -1 si non
+        /// renseigné — utilisé par <c>SelectionGateViewModel</c> pour mapper directement
+        /// les cases cochées vers <c>Mesure.GateIndices</c> sans reparser le libellé.
+        /// </summary>
+        public int SlotCanonique { get; set; } = -1;
+
         public GateCochable(string libelle)
         {
             Libelle = libelle;

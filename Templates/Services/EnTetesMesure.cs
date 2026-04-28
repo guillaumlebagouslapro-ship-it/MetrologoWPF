@@ -1,3 +1,4 @@
+using System.Linq;
 using Metrologo.Models;
 
 namespace Metrologo.Services
@@ -109,15 +110,34 @@ namespace Metrologo.Services
             100.0, 200.0, 500.0, 1000.0
         };
 
+        /// <summary>Échelle canonique complète des libellés de gates (slots 0..15).</summary>
+        public static System.Collections.Generic.IReadOnlyList<string> LibellesCanoniques => _libellesGate;
+
         public static string LibelleGate(int index) => index switch
         {
-            -2 => "Procédure auto (10 ms → 10 s)",
-            -1 => "Procédure auto (10 ms → 100 s)",
             >= 0 and var i when i < _libellesGate.Length => _libellesGate[i],
             _ => ""
         };
 
         public static double SecondesGate(int index) =>
             (index >= 0 && index < _secondesGate.Length) ? _secondesGate[index] : 1.0;
+
+        /// <summary>
+        /// Retourne l'index canonique correspondant à un libellé (insensible à la casse et aux
+        /// espaces multiples). -1 si le libellé n'est pas reconnu — l'appelant doit gérer ce cas.
+        /// </summary>
+        public static int IndexDepuisLibelle(string? libelle)
+        {
+            if (string.IsNullOrWhiteSpace(libelle)) return -1;
+            string norm = NormaliserLibelle(libelle);
+            for (int i = 0; i < _libellesGate.Length; i++)
+            {
+                if (NormaliserLibelle(_libellesGate[i]) == norm) return i;
+            }
+            return -1;
+        }
+
+        private static string NormaliserLibelle(string libelle)
+            => string.Concat(libelle.Where(c => !char.IsWhiteSpace(c))).ToLowerInvariant();
     }
 }

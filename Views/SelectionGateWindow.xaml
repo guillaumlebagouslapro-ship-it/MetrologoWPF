@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Sélection du temps de porte"
-        Height="560" Width="500"
+        Height="680" Width="540"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowBackdropType="Mica"
@@ -33,7 +33,7 @@
                     <TextBlock Text="{Binding Titre}"
                                FontSize="20" FontWeight="Bold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Définissez le temps de porte ou la procédure automatique"
+                    <TextBlock Text="{Binding SousTitre}"
                                FontSize="12"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
@@ -43,14 +43,15 @@
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="24,0,24,16">
             <StackPanel>
 
-                <!-- Temps de porte fixe -->
-                <Border Style="{StaticResource FormSectionStyle}">
+                <!-- Mode "Gate fixe" : visible sauf en Stabilité -->
+                <Border Style="{StaticResource FormSectionStyle}"
+                        Visibility="{Binding IsStabilite, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
                             <ui:SymbolIcon Symbol="Timer24" FontSize="18"
                                            Foreground="{StaticResource AsertiOrangeBrush}"
                                            Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Temps de porte fixe" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
+                            <TextBlock Text="Temps de porte" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
                         </StackPanel>
 
                         <TextBlock Text="Durée d'intégration d'une mesure individuelle"
@@ -59,93 +60,89 @@
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                    Margin="0,0,0,10"/>
 
-                        <ComboBox ItemsSource="{Binding GateTimes}"
+                        <ComboBox ItemsSource="{Binding GatesDisponibles}"
+                                  DisplayMemberPath="Libelle"
                                   SelectedIndex="{Binding GateSelectionneIndex, Mode=TwoWay}"
                                   Padding="10,8"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Procédure automatique (stabilité uniquement) -->
+                <!-- Mode "Stabilité" : presets + cases à cocher -->
                 <Border Style="{StaticResource FormSectionStyle}"
                         Visibility="{Binding IsStabilite, Converter={StaticResource BoolToVis}}">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                            <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="18"
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <ui:SymbolIcon Symbol="Bookmark24" FontSize="18"
                                            Foreground="{StaticResource AsertiOrangeBrush}"
                                            Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Procédure automatique" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
+                            <TextBlock Text="Preset de balayage" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
                         </StackPanel>
 
-                        <TextBlock Text="Balaie automatiquement plusieurs temps de porte pour une mesure de stabilité complète"
+                        <TextBlock Text="Charge un balayage prédéfini, puis ajuste les cases cochées si besoin"
                                    FontSize="11"
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                   Margin="0,0,0,12"/>
+                                   Margin="0,0,0,10"/>
 
-                        <RadioButton GroupName="Procedure"
-                                     IsChecked="{Binding Procedure100SChoisie, Mode=TwoWay}"
-                                     Margin="0,0,0,8">
-                            <RadioButton.Template>
-                                <ControlTemplate TargetType="RadioButton">
-                                    <Border x:Name="b" CornerRadius="6" Padding="14,12"
-                                            Background="White"
-                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                                            BorderThickness="1">
-                                        <StackPanel>
-                                            <TextBlock Text="Procédure Auto 1" FontWeight="SemiBold"
-                                                       Foreground="{StaticResource AsertiNavyBrush}"/>
-                                            <TextBlock Text="Balayage 10 ms → 100 s"
-                                                       FontSize="11"
-                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                       Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsChecked" Value="True">
-                                            <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
-                                            <Setter TargetName="b" Property="BorderThickness" Value="2"/>
-                                            <Setter TargetName="b" Property="Background">
-                                                <Setter.Value>
-                                                    <SolidColorBrush Color="{StaticResource AsertiOrangeColor}" Opacity="0.08"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </RadioButton.Template>
-                        </RadioButton>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox Grid.Column="0"
+                                      ItemsSource="{Binding Presets}"
+                                      DisplayMemberPath="Nom"
+                                      SelectedItem="{Binding PresetSelectionne, Mode=TwoWay}"
+                                      Padding="10,8"/>
+                            <Button Grid.Column="1"
+                                    Margin="8,0,0,0"
+                                    Content="Supprimer"
+                                    Command="{Binding SupprimerPresetCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}"/>
+                        </Grid>
 
-                        <RadioButton GroupName="Procedure"
-                                     IsChecked="{Binding Procedure10SChoisie, Mode=TwoWay}">
-                            <RadioButton.Template>
-                                <ControlTemplate TargetType="RadioButton">
-                                    <Border x:Name="b" CornerRadius="6" Padding="14,12"
-                                            Background="White"
-                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                                            BorderThickness="1">
-                                        <StackPanel>
-                                            <TextBlock Text="Procédure Auto 2" FontWeight="SemiBold"
-                                                       Foreground="{StaticResource AsertiNavyBrush}"/>
-                                            <TextBlock Text="Balayage 10 ms → 10 s (plus rapide)"
-                                                       FontSize="11"
-                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                       Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsChecked" Value="True">
-                                            <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
-                                            <Setter TargetName="b" Property="BorderThickness" Value="2"/>
-                                            <Setter TargetName="b" Property="Background">
-                                                <Setter.Value>
-                                                    <SolidColorBrush Color="{StaticResource AsertiOrangeColor}" Opacity="0.08"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </RadioButton.Template>
-                        </RadioButton>
+                        <Separator Margin="0,4,0,12"/>
+
+                        <TextBlock Text="Temps de porte à balayer (cocher 1 ou plusieurs)"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,8"/>
+
+                        <ItemsControl ItemsSource="{Binding GatesDisponibles}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Libelle}"
+                                              IsChecked="{Binding EstCoche, Mode=TwoWay}"
+                                              MinWidth="86"
+                                              Margin="0,4,12,4"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Separator Margin="0,12,0,12"/>
+
+                        <TextBlock Text="Sauver la sélection actuelle comme nouveau preset"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,6"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ui:TextBox Grid.Column="0"
+                                        Text="{Binding NomNouveauPreset, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="Nom du preset (ex: Mon balayage rapide)"
+                                        Padding="10,8"/>
+                            <Button Grid.Column="1"
+                                    Margin="8,0,0,0"
+                                    Content="Sauver"
+                                    Command="{Binding SauverCommePresetCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}"/>
+                        </Grid>
                     </StackPanel>
                 </Border>
 

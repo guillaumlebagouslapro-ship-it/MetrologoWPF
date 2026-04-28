@@ -49,6 +49,9 @@ namespace Metrologo.ViewModels
                 _accueilViewModel.EstSurBaie = choixBaie;
                 OnPropertyChanged(nameof(TexteUtilisateurConnecte));
                 VueActuelle = _accueilViewModel;
+                // Enregistre le poste choisi sur la session courante pour qu'il apparaisse
+                // dans le journal d'activité (« Baie » ou « Paillasse » à côté de l'utilisateur).
+                _ = Metrologo.Services.Journal.Journal.DefinirPosteAsync(choixBaie ? "Baie" : "Paillasse");
             };
 
             _accueilViewModel.PropertyChanged += (_, e) =>

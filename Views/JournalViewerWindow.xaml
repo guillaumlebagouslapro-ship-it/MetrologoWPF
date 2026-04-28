@@ -69,6 +69,7 @@
                 BorderThickness="1"
                 CornerRadius="10"
                 Padding="14,12">
+            <StackPanel>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -128,6 +129,15 @@
                         Padding="16,8"
                         VerticalAlignment="Bottom"/>
             </Grid>
+
+            <!-- Toggle vue métier ↔ vue debug. En vue métier (défaut), seules les
+                 entrées clés sont visibles (sessions, configs validées, mesures,
+                 erreurs). En vue debug, on voit tout (SCPI, GPIB, Excel, perf…). -->
+            <CheckBox Content="Mode debug — afficher toutes les entrées techniques (SCPI, GPIB, Excel, perf…)"
+                      IsChecked="{Binding AfficherDetails, Mode=TwoWay}"
+                      FontSize="11"
+                      Margin="34,10,0,0"/>
+            </StackPanel>
         </Border>
 
         <!-- Liste des sessions -->
@@ -135,7 +145,7 @@
             <ItemsControl ItemsSource="{Binding Sessions}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Expander Margin="0,0,0,10" IsExpanded="True">
+                        <Expander Margin="0,0,0,10" IsExpanded="False">
                             <Expander.Header>
                                 <Grid Width="980">
                                     <Grid.ColumnDefinitions>
@@ -161,13 +171,27 @@
                                             <TextBlock Text="{Binding Utilisateur}"
                                                        FontWeight="Bold" FontSize="14"
                                                        Foreground="{StaticResource AsertiNavyBrush}"/>
-                                            <TextBlock Text=" · "
-                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock Text="{Binding Machine}"
-                                                       FontSize="12"
-                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                       VerticalAlignment="Center"/>
+                                            <!-- Badge Poste (Baie / Paillasse), seulement si défini -->
+                                            <Border Background="#FFE0E7FF" CornerRadius="8" Padding="6,1"
+                                                    Margin="8,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Poste}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Poste}" Value="">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding Poste}"
+                                                           FontSize="10" FontWeight="SemiBold"
+                                                           Foreground="#FF4338CA"/>
+                                            </Border>
                                             <Border Background="#FFDCFCE7" CornerRadius="8" Padding="6,1"
                                                     Margin="8,0,0,0"
                                                     Visibility="{Binding Active, Converter={StaticResource BoolToVis}}">
@@ -255,14 +279,20 @@
                                                                FontSize="12"
                                                                TextWrapping="Wrap"
                                                                Foreground="{StaticResource AsertiNavyBrush}"/>
+                                                    <!-- Ligne détails technique : Action SCPI + JSON brut.
+                                                         Cachée par défaut, dévoilée par la checkbox
+                                                         "Afficher les détails techniques" du filtre. -->
                                                     <TextBlock FontSize="10"
                                                                FontFamily="Cascadia Mono, Consolas"
                                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                                                TextWrapping="Wrap"
-                                                               Margin="0,2,0,0">
+                                                               Margin="0,2,0,0"
+                                                               Visibility="{Binding DataContext.AfficherDetails,
+                                                                            RelativeSource={RelativeSource AncestorType={x:Type Window}},
+                                                                            Converter={StaticResource BoolToVis}}">
                                                         <Run Text="{Binding Action, Mode=OneWay}"/>
                                                         <Run Text=" · "/>
-                                                        <Run Text="{Binding Details, Mode=OneWay}"/>
+                                                        <Run Text="{Binding DetailsLisibles, Mode=OneWay}"/>
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Grid>

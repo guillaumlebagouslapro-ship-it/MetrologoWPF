@@ -6,6 +6,7 @@ using Metrologo.Services.Journal;
 using Metrologo.ViewModels;
 using Metrologo.Views;
 using System;
+using System.IO;
 using System.Windows;
 using System.Threading.Tasks;
 
@@ -24,8 +25,36 @@ namespace Metrologo
             // Initialisation du journal (SQLite local)
             Journal.Configurer(new SqliteJournalService());
 
+            // Ferme les sessions zombies (laissées ouvertes par un crash, taskkill, ou
+            // arrêt brutal lors d'un debug). Sans ça, elles s'accumulent et apparaissent
+            // perpétuellement « En cours » dans la liste du journal.
+            await Journal.NettoyerSessionsZombiesAsync();
+
             // Chargement du catalogue local des modèles d'appareils enregistrés par les utilisateurs
             await CatalogueAppareilsService.Instance.ChargerAsync();
+
+            // Chargement des presets de balayage de stabilité (séédés au 1er démarrage).
+            await PresetsStabiliteService.Instance.ChargerAsync();
+
+            // METROLOGO_Stab.xltm est livré avec l'app (extrait de Stab1.xls historique avec
+            // graphe pro intégré). Le builder n'est utilisé qu'en filet de sécurité si quelqu'un
+            // a supprimé le template — il génère alors une version basique sans graphe pro.
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string stabPath = Path.Combine(baseDir, "Templates", "METROLOGO_Stab.xltm");
+                if (!File.Exists(stabPath))
+                {
+                    StabTemplateBuilder.EnsureExists(
+                        Path.Combine(baseDir, "Templates", "METROLOGO.xltm"),
+                        stabPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                Journal.Warn(CategorieLog.Excel, "TEMPLATE_STAB_BUILD",
+                    $"Construction du template Stabilité échouée : {ex.Message}.");
+            }
 
             // Démarre une instance Excel cachée en arrière-plan dès le lancement de l'app
             // (comportement hérité du Delphi) pour que l'ouverture du classeur au démarrage

@@ -67,6 +67,8 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _confEntree = string.Empty;
         [ObservableProperty] private string _exeMesure = ":READ?";
         [ObservableProperty] private string _commandeGate = ":FREQ:APER {0}";
+        [ObservableProperty] private string _commandeMesureMultiple = string.Empty;
+        [ObservableProperty] private string _commandeFetchFresh = string.Empty;
 
         [ObservableProperty] private int _termWrite = 1;
         [ObservableProperty] private int _termRead = 10;
@@ -172,6 +174,8 @@ namespace Metrologo.ViewModels
             ConfEntree = modeleExistant.Parametres.ConfEntree;
             ExeMesure = modeleExistant.Parametres.ExeMesure;
             CommandeGate = modeleExistant.Parametres.CommandeGate;
+            CommandeMesureMultiple = modeleExistant.Parametres.CommandeMesureMultiple;
+            CommandeFetchFresh = modeleExistant.Parametres.CommandeFetchFresh;
             TermWrite = modeleExistant.Parametres.TermWrite;
             TermRead = modeleExistant.Parametres.TermRead;
             TailleHeader = modeleExistant.Parametres.TailleHeader;
@@ -383,6 +387,8 @@ namespace Metrologo.ViewModels
             ConfEntree = ConfEntree ?? string.Empty,
             ExeMesure = ExeMesure ?? string.Empty,
             CommandeGate = CommandeGate ?? string.Empty,
+            CommandeMesureMultiple = CommandeMesureMultiple ?? string.Empty,
+            CommandeFetchFresh = CommandeFetchFresh ?? string.Empty,
             TermWrite = TermWrite,
             TermRead = TermRead,
             TailleHeader = TailleHeader,
