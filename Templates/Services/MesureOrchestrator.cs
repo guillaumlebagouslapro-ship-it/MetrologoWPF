@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -135,10 +136,14 @@ namespace Metrologo.Services
                 string? cheminFichier = null;
                 string? derniereFeuille = null;
 
-                // Mémoire d'échec du bulk : si la commande échoue à la 1ère gate, on désactive
-                // pour les gates suivantes — évite de gaspiller 5 s × N gates en timeouts répétés
-                // sur une commande qui ne sera jamais acceptée par l'instrument.
                 bool bulkDejaEchoue = false;
+
+                // Mode « Excel invisible » : pour la Stabilité, Excel ne s'ouvre PAS pendant
+                // les gates. Tout est fait en mémoire via ClosedXML, et le classeur final
+                // n'est ouvert dans Excel qu'à la toute fin du balayage. Économie : ~150 ms
+                // d'open Interop × N gates + ~80 ms de close Interop × N gates + le coût COM
+                // de chaque toggle Visible. Sur 8 gates ≈ 4-5 s gagnés.
+                bool excelInvisible = mesure.TypeMesure == TypeMesure.Stabilite;
 
                 for (int g = 0; g < nbIterations; g++)
                 {
@@ -146,10 +151,10 @@ namespace Metrologo.Services
                     int gateIdx = gates[g];
                     Perf($"--- Gate {g + 1}/{nbIterations} ({EnTetesMesureHelper.LibelleGate(gateIdx)}) ---");
 
-                    // À partir de la 2ème itération : Interop tient encore le classeur ouvert
-                    // depuis la fin de l'itération précédente (réouverture pour l'utilisateur).
-                    // On le ferme pour libérer le handle avant que ClosedXML touche au fichier.
-                    if (g > 0)
+                    // En mode visible : Interop tient le classeur depuis la gate précédente,
+                    // on le ferme pour libérer le handle avant que ClosedXML touche au fichier.
+                    // En mode invisible : aucun handle Interop, rien à fermer.
+                    if (g > 0 && !excelInvisible)
                     {
                         await ExcelInteropHost.Instance.FermerClasseurActifAsync();
                         Perf("Interop.FermerClasseurActif (entre gates)");
@@ -172,13 +177,19 @@ namespace Metrologo.Services
 
                     cheminFichier = await _excel.SauvegarderSurDisqueAsync();
                     Perf("ClosedXML.SauvegarderSurDisqueAsync (.xlsm)");
-                    _excel.FermerExcel();
-                    Perf("ClosedXML.FermerExcel");
                     string nomFeuille = _excel.NomFeuilleMesure;
                     derniereFeuille = nomFeuille;
 
-                    await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuille);
-                    Perf("Interop.OuvrirEtAfficherAsync");
+                    // En mode visible : on ferme ClosedXML et on ouvre Excel pour l'utilisateur.
+                    // En mode invisible (Stabilité) : ClosedXML reste prêt en mémoire, on
+                    // remplit le tableau de mesures dedans, sans toucher à Excel.
+                    if (!excelInvisible)
+                    {
+                        _excel.FermerExcel();
+                        Perf("ClosedXML.FermerExcel");
+                        await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuille);
+                        Perf("Interop.OuvrirEtAfficherAsync");
+                    }
 
                     // 3.b Programmation de la gate de cette itération
                     progress?.Report(new ProgressionMesure
@@ -288,23 +299,22 @@ namespace Metrologo.Services
                         try
                         {
                             await _driver.EcrireAsync(appareil.Adresse, ":INIT:CONT ON", appareil.WriteTerm, ct);
-                            // Délai d'amorçage : au moins 2× la gate (pour laisser le temps de
-                            // compléter 1-2 mesures internes) avec un plancher à 200 ms. Évite
-                            // l'erreur GPIB 230 "Data stale" du 53131A quand on fetch trop tôt.
-                            int amorceMs = Math.Max(200, (int)(gateSecondes * 1000 * 2));
-                            await Task.Delay(amorceMs, ct);
-
-                            // Test fetch : s'assure qu'une mesure est vraiment dispo. Si retour
-                            // à 0 (data stale ou commande rejetée), on fait un retry avec délai
-                            // plus long. Le 53131A a parfois besoin de 2-3 essais après un
-                            // *RST récent pour stabiliser l'arming continu.
+                            // Amorçage adaptatif : on tente immédiatement avec un délai court
+                            // (gate ms ou 50 ms minimum). Si le 1er fetch retourne 0 (erreur
+                            // GPIB 230 "Data stale"), on retry en augmentant le délai.
+                            // Évite de payer 200 ms × N gates quand l'instrument répond du
+                            // premier coup (cas normal après une 1ère gate qui a marché).
+                            // Délai = gate + 200 ms (garantit que la 1ère mesure interne est
+                            // complète avant le 1er fetch — évite le retry sur data stale).
+                            int amorceInitial = Math.Max(150, (int)(gateSecondes * 1000) + 200);
+                            await Task.Delay(amorceInitial, ct);
                             for (int essai = 0; essai < 3; essai++)
                             {
                                 var testVal = await appareil.FetcherAsync(_driver, cmdFetchUsed!, ct);
                                 if (testVal != 0.0) break;
-                                await Task.Delay(amorceMs, ct);
+                                await Task.Delay(amorceInitial * (essai + 2), ct); // 2x, 3x, 4x
                             }
-                            Perf($"INIT:CONT ON (mode rapide, fetch={cmdFetchUsed}, amorce={amorceMs}ms, delay-loop={delayFetchMs}ms)");
+                            Perf($"INIT:CONT ON (mode rapide, fetch={cmdFetchUsed}, amorce={amorceInitial}ms, delay-loop={delayFetchMs}ms)");
                         }
                         catch (Exception ex)
                         {
@@ -536,12 +546,24 @@ namespace Metrologo.Services
                         }
                     }
 
-                    // Flush batch : écrit toutes les valeurs accumulées en un seul appel COM.
+                    // Flush batch : écriture en bloc des N valeurs accumulées.
+                    //   - Mode invisible (Stabilité) : via ClosedXML directement en mémoire,
+                    //     pas d'aller-retour Excel/COM.
+                    //   - Mode visible (Fréquence batch ou autre) : via Interop (le classeur
+                    //     est ouvert dans Excel, on bénéficie du Range.Value2 = matrix).
                     if (ecritureBatch && bufferBatch!.Count > 0)
                     {
-                        await ExcelInteropHost.Instance
-                            .EcrireValeursEnBlocAsync(LIGNE_DEBUT_MESURES, bufferBatch);
-                        Perf("Interop.EcrireValeursEnBlocAsync (bulk write)");
+                        if (excelInvisible)
+                        {
+                            await _excel.EcrireValeursBatchClosedXMLAsync(LIGNE_DEBUT_MESURES, bufferBatch);
+                            Perf("ClosedXML.EcrireValeursBatch (mode invisible)");
+                        }
+                        else
+                        {
+                            await ExcelInteropHost.Instance
+                                .EcrireValeursEnBlocAsync(LIGNE_DEBUT_MESURES, bufferBatch);
+                            Perf("Interop.EcrireValeursEnBlocAsync (bulk write)");
+                        }
                     }
 
                     // 3.d SRQ off uniquement à la dernière itération (cf. F_Main:1262 — historiquement
@@ -554,10 +576,15 @@ namespace Metrologo.Services
                     }
 
                     // 3.e Stats + ligne Recap pour cette gate
-                    await ExcelInteropHost.Instance.FermerClasseurActifAsync();
-                    Perf("Interop.FermerClasseurActif");
-                    await _excel.RouvrirClasseurAsync();
-                    Perf("ClosedXML.RouvrirClasseurAsync");
+                    //   - Mode invisible : ClosedXML est encore ouvert en mémoire, on écrit direct
+                    //   - Mode visible : on ferme Interop et on rouvre via ClosedXML
+                    if (!excelInvisible)
+                    {
+                        await ExcelInteropHost.Instance.FermerClasseurActifAsync();
+                        Perf("Interop.FermerClasseurActif");
+                        await _excel.RouvrirClasseurAsync();
+                        Perf("ClosedXML.RouvrirClasseurAsync");
+                    }
                     await _excel.EcrireStatsAsync(valeurs);
                     Perf("ClosedXML.EcrireStatsAsync");
 
@@ -584,13 +611,26 @@ namespace Metrologo.Services
                     });
                     await _excel.SauvegarderFinalAsync();
                     Perf("ClosedXML.SauvegarderFinalAsync");
-                    _excel.FermerExcel();
-                    Perf("ClosedXML.FermerExcel (final)");
 
-                    // Réouvre le classeur pour que l'utilisateur voie l'avancement entre les gates
-                    // (et garde le fichier visible à la fin de la dernière itération).
-                    await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuille);
-                    Perf("Interop.OuvrirEtAfficherAsync (final)");
+                    // Mode visible : on ferme ClosedXML et on rouvre Excel à chaque gate pour
+                    // que l'utilisateur voie l'avancement.
+                    // Mode invisible : on ne ferme/ouvre rien — ClosedXML reste prêt pour la
+                    // gate suivante. À la dernière gate, on ferme et on ouvre Excel UNE fois
+                    // pour montrer le résultat final à l'utilisateur.
+                    if (!excelInvisible)
+                    {
+                        _excel.FermerExcel();
+                        Perf("ClosedXML.FermerExcel (final)");
+                        await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuille);
+                        Perf("Interop.OuvrirEtAfficherAsync (final)");
+                    }
+                    else if (isDernier)
+                    {
+                        _excel.FermerExcel();
+                        Perf("ClosedXML.FermerExcel (final)");
+                        await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuille);
+                        Perf("Interop.OuvrirEtAfficherAsync (1 seule fois à la fin du balayage)");
+                    }
 
                     // À la dernière itération d'un balayage de stabilité, on ajoute le graphe
                     // de stabilité dans la Récap. (3 séries : Écart type / Valeurs Maxi / Mini
@@ -671,8 +711,13 @@ namespace Metrologo.Services
                     JournalLog.Info(CategorieLog.Mesure, "SCPI_REJEU",
                         $"GPIB0::{appareil.Adresse} ← {cmd} (réapplication post-RST)");
                 }
-                catch (Ivi.Visa.IOTimeoutException)
+                // Catch large : VISA lève Ivi.Visa.IOTimeoutException, NI-488.2 lève IOException
+                // avec « timeout » dans le message. Dans les deux cas on log et on continue.
+                catch (Exception ex) when (
+                    ex is Ivi.Visa.IOTimeoutException ||
+                    (ex is IOException && ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase)))
                 {
+                    _ = ex; // utilisé dans le filtre
                     JournalLog.Warn(CategorieLog.Mesure, "SCPI_REJEU_TIMEOUT",
                         $"Timeout sur l'envoi de « {cmd} » à GPIB0::{appareil.Adresse} — "
                         + "commande ignorée, la mesure continue.");

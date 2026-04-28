@@ -68,11 +68,12 @@
 
                     <!-- Tagline + features -->
                     <StackPanel Grid.Row="1" VerticalAlignment="Center">
-                        <TextBlock Text="Plateforme de"
+                        <TextBlock Text="Logiciel de"
                                    FontSize="22"
                                    FontWeight="Light"
                                    Foreground="White"/>
-                        <TextBlock Text="métrologie de fréquence"
+                        <TextBlock Text="Temps-fréquences
+                                   "
                                    FontSize="28"
                                    FontWeight="Bold"
                                    Foreground="White"

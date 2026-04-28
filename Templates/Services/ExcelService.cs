@@ -44,6 +44,14 @@ namespace Metrologo.Services
         /// </summary>
         Task EcrireStatsAsync(List<double> resultats);
 
+        /// <summary>
+        /// Écrit les N mesures (HEURE + valeur) directement dans la feuille de mesure courante
+        /// via ClosedXML, **sans passer par Excel/Interop**. Utilisé en mode « invisible » pour
+        /// la Stabilité : Excel n'est jamais ouvert pendant la mesure, tout se fait en mémoire,
+        /// et l'utilisateur voit le fichier final apparaître à la toute fin du balayage.
+        /// </summary>
+        Task EcrireValeursBatchClosedXMLAsync(int ligneDebut, IList<(DateTime ts, double valeur)> mesures);
+
         Task MettreAJourRecapFreqAsync(Mesure mesure);
         Task MettreAJourRecapStabAsync(Mesure mesure);
 
@@ -256,6 +264,20 @@ namespace Metrologo.Services
                         $"IF(ISBLANK(ZNCoeffMult),B{row},"
                         + $"(((B{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
                     _feuilleMesure.Cell($"D{row}").FormulaA1 = $"C{row - 1}-C{row}";
+                }
+            });
+        }
+
+        public Task EcrireValeursBatchClosedXMLAsync(int ligneDebut, IList<(DateTime ts, double valeur)> mesures)
+        {
+            if (_feuilleMesure == null || mesures.Count == 0) return Task.CompletedTask;
+            return Task.Run(() =>
+            {
+                for (int i = 0; i < mesures.Count; i++)
+                {
+                    int row = ligneDebut + i;
+                    _feuilleMesure.Cell(row, 1).SetValue(mesures[i].ts.ToString("HH:mm:ss"));
+                    _feuilleMesure.Cell(row, 2).SetValue(mesures[i].valeur);
                 }
             });
         }
