@@ -137,6 +137,31 @@ namespace Metrologo.Services.Journal
 
         public bool HasErreurs => NbErreurs > 0;
         public bool HasAvertissements => NbAvertissements > 0;
+
+        /// <summary>Nombre de mesures effectuées dans cette session (count des MESURE_DEBUT).</summary>
+        public int NbMesures
+        {
+            get
+            {
+                int n = 0;
+                foreach (var e in Entrees)
+                    if (string.Equals(e.Action, "MESURE_DEBUT", StringComparison.OrdinalIgnoreCase)) n++;
+                return n;
+            }
+        }
+
+        /// <summary>Résumé visuel court pour la card compacte : 47 actions · 2 mesures · 0 erreur.</summary>
+        public string ResumeAffiche
+        {
+            get
+            {
+                var parts = new List<string> { $"{NbEntrees} action{(NbEntrees > 1 ? "s" : "")}" };
+                if (NbMesures > 0) parts.Add($"{NbMesures} mesure{(NbMesures > 1 ? "s" : "")}");
+                if (NbErreurs > 0) parts.Add($"{NbErreurs} erreur{(NbErreurs > 1 ? "s" : "")}");
+                else if (NbAvertissements > 0) parts.Add($"{NbAvertissements} avert.");
+                return string.Join(" · ", parts);
+            }
+        }
     }
 
     public class FiltreJournal

@@ -56,6 +56,18 @@ namespace Metrologo.Services
             _excel = excel;
         }
 
+        /// <summary>
+        /// Débloque immédiatement la mesure en cours côté GPIB. Appelé depuis le bouton
+        /// « Arrêter la mesure » en complément de <c>CancellationTokenSource.Cancel()</c> :
+        /// le Cancel seul ne suffit pas car le <c>RawIO.ReadString()</c> de NI-VISA est
+        /// synchrone et ignore le token tant que l'instrument n'a pas répondu (ce qui peut
+        /// prendre toute la durée d'une gate, jusqu'à 1000 s sur les slots les plus longs).
+        /// Le SDC envoyé ici fait rendre la main au ReadString sous quelques millisecondes ;
+        /// la boucle de mesure voit ensuite le token annulé et sort proprement via
+        /// <see cref="OperationCanceledException"/>.
+        /// </summary>
+        public void AborterMesureEnCours() => _driver.AborterToutesSessions();
+
         public async Task<ResultatMesure> ExecuterAsync(
             Mesure mesure,
             Rubidium rubidium,
@@ -147,6 +159,12 @@ namespace Metrologo.Services
 
                 for (int g = 0; g < nbIterations; g++)
                 {
+                    // Stop utilisateur entre deux gates : on ne démarre pas la suivante.
+                    // Sans ce check, un balayage stab 8 gates peut continuer à enchaîner les
+                    // gates restantes même après Cancel() si le ReadString de la gate courante
+                    // a déjà rendu la main avant le Device Clear.
+                    ct.ThrowIfCancellationRequested();
+
                     bool isDernier = g == nbIterations - 1;
                     int gateIdx = gates[g];
                     Perf($"--- Gate {g + 1}/{nbIterations} ({EnTetesMesureHelper.LibelleGate(gateIdx)}) ---");
@@ -169,8 +187,12 @@ namespace Metrologo.Services
                         EtapesTotales = totalEtapes
                     });
 
-                    // 3.a Création d'une nouvelle feuille de mesure (Stab1, Stab2, … selon le slot dispo)
-                    await _excel.InitialiserRapportAsync(mesure.NumFI, mesure, rubidium, gateIdx);
+                    // 3.a Création d'une nouvelle feuille de mesure (Stab1, Stab2, … selon le slot dispo).
+                    // À la 1ère gate d'une session Stab, on signale "nouvelle session" pour qu'un
+                    // suffixe _v2, _v3… soit appliqué si le fichier précédent existe déjà — évite
+                    // que le graphe Stab traîne les 7 valeurs de la mesure précédente sur le même FI.
+                    bool nouvelleSession = (g == 0 && mesure.TypeMesure == TypeMesure.Stabilite);
+                    await _excel.InitialiserRapportAsync(mesure.NumFI, mesure, rubidium, gateIdx, nouvelleSession);
                     Perf("ClosedXML.InitialiserRapportAsync");
                     await _excel.PreparerLignesMesureAsync(mesure.NbMesures);
                     Perf("ClosedXML.PreparerLignesMesureAsync");

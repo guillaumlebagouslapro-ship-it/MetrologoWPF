@@ -114,6 +114,18 @@ namespace Metrologo.Services
                         }
                     }
 
+                    // Force Excel à recalculer formules + caches des graphes. Sans ça, le
+                    // graphe Stab (axe Y log) reste vide : ClosedXML n'a pas peuplé le
+                    // numCache des charts au moment de l'écriture, et l'ouverture avec
+                    // UpdateLinks=0 ne déclenche pas le recalcul automatique. Le rebuild
+                    // recompose la chaîne de calcul + régénère les caches des graphes.
+                    try { _excel.CalculateFullRebuild(); }
+                    catch (Exception ex)
+                    {
+                        JournalLog.Warn(CategorieLog.Excel, "EXCEL_RECALC_KO",
+                            $"CalculateFullRebuild échoué : {ex.Message}");
+                    }
+
                     _excel.ScreenUpdating = true;
                     _excel.Visible = true;
 
@@ -265,6 +277,15 @@ namespace Metrologo.Services
             }
 
             _cheminClasseurActif = string.Empty;
+
+            // Re-cache l'instance Excel après fermeture du classeur — sinon une fenêtre
+            // Excel grise sans contenu reste visible à l'utilisateur (l'instance hôte
+            // est conservée pour les ouvertures rapides suivantes, mais doit redevenir
+            // invisible tant qu'aucun classeur n'est dedans).
+            if (_excel != null)
+            {
+                try { _excel.Visible = false; } catch { /* best-effort */ }
+            }
         }
 
         /// <summary>

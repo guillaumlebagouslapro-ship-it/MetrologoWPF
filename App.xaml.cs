@@ -22,13 +22,20 @@ namespace Metrologo
 
             await DatabaseInitializer.InitialiserAsync();
 
-            // Initialisation du journal (SQLite local)
-            Journal.Configurer(new SqliteJournalService());
+            // Journal centralisé sur SQL Server : les logs de tous les postes (Baie,
+            // Paillasse, dev) atterrissent dans la base Metrologo et sont consultables
+            // par l'admin depuis n'importe quelle machine.
+            Journal.Configurer(new SqlServerJournalService());
 
             // Ferme les sessions zombies (laissées ouvertes par un crash, taskkill, ou
             // arrêt brutal lors d'un debug). Sans ça, elles s'accumulent et apparaissent
             // perpétuellement « En cours » dans la liste du journal.
             await Journal.NettoyerSessionsZombiesAsync();
+
+            // Archive le mois précédent s'il n'est pas déjà archivé. Idempotent et
+            // multi-postes-safe (verrou applicatif SQL). Fire-and-forget : ne bloque
+            // pas le démarrage de l'app, l'archivage se fait en arrière-plan.
+            _ = ArchivesLogsService.ArchiverMoisPrecedentSiNecessaireAsync();
 
             // Chargement du catalogue local des modèles d'appareils enregistrés par les utilisateurs
             await CatalogueAppareilsService.Instance.ChargerAsync();

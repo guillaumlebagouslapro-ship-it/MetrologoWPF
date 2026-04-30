@@ -20,7 +20,7 @@ namespace Metrologo.Services
         /// pour les balayages de stabilité où chaque feuille est associée à une gate différente
         /// sans qu'on souhaite muter <c>config.GateIndex</c> partout.
         /// </summary>
-        Task InitialiserRapportAsync(string numeroFI, Mesure configuration, Rubidium rubidium, int? gateIndexOverride = null);
+        Task InitialiserRapportAsync(string numeroFI, Mesure configuration, Rubidium rubidium, int? gateIndexOverride = null, bool nouvelleSession = false);
 
         /// <summary>
         /// Pré-insère les lignes vides nécessaires pour les mesures à venir (au-delà des 2 lignes
@@ -92,6 +92,15 @@ namespace Metrologo.Services
         private IXLWorksheet? _feuilleMesure;   // feuille NOUVELLEMENT créée pour cette mesure
         private string _cheminFichier = string.Empty;
         private string _nomFeuilleMesure = string.Empty;
+        private TypeMesure _typeMesureCourant;  // mémorisé pour PreparerLignesMesureAsync (col K Tachy)
+
+        /// <summary>
+        /// Colonne dédiée à la conversion Hz → tr/min pour les mesures de tachymétrie /
+        /// stroboscope. Choisie volontairement éloignée des colonnes A-D (qui alimentent
+        /// la Récap. Fréquence via les zones nommées scope-feuille) pour ne PAS interférer
+        /// avec les formules cross-sheet de la Récap. CEAO/SDAO ne lit pas cette colonne.
+        /// </summary>
+        private const string COL_CONVERSION_TR_MIN = "K";
 
         public string NomFeuilleMesure => _nomFeuilleMesure;
 
@@ -105,7 +114,7 @@ namespace Metrologo.Services
         /// <summary>Vrai si le fichier a dû être écrit sous un nom de fallback au lieu du nom principal.</summary>
         public bool FallbackTimestampUtilise { get; private set; }
 
-        public async Task InitialiserRapportAsync(string numeroFI, Mesure config, Rubidium rubidium, int? gateIndexOverride = null)
+        public async Task InitialiserRapportAsync(string numeroFI, Mesure config, Rubidium rubidium, int? gateIndexOverride = null, bool nouvelleSession = false)
         {
             int gateInscrite = gateIndexOverride ?? config.GateIndex;
             bool estStab = config.TypeMesure == TypeMesure.Stabilite;
@@ -125,6 +134,22 @@ namespace Metrologo.Services
                 string suffixe = estStab ? "_Stab" : string.Empty;
                 _cheminFichier = Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}.xlsm");
                 FallbackTimestampUtilise = false;
+
+                // Stabilité + nouvelle session + fichier existant → suffixe _v2, _v3, etc.
+                // Évite que le graphe Stab affiche les valeurs de la mesure précédente
+                // mélangées avec celles de la nouvelle session sur le même FI.
+                if (estStab && nouvelleSession && File.Exists(_cheminFichier))
+                {
+                    string baseSansExt = Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}");
+                    int v = 2;
+                    string candidat;
+                    do
+                    {
+                        candidat = $"{baseSansExt}_v{v}.xlsm";
+                        v++;
+                    } while (File.Exists(candidat) && v < 1000);
+                    _cheminFichier = candidat;
+                }
 
                 // --- 2. Ouverture : fichier existant ou copie du template ---
                 //    Template Stab dédié pour la Stabilité (Récap. 8 cols + zones nommées
@@ -213,6 +238,24 @@ namespace Metrologo.Services
                 _feuilleMesure.Cell("B25").SetValue(entetes.LabelIncertResol);
                 _feuilleMesure.Cell("B31").SetValue(entetes.LabelIncertGlob);
 
+                // Mémorisation pour PreparerLignesMesureAsync (col K conversion tr/min)
+                _typeMesureCourant = config.TypeMesure;
+
+                // --- 5b. Tachymétrie : colonne K dédiée à la conversion Hz → tr/min ---
+                // Le compteur GPIB mesure une fréquence d'impulsions (Hz). La conversion
+                // tr/min = Hz × 60 (1 imp/tour) est faite côté Excel pour rester visible
+                // à l'utilisateur. Colonne K choisie loin de A-D pour ne pas interférer
+                // avec la Récap. qui lit B/C/D via les zones nommées scope-feuille.
+                if (config.TypeMesure == TypeMesure.TachyContact)
+                {
+                    _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}7").SetValue("Vitesse (tr/min)");
+                    _feuilleMesure.Column(COL_CONVERSION_TR_MIN).Width = 18;
+                    // Formules pour les 2 lignes de mesure pré-existantes du template (9 et 10).
+                    // Les lignes additionnelles (11+) seront alimentées par PreparerLignesMesureAsync.
+                    _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}9").FormulaA1 = "=B9*60";
+                    _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}10").FormulaA1 = "=B10*60";
+                }
+
                 // --- 6. Métadonnées via zones nommées (sheet-scope) ---
                 SetNamed("ZNNoFiche", numeroFI);
                 SetNamed("ZNDate", DateTime.Now.ToString("dd/MM/yyyy"));
@@ -257,6 +300,7 @@ namespace Metrologo.Services
                 // Ajoute les formules Fréq. Réelle (col C) et delta (col D) pour les lignes
                 // créées par InsertRowsAbove. Les cellules HEURE/mesure restent vides — elles
                 // seront écrites en direct par ExcelInteropHost pendant la boucle de mesures.
+                bool conversionTrMin = _typeMesureCourant == TypeMesure.TachyContact;
                 for (int i = 2; i < nbMesures; i++)
                 {
                     int row = LIGNE_DEBUT_MESURES + i;
@@ -264,6 +308,8 @@ namespace Metrologo.Services
                         $"IF(ISBLANK(ZNCoeffMult),B{row},"
                         + $"(((B{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
                     _feuilleMesure.Cell($"D{row}").FormulaA1 = $"C{row - 1}-C{row}";
+                    if (conversionTrMin)
+                        _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}{row}").FormulaA1 = $"=B{row}*60";
                 }
             });
         }
@@ -309,6 +355,9 @@ namespace Metrologo.Services
             if (_workbook == null) return string.Empty;
             await Task.Run(() =>
             {
+                // Compté AVANT SaveAs : ClosedXML libère ses ressources après sauvegarde.
+                int nbGatesStab = CompterGatesStabPourGraphe();
+
                 try { _workbook.SaveAs(_cheminFichier); }
                 catch (IOException)
                 {
@@ -317,10 +366,22 @@ namespace Metrologo.Services
                         + "le fichier est verrouillé. Fermez-le dans Excel et relancez la mesure.");
                 }
 
-                // Patche le lien vers Metrologo.xla dès la première sauvegarde pour que les formules
-                // d'incertitude soient résolues dès l'ouverture du fichier par Excel Interop.
                 try { PatcherLienMacroXLA(_cheminFichier, Preferences.CheminMacroXLA); }
                 catch { /* best-effort */ }
+
+                try { ForcerRecalculAuOuverture(_cheminFichier); }
+                catch { /* best-effort */ }
+
+                // Patche le graphe Stab : plages des séries adaptées au nombre de gates
+                // effectivement balayées + axe Y rendu auto (retrait des min/max fixes
+                // 1E-12/1E-08 hérités de Stab1.xls qui figeaient l'échelle). Ne touche
+                // PAS aux cellules ni aux zones nommées de la Récap → CEAO/SDAO non
+                // impacté (il consomme les données, pas les graphes).
+                if (nbGatesStab > 0)
+                {
+                    try { RendreGrapheStabDynamique(_cheminFichier, nbGatesStab); }
+                    catch { /* best-effort */ }
+                }
             });
             return _cheminFichier;
         }
@@ -351,6 +412,8 @@ namespace Metrologo.Services
             if (_workbook == null) return;
             await Task.Run(() =>
             {
+                int nbGatesStab = CompterGatesStabPourGraphe();
+
                 try { _workbook.SaveAs(_cheminFichier); }
                 catch (IOException)
                 {
@@ -361,6 +424,15 @@ namespace Metrologo.Services
 
                 try { PatcherLienMacroXLA(_cheminFichier, Preferences.CheminMacroXLA); }
                 catch { /* best-effort */ }
+
+                try { ForcerRecalculAuOuverture(_cheminFichier); }
+                catch { /* best-effort */ }
+
+                if (nbGatesStab > 0)
+                {
+                    try { RendreGrapheStabDynamique(_cheminFichier, nbGatesStab); }
+                    catch { /* best-effort */ }
+                }
             });
         }
 
@@ -559,6 +631,158 @@ namespace Metrologo.Services
         /// Réécrit le Target de la relation externe dans le fichier .xlsm pour qu'il
         /// pointe vers le chemin configuré du fichier Metrologo.xla.
         /// </summary>
+        /// <summary>
+        /// Compte les gates effectivement balayées dans le fichier Stab — basé sur le
+        /// nombre de feuilles à nom numérique (<c>1</c>, <c>2</c>, …) car chaque gate
+        /// crée sa propre feuille de mesure. Approche plus fiable que de compter les
+        /// lignes de la Récap : ClosedXML ne calcule pas les formules, donc le
+        /// <c>CachedValue</c> de col A (formule <c>='N'!ZNValGateSecondes</c>) est
+        /// systématiquement 0 → tableau systématiquement vide selon ce critère.
+        ///
+        /// Retourne 0 si pas dans un fichier Stab (autres types n'ont pas de feuilles
+        /// numériques, donc protection naturelle).
+        /// </summary>
+        private int CompterGatesStabPourGraphe()
+        {
+            if (_workbook == null || _typeMesureCourant != TypeMesure.Stabilite) return 0;
+            int compteur = 0;
+            foreach (var ws in _workbook.Worksheets)
+            {
+                if (int.TryParse(ws.Name, out _)) compteur++;
+            }
+            return compteur;
+        }
+
+        /// <summary>
+        /// Patche le graphe Stabilité du fichier .xlsm pour qu'il s'adapte aux mesures :
+        ///   • Plages des séries ajustées au nombre réel de gates balayées (au lieu du
+        ///     <c>$A$6:$A$15</c> figé du Stab1.xls historique qui forçait 10 lignes — les
+        ///     lignes vides étaient lues comme 0, l'axe Y log refusait → graphe vide).
+        ///   • Bornes <c>min</c>/<c>max</c> de l'axe Y retirées : Excel les calcule auto
+        ///     à chaque ouverture en fonction des valeurs réelles. L'historique fixait
+        ///     <c>[1E-12, 1E-08]</c> qui marchait pour des écart-types Allan ~1E-9, mais
+        ///     toute mesure hors plage (signal mal calibré, gamme différente, etc.)
+        ///     sortait du cadre.
+        ///
+        /// Modifie UNIQUEMENT <c>xl/charts/chart1.xml</c> — pas les cellules ni les zones
+        /// nommées de la Récap. CEAO/SDAO consomme les données via les zones nommées
+        /// (<c>ZNRecapS_*</c>), pas le graphe → impact zéro.
+        /// </summary>
+        private static void RendreGrapheStabDynamique(string xlsmPath, int nbGates)
+        {
+            if (nbGates <= 0) return;
+            int derniereLigne = 5 + nbGates;
+
+            using var zip = ZipFile.Open(xlsmPath, ZipArchiveMode.Update);
+            var entries = zip.Entries
+                .Where(e => e.FullName.StartsWith("xl/charts/chart") && e.FullName.EndsWith(".xml"))
+                .ToList();
+
+            foreach (var entry in entries)
+            {
+                string contenu;
+                using (var s = entry.Open())
+                using (var r = new StreamReader(s))
+                {
+                    contenu = r.ReadToEnd();
+                }
+
+                string nouveau = contenu;
+
+                // 1. Adapte les plages des séries au nb de gates : $X$6:$X$<N> → $X$6:$X$<5+nbGates>.
+                // Le `\d+` (au lieu de `15`) permet de re-patcher après un patch précédent
+                // (à chaque gate du balayage stab, le code repasse pour ajuster la plage).
+                nouveau = System.Text.RegularExpressions.Regex.Replace(
+                    nouveau,
+                    @"\$([A-Z]+)\$6:\$([A-Z]+)\$\d+",
+                    m => $"${m.Groups[1].Value}$6:${m.Groups[2].Value}${derniereLigne}");
+
+                // 2. Retire <c:min .../> et <c:max .../> à l'intérieur des <c:valAx>...</c:valAx>
+                //    (axe Y) pour qu'Excel les recalcule auto. L'axe X (catAx) n'a pas de
+                //    bornes fixes dans le template historique — non concerné.
+                nouveau = System.Text.RegularExpressions.Regex.Replace(
+                    nouveau,
+                    "(<c:valAx>.*?<c:scaling>)(.*?)(</c:scaling>.*?</c:valAx>)",
+                    m =>
+                    {
+                        string scaling = m.Groups[2].Value;
+                        scaling = System.Text.RegularExpressions.Regex.Replace(
+                            scaling, @"<c:min\s+val=""[^""]*""\s*/>", "");
+                        scaling = System.Text.RegularExpressions.Regex.Replace(
+                            scaling, @"<c:max\s+val=""[^""]*""\s*/>", "");
+                        return m.Groups[1].Value + scaling + m.Groups[3].Value;
+                    },
+                    System.Text.RegularExpressions.RegexOptions.Singleline);
+
+                if (nouveau == contenu) continue;
+
+                string fullName = entry.FullName;
+                entry.Delete();
+                var nouvelle = zip.CreateEntry(fullName);
+                using (var s = nouvelle.Open())
+                using (var w = new StreamWriter(s))
+                {
+                    w.Write(nouveau);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Force Excel à recalculer toutes les formules ET à régénérer les caches des graphes
+        /// à l'ouverture, en injectant <c>fullCalcOnLoad="1"</c> dans <c>xl/workbook.xml</c>.
+        ///
+        /// Pourquoi : ClosedXML écrit correctement les cellules de la Récap. mais ne touche
+        /// pas aux <c>numCache</c> stockés dans les <c>xl/charts/chartN.xml</c> — Excel les
+        /// utilise alors tels quels (figés à 0) au lieu de relire les cellules. Sur le graphe
+        /// Stabilité (axe Y log), des zéros déclenchent le popup « Impossible de représenter
+        /// les valeurs nulles ou négatives sur des graphiques logarithmiques » et la zone
+        /// de traçage reste vide.
+        ///
+        /// Solution : <c>fullCalcOnLoad="1"</c> dit à Excel de tout recalculer à la prochaine
+        /// ouverture du fichier (formules ET caches de graphes), ~50 ms d'overhead à
+        /// l'ouverture, négligeable.
+        /// </summary>
+        private static void ForcerRecalculAuOuverture(string xlsmPath)
+        {
+            const string relPath = "xl/workbook.xml";
+            using var zip = ZipFile.Open(xlsmPath, ZipArchiveMode.Update);
+            var entry = zip.GetEntry(relPath);
+            if (entry == null) return;
+
+            string contenu;
+            using (var s = entry.Open())
+            using (var r = new StreamReader(s))
+            {
+                contenu = r.ReadToEnd();
+            }
+
+            // 3 cas : <calcPr ... fullCalcOnLoad="X" /> existant → remplacer X par 1.
+            //          <calcPr ... /> sans fullCalcOnLoad → ajouter l'attribut.
+            //          pas de <calcPr> → en injecter un avant </workbook>.
+            if (System.Text.RegularExpressions.Regex.IsMatch(contenu, "<calcPr[^>]*\\bfullCalcOnLoad="))
+            {
+                contenu = System.Text.RegularExpressions.Regex.Replace(
+                    contenu, "\\bfullCalcOnLoad=\"[^\"]*\"", "fullCalcOnLoad=\"1\"");
+            }
+            else if (contenu.Contains("<calcPr"))
+            {
+                contenu = System.Text.RegularExpressions.Regex.Replace(
+                    contenu, "<calcPr\\b", "<calcPr fullCalcOnLoad=\"1\"");
+            }
+            else
+            {
+                contenu = contenu.Replace("</workbook>", "<calcPr fullCalcOnLoad=\"1\"/></workbook>");
+            }
+
+            entry.Delete();
+            var nouvelle = zip.CreateEntry(relPath);
+            using (var s = nouvelle.Open())
+            using (var w = new StreamWriter(s))
+            {
+                w.Write(contenu);
+            }
+        }
+
         private static void PatcherLienMacroXLA(string xlsmPath, string xlaPath)
         {
             const string relPath = "xl/externalLinks/_rels/externalLink1.xml.rels";

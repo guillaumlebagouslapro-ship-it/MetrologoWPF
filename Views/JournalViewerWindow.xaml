@@ -3,17 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Journal d'activité"
-        Height="760" Width="1120"
+        Height="800" Width="1280"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
         ExtendsContentIntoTitleBar="True">
 
     <ui:FluentWindow.Resources>
-        <!-- Style pour les lignes d'entrée selon la sévérité -->
+
+        <!-- Style des entries (sévérité = couleur) -->
         <Style x:Key="EntryRowStyle" TargetType="Border">
             <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Margin" Value="0,0,0,3"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
@@ -28,6 +29,107 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!-- Bouton « pill » pour les filtres rapides (toggle visuel selon PeriodeActive) -->
+        <Style x:Key="PillButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource AsertiNavyBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="PillButtonActiveStyle" TargetType="Button" BasedOn="{StaticResource PillButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource AsertiNavyBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AsertiNavyBrush}"/>
+        </Style>
+
+        <!-- Item sidebar (un jour) -->
+        <Style x:Key="SidebarItemStyle" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="SidebarJourTemplate">
+            <Border CornerRadius="8" Padding="10,8"
+                    BorderThickness="1"
+                    SnapsToDevicePixels="True">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderBrush" Value="Transparent"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                                <Setter Property="Background" Value="White"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding Libelle}" FontWeight="SemiBold" FontSize="13"
+                                   Foreground="{StaticResource AsertiNavyBrush}"/>
+                        <TextBlock Text="{Binding DateCourte}" FontSize="11"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Pastille rouge si erreurs -->
+                        <Border Width="8" Height="8" CornerRadius="4" Background="#FFB91C1C"
+                                Margin="0,0,8,0"
+                                Visibility="{Binding ContientErreurs, Converter={StaticResource BoolToVis}}"
+                                ToolTip="Cette journée contient des erreurs"/>
+                        <Border Background="#FFE0E7FF" CornerRadius="10" Padding="8,2">
+                            <TextBlock FontSize="11" FontWeight="Bold" Foreground="#FF4338CA">
+                                <Run Text="{Binding NbSessions, Mode=OneWay}"/>
+                            </TextBlock>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
     </ui:FluentWindow.Resources>
 
     <Grid>
@@ -41,274 +143,531 @@
 
         <ui:TitleBar Grid.Row="0" Title="Journal d'activité"/>
 
-        <!-- En-tête -->
-        <Border Grid.Row="1" Padding="24,12,24,12">
-            <StackPanel Orientation="Horizontal">
-                <Border Width="44" Height="44" CornerRadius="10"
-                        Background="{StaticResource AsertiNavyBrush}"
-                        Margin="0,0,14,0">
-                    <ui:SymbolIcon Symbol="History24" FontSize="22"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Journal d'activité"
-                               FontSize="20" FontWeight="Bold"
-                               Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Historique des actions par session utilisateur"
-                               FontSize="12"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
-            </StackPanel>
-        </Border>
-
-        <!-- Barre de filtres -->
-        <Border Grid.Row="2" Margin="24,0,24,12"
-                Background="White"
-                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="10"
-                Padding="14,12">
-            <StackPanel>
+        <!-- En-tête + filtres rapides -->
+        <Border Grid.Row="1" Padding="24,12,24,8">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="2*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <ui:SymbolIcon Grid.Column="0" Symbol="Options24" FontSize="18"
-                               Foreground="{StaticResource AsertiOrangeBrush}"
-                               VerticalAlignment="Center" Margin="0,0,14,0"/>
-
-                <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                    <TextBlock Text="DEPUIS" Style="{StaticResource FormLabelStyle}"/>
-                    <DatePicker SelectedDate="{Binding FiltreDepuis, Mode=TwoWay}" Padding="8,4"/>
+                <StackPanel Orientation="Horizontal" Grid.Column="0">
+                    <Border Width="44" Height="44" CornerRadius="10"
+                            Background="{StaticResource AsertiNavyBrush}"
+                            Margin="0,0,14,0">
+                        <ui:SymbolIcon Symbol="History24" FontSize="22" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Journal d'activité"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{StaticResource AsertiNavyBrush}"/>
+                        <TextBlock Text="Naviguez par date dans la sidebar — filtres rapides ci-dessous."
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" Margin="0,0,8,0">
-                    <TextBlock Text="UTILISATEUR" Style="{StaticResource FormLabelStyle}"/>
-                    <ComboBox ItemsSource="{Binding Utilisateurs}"
-                              SelectedItem="{Binding FiltreUtilisateur}"
-                              Padding="8,4"/>
+                <!-- Filtres rapides (boutons pill toggle) -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Aujourd'hui"
+                            Command="{Binding FiltrerAujourdhuiCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PillButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding PeriodeAujourdhui}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AsertiNavyBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource AsertiNavyBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="7 jours" Command="{Binding Filtrer7JoursCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PillButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Periode7Jours}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AsertiNavyBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource AsertiNavyBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="30 jours" Command="{Binding Filtrer30JoursCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PillButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Periode30Jours}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AsertiNavyBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource AsertiNavyBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="Tout" Command="{Binding FiltrerToutCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PillButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding PeriodeTout}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AsertiNavyBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource AsertiNavyBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="⚠ Erreurs" Command="{Binding FiltrerErreursSeulementCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PillButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding PeriodeErreurs}" Value="True">
+                                        <Setter Property="Background" Value="#FFB91C1C"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="#FFB91C1C"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </StackPanel>
-
-                <StackPanel Grid.Column="3" Margin="0,0,8,0">
-                    <TextBlock Text="CATÉGORIE" Style="{StaticResource FormLabelStyle}"/>
-                    <ComboBox ItemsSource="{Binding CategoriesFiltre}"
-                              SelectedItem="{Binding FiltreCategorie}"
-                              Padding="8,4"/>
-                </StackPanel>
-
-                <StackPanel Grid.Column="4" Margin="0,0,8,0">
-                    <TextBlock Text="SÉVÉRITÉ MIN." Style="{StaticResource FormLabelStyle}"/>
-                    <ComboBox ItemsSource="{Binding SeveritesFiltre}"
-                              SelectedItem="{Binding FiltreSeveriteMin}"
-                              Padding="8,4"/>
-                </StackPanel>
-
-                <StackPanel Grid.Column="5" Margin="0,0,12,0">
-                    <TextBlock Text="RECHERCHE" Style="{StaticResource FormLabelStyle}"/>
-                    <ui:TextBox Text="{Binding FiltreRecherche, UpdateSourceTrigger=PropertyChanged}"
-                                PlaceholderText="message, action…"
-                                Padding="8,4">
-                        <ui:TextBox.Icon>
-                            <ui:SymbolIcon Symbol="Info24"/>
-                        </ui:TextBox.Icon>
-                    </ui:TextBox>
-                </StackPanel>
-
-                <Button Grid.Column="6"
-                        Content="Appliquer"
-                        Command="{Binding AppliquerFiltreCommand}"
-                        Style="{StaticResource PrimaryButtonStyle}"
-                        Padding="16,8"
-                        VerticalAlignment="Bottom"/>
             </Grid>
-
-            <!-- Toggle vue métier ↔ vue debug. En vue métier (défaut), seules les
-                 entrées clés sont visibles (sessions, configs validées, mesures,
-                 erreurs). En vue debug, on voit tout (SCPI, GPIB, Excel, perf…). -->
-            <CheckBox Content="Mode debug — afficher toutes les entrées techniques (SCPI, GPIB, Excel, perf…)"
-                      IsChecked="{Binding AfficherDetails, Mode=TwoWay}"
-                      FontSize="11"
-                      Margin="34,10,0,0"/>
-            </StackPanel>
         </Border>
 
-        <!-- Liste des sessions -->
-        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Padding="24,0,24,16">
-            <ItemsControl ItemsSource="{Binding Sessions}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Expander Margin="0,0,0,10" IsExpanded="False">
-                            <Expander.Header>
-                                <Grid Width="980">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+        <!-- Filtres avancés (dépliable) -->
+        <Expander Grid.Row="2" Header="Filtres avancés (utilisateur, catégorie, recherche…)"
+                  Margin="24,0,24,8" IsExpanded="False" FontSize="11">
+            <Border Background="White"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="12">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="DEPUIS" Style="{StaticResource FormLabelStyle}"/>
+                            <DatePicker SelectedDate="{Binding FiltreDepuis, Mode=TwoWay}" Padding="8,4"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                            <TextBlock Text="UTILISATEUR" Style="{StaticResource FormLabelStyle}"/>
+                            <ComboBox ItemsSource="{Binding Utilisateurs}"
+                                      SelectedItem="{Binding FiltreUtilisateur}" Padding="8,4"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                            <TextBlock Text="CATÉGORIE" Style="{StaticResource FormLabelStyle}"/>
+                            <ComboBox ItemsSource="{Binding CategoriesFiltre}"
+                                      SelectedItem="{Binding FiltreCategorie}" Padding="8,4"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="3" Margin="0,0,8,0">
+                            <TextBlock Text="SÉVÉRITÉ MIN." Style="{StaticResource FormLabelStyle}"/>
+                            <ComboBox ItemsSource="{Binding SeveritesFiltre}"
+                                      SelectedItem="{Binding FiltreSeveriteMin}" Padding="8,4"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="4" Margin="0,0,12,0">
+                            <TextBlock Text="RECHERCHE" Style="{StaticResource FormLabelStyle}"/>
+                            <ui:TextBox Text="{Binding FiltreRecherche, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="message, action…" Padding="8,4">
+                                <ui:TextBox.Icon>
+                                    <ui:SymbolIcon Symbol="Search24"/>
+                                </ui:TextBox.Icon>
+                            </ui:TextBox>
+                        </StackPanel>
+                        <Button Grid.Column="5" Content="Appliquer"
+                                Command="{Binding AppliquerFiltreCommand}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Padding="16,6" VerticalAlignment="Bottom"/>
+                    </Grid>
+                    <CheckBox Content="Mode debug — afficher les entrées techniques (SCPI, GPIB, Excel, perf…)"
+                              IsChecked="{Binding AfficherDetails, Mode=TwoWay}"
+                              FontSize="11" Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+        </Expander>
 
-                                    <!-- Icône user -->
-                                    <Border Grid.Column="0"
-                                            Width="36" Height="36" CornerRadius="8"
-                                            Background="{StaticResource AsertiNavyBrush}"
-                                            Margin="0,0,12,0">
-                                        <ui:SymbolIcon Symbol="Person24" FontSize="16"
-                                                       Foreground="White"
-                                                       HorizontalAlignment="Center"
+        <!-- Layout principal : sidebar (jours) + main (sessions) -->
+        <Grid Grid.Row="3" Margin="24,0,24,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- SIDEBAR : arborescence par jour -->
+            <Border Grid.Column="0" Background="White"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="10"
+                    Margin="0,0,12,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="DATES"
+                               FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource AsertiOrangeBrush}"
+                               Margin="6,4,0,8"/>
+
+                    <!-- "Tous les jours" en haut -->
+                    <Button Grid.Row="1"
+                            Command="{Binding SelectionnerTousLesJoursCommand}"
+                            Margin="0,0,0,6" Padding="10,8"
+                            HorizontalContentAlignment="Stretch"
+                            BorderThickness="0" Background="Transparent" Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding JourSelectionne}" Value="{x:Null}">
+                                        <Setter Property="Background" Value="#FFFEF3C7"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="10,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" Grid.Column="0">
+                                            <ui:SymbolIcon Symbol="Calendar24" FontSize="14"
+                                                           Foreground="{StaticResource AsertiNavyBrush}"
+                                                           Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Toutes les sessions" FontWeight="SemiBold" FontSize="13"
+                                                       Foreground="{StaticResource AsertiNavyBrush}"
                                                        VerticalAlignment="Center"/>
-                                    </Border>
-
-                                    <!-- Infos session -->
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Utilisateur}"
-                                                       FontWeight="Bold" FontSize="14"
-                                                       Foreground="{StaticResource AsertiNavyBrush}"/>
-                                            <!-- Badge Poste (Baie / Paillasse), seulement si défini -->
-                                            <Border Background="#FFE0E7FF" CornerRadius="8" Padding="6,1"
-                                                    Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Poste}" Value="{x:Null}">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Poste}" Value="">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <TextBlock Text="{Binding Poste}"
-                                                           FontSize="10" FontWeight="SemiBold"
-                                                           Foreground="#FF4338CA"/>
-                                            </Border>
-                                            <Border Background="#FFDCFCE7" CornerRadius="8" Padding="6,1"
-                                                    Margin="8,0,0,0"
-                                                    Visibility="{Binding Active, Converter={StaticResource BoolToVis}}">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Ellipse Width="6" Height="6" Fill="#FF16A34A"
-                                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="En cours" FontSize="10" FontWeight="SemiBold"
-                                                               Foreground="#FF166534"/>
-                                                </StackPanel>
-                                            </Border>
                                         </StackPanel>
-                                        <TextBlock Text="{Binding EnteteAffiche}"
-                                                   FontSize="11"
-                                                   Margin="0,2,0,0"
-                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                                    </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
 
-                                    <!-- Badges -->
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Border Background="#FFE0E7FF" CornerRadius="10" Padding="8,3" Margin="4,0">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding NbEntrees}" FontSize="11" FontWeight="Bold" Foreground="#FF4338CA"/>
-                                                <TextBlock Text=" entrées" FontSize="11" Foreground="#FF4338CA"/>
-                                            </StackPanel>
-                                        </Border>
-                                        <Border Background="#FFFEF3C7" CornerRadius="10" Padding="8,3" Margin="4,0"
-                                                Visibility="{Binding HasAvertissements, Converter={StaticResource BoolToVis}}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="⚠ " FontSize="11"/>
-                                                <TextBlock Text="{Binding NbAvertissements}" FontSize="11" FontWeight="Bold" Foreground="#FF92400E"/>
-                                            </StackPanel>
-                                        </Border>
-                                        <Border Background="#FFFEE2E2" CornerRadius="10" Padding="8,3" Margin="4,0"
-                                                Visibility="{Binding HasErreurs, Converter={StaticResource BoolToVis}}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="✖ " FontSize="11"/>
-                                                <TextBlock Text="{Binding NbErreurs}" FontSize="11" FontWeight="Bold" Foreground="#FF991B1B"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </StackPanel>
-                                </Grid>
-                            </Expander.Header>
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <!-- Jours en base -->
+                            <ListBox ItemsSource="{Binding GroupesParJour}"
+                                     SelectedItem="{Binding JourSelectionne, Mode=TwoWay}"
+                                     ItemTemplate="{StaticResource SidebarJourTemplate}"
+                                     ItemContainerStyle="{StaticResource SidebarItemStyle}"
+                                     Background="Transparent" BorderThickness="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
 
-                            <!-- Corps : liste des entrées -->
-                            <ItemsControl ItemsSource="{Binding Entrees}" Margin="46,8,0,4">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Style="{StaticResource EntryRowStyle}">
-                                            <Grid>
+                            <!-- Section Archivé : visible seulement si au moins un mois archivé existe -->
+                            <StackPanel Margin="0,12,0,0">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding MoisArchives.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+
+                                <Border Margin="6,0,6,4" Padding="0,4,0,4"
+                                        BorderThickness="0,1,0,0"
+                                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                                    <TextBlock Text="ARCHIVÉ"
+                                               FontSize="10" FontWeight="Bold"
+                                               Foreground="{StaticResource AsertiOrangeBrush}"
+                                               Margin="0,8,0,0"/>
+                                </Border>
+
+                                <ItemsControl ItemsSource="{Binding MoisArchives}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,0,2">
+                                                <!-- Mois (clickable, déplie/replie) -->
+                                                <Button Command="{Binding DataContext.BasculerExpandMoisArchiveCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        BorderThickness="0" Background="Transparent"
+                                                        Cursor="Hand" Padding="0">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="10,6">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Grid.Column="0" Text="📦" FontSize="13"
+                                                                               Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Column="1" Text="{Binding LibelleCapitalise}"
+                                                                               FontWeight="SemiBold" FontSize="12"
+                                                                               VerticalAlignment="Center"
+                                                                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                                                                    <TextBlock Grid.Column="2" Text="▾" FontSize="11"
+                                                                               VerticalAlignment="Center"
+                                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Setter Property="Text" Value="▸"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding EstDeplie}" Value="True">
+                                                                                        <Setter Property="Text" Value="▾"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
+                                                                </Grid>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                </Button>
+
+                                                <!-- Liste des jours du mois (visible si EstDeplie) -->
+                                                <ItemsControl ItemsSource="{Binding Jours}"
+                                                              Margin="14,2,0,4"
+                                                              Visibility="{Binding EstDeplie, Converter={StaticResource BoolToVis}}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Command="{Binding DataContext.SelectionnerJourArchiveCommand,
+                                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    BorderThickness="0" Background="Transparent"
+                                                                    Cursor="Hand" Padding="0" Margin="0,0,0,2">
+                                                                <Button.Template>
+                                                                    <ControlTemplate TargetType="Button">
+                                                                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="10,5">
+                                                                            <Grid>
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="*"/>
+                                                                                    <ColumnDefinition Width="Auto"/>
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <TextBlock Grid.Column="0" Text="{Binding LibelleCapitalise}" FontSize="11"
+                                                                                           Foreground="{StaticResource AsertiNavyBrush}"/>
+                                                                                <TextBlock Grid.Column="1" Text="{Binding DateCourte}" FontSize="10"
+                                                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                                            </Grid>
+                                                                        </Border>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter Property="Background" Value="#FFFEF3C7"/>
+                                                                            </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Button.Template>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- MAIN : sessions du jour sélectionné -->
+            <Border Grid.Column="1" Background="White"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="14">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding TitreVue}"
+                                   FontSize="16" FontWeight="Bold"
+                                   Foreground="{StaticResource AsertiNavyBrush}"/>
+                        <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <Run Text="{Binding SessionsAffichees.Count, Mode=OneWay}"/>
+                            <Run Text=" session(s)"/>
+                        </TextBlock>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding SessionsAffichees}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Expander Margin="0,0,0,8" IsExpanded="False">
+                                        <Expander.Header>
+                                            <Grid Width="900">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding TimestampAffiche}"
-                                                           FontFamily="Cascadia Mono, Consolas"
-                                                           FontSize="11"
-                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                           VerticalAlignment="Center"
-                                                           Margin="0,0,12,0"/>
-
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding CategorieEmoji}"
-                                                           FontSize="14"
-                                                           VerticalAlignment="Center"
-                                                           Margin="0,0,6,0"/>
-
-                                                <Border Grid.Column="2"
-                                                        Background="#FFF1F5F9"
-                                                        CornerRadius="4"
-                                                        Padding="6,1"
-                                                        Margin="0,0,12,0"
-                                                        VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding CategorieLibelle}"
-                                                               FontSize="10"
-                                                               FontWeight="SemiBold"
-                                                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                                                <!-- Avatar -->
+                                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18"
+                                                        Background="{StaticResource AsertiNavyBrush}"
+                                                        Margin="0,0,12,0">
+                                                    <ui:SymbolIcon Symbol="Person24" FontSize="16"
+                                                                   Foreground="White"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
                                                 </Border>
 
-                                                <StackPanel Grid.Column="3" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Message}"
-                                                               FontSize="12"
-                                                               TextWrapping="Wrap"
-                                                               Foreground="{StaticResource AsertiNavyBrush}"/>
-                                                    <!-- Ligne détails technique : Action SCPI + JSON brut.
-                                                         Cachée par défaut, dévoilée par la checkbox
-                                                         "Afficher les détails techniques" du filtre. -->
-                                                    <TextBlock FontSize="10"
-                                                               FontFamily="Cascadia Mono, Consolas"
-                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,2,0,0"
-                                                               Visibility="{Binding DataContext.AfficherDetails,
-                                                                            RelativeSource={RelativeSource AncestorType={x:Type Window}},
-                                                                            Converter={StaticResource BoolToVis}}">
-                                                        <Run Text="{Binding Action, Mode=OneWay}"/>
+                                                <!-- Identité + résumé compact -->
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Utilisateur}"
+                                                                   FontWeight="Bold" FontSize="14"
+                                                                   Foreground="{StaticResource AsertiNavyBrush}"/>
+                                                        <Border Background="#FFE0E7FF" CornerRadius="8" Padding="6,1"
+                                                                Margin="8,0,0,0" VerticalAlignment="Center">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Poste}" Value="{x:Null}">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Poste}" Value="">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock Text="{Binding Poste}"
+                                                                       FontSize="10" FontWeight="SemiBold"
+                                                                       Foreground="#FF4338CA"/>
+                                                        </Border>
+                                                        <Border Background="#FFDCFCE7" CornerRadius="8" Padding="6,1"
+                                                                Margin="8,0,0,0"
+                                                                Visibility="{Binding Active, Converter={StaticResource BoolToVis}}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <Ellipse Width="6" Height="6" Fill="#FF16A34A"
+                                                                         VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                                <TextBlock Text="En cours" FontSize="10" FontWeight="SemiBold"
+                                                                           Foreground="#FF166534"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock FontSize="11" Margin="0,2,0,0"
+                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                                                        <Run Text="{Binding DebutAffiche, Mode=OneWay}"/>
+                                                        <Run Text=" → "/>
+                                                        <Run Text="{Binding FinAffiche, Mode=OneWay}"/>
                                                         <Run Text=" · "/>
-                                                        <Run Text="{Binding DetailsLisibles, Mode=OneWay}"/>
+                                                        <Run Text="{Binding DureeAffiche, Mode=OneWay}"/>
+                                                        <Run Text=" · "/>
+                                                        <Run Text="{Binding ResumeAffiche, Mode=OneWay}"
+                                                             FontWeight="SemiBold"/>
                                                     </TextBlock>
                                                 </StackPanel>
+
+                                                <!-- Badges -->
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Border Background="#FFE0E7FF" CornerRadius="10" Padding="8,3" Margin="4,0">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding NbEntrees}" FontSize="11" FontWeight="Bold" Foreground="#FF4338CA"/>
+                                                            <TextBlock Text=" act." FontSize="11" Foreground="#FF4338CA"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Background="#FFFEF3C7" CornerRadius="10" Padding="8,3" Margin="4,0"
+                                                            Visibility="{Binding HasAvertissements, Converter={StaticResource BoolToVis}}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="⚠ " FontSize="11"/>
+                                                            <TextBlock Text="{Binding NbAvertissements}" FontSize="11" FontWeight="Bold" Foreground="#FF92400E"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Background="#FFFEE2E2" CornerRadius="10" Padding="8,3" Margin="4,0"
+                                                            Visibility="{Binding HasErreurs, Converter={StaticResource BoolToVis}}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="✖ " FontSize="11"/>
+                                                            <TextBlock Text="{Binding NbErreurs}" FontSize="11" FontWeight="Bold" Foreground="#FF991B1B"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </StackPanel>
                                             </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </Expander>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+                                        </Expander.Header>
+
+                                        <!-- Détail : entries -->
+                                        <ItemsControl ItemsSource="{Binding Entrees}" Margin="46,8,0,4">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource EntryRowStyle}">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding TimestampAffiche}"
+                                                                       FontFamily="Cascadia Mono, Consolas" FontSize="11"
+                                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding CategorieEmoji}"
+                                                                       FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                            <Border Grid.Column="2" Background="#FFF1F5F9"
+                                                                    CornerRadius="4" Padding="6,1" Margin="0,0,12,0"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding CategorieLibelle}"
+                                                                           FontSize="10" FontWeight="SemiBold"
+                                                                           Foreground="{StaticResource AsertiNavyBrush}"/>
+                                                            </Border>
+                                                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Message}"
+                                                                           FontSize="12" TextWrapping="Wrap"
+                                                                           Foreground="{StaticResource AsertiNavyBrush}"/>
+                                                                <TextBlock FontSize="10"
+                                                                           FontFamily="Cascadia Mono, Consolas"
+                                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                           TextWrapping="Wrap" Margin="0,2,0,0"
+                                                                           Visibility="{Binding DataContext.AfficherDetails,
+                                                                                        RelativeSource={RelativeSource AncestorType={x:Type Window}},
+                                                                                        Converter={StaticResource BoolToVis}}">
+                                                                    <Run Text="{Binding Action, Mode=OneWay}"/>
+                                                                    <Run Text=" · "/>
+                                                                    <Run Text="{Binding DetailsLisibles, Mode=OneWay}"/>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Expander>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
 
         <!-- Footer statut -->
-        <Border Grid.Row="4"
-                Padding="24,12"
+        <Border Grid.Row="4" Padding="24,12"
                 Background="{DynamicResource LayerFillColorDefaultBrush}"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
@@ -316,27 +675,24 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="10"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0"
-                           Text="{Binding Statut}"
-                           VerticalAlignment="Center"
-                           FontSize="12"
+                <TextBlock Grid.Column="0" Text="{Binding Statut}"
+                           VerticalAlignment="Center" FontSize="12"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                <Button Grid.Column="1"
-                        Content="Rafraîchir"
-                        Command="{Binding RafraichirCommand}"
-                        Style="{StaticResource SecondaryButtonStyle}"
-                        Padding="16,8"
-                        MinWidth="120"/>
-                <Button Grid.Column="3"
-                        Content="Fermer"
-                        IsCancel="True"
-                        IsDefault="True"
-                        Style="{StaticResource PrimaryButtonStyle}"
-                        Padding="16,8"
-                        MinWidth="120"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="📦 Archiver mois précédent"
+                            Command="{Binding ArchiverMaintenantCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Padding="14,8" MinWidth="120" Margin="0,0,8,0"
+                            ToolTip="Force l'archivage du mois précédent (export JSON + suppression SQL)"/>
+                    <Button Content="Rafraîchir"
+                            Command="{Binding RafraichirCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Padding="14,8" MinWidth="100" Margin="0,0,8,0"/>
+                    <Button Content="Fermer" IsCancel="True" IsDefault="True"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Padding="14,8" MinWidth="100"/>
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

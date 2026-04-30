@@ -95,10 +95,13 @@ namespace Metrologo.ViewModels
                 if (_source.Type == TypeReglage.Numerique)
                 {
                     string? template = _source.Options.Count > 0 ? _source.Options[0].CommandeScpi : null;
-                    if (string.IsNullOrWhiteSpace(template) || string.IsNullOrWhiteSpace(Valeur)) return null;
+                    if (string.IsNullOrWhiteSpace(template)) return null;
 
-                    // Normalise la virgule décimale en point (SCPI attend du point).
-                    string valeurNum = Valeur.Replace(',', '.');
+                    // Si l'utilisateur n'a rien saisi, on envoie 0 explicite plutôt que de
+                    // laisser le réglage non envoyé : sur certains compteurs (53131A) un
+                    // trigger non configuré active le mode AUTO qui n'est pas voulu en
+                    // métrologie. Convention : pas de saisie = valeur 0 forcée.
+                    string valeurNum = string.IsNullOrWhiteSpace(Valeur) ? "0" : Valeur.Replace(',', '.');
                     if (!double.TryParse(valeurNum, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) return null;
 
                     return string.Format(CultureInfo.InvariantCulture, template, v);

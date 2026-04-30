@@ -38,7 +38,9 @@ namespace Metrologo.Models
         /// </summary>
         public List<ReglageAppareil> Reglages { get; set; } = new();
 
-        public DateTime DateCreation { get; set; } = DateTime.Now;
+        // Stocké en UTC. Convertir avec ToLocalTime() pour l'affichage UI — la
+        // bascule été/hiver est gérée automatiquement par la stack horaire Windows.
+        public DateTime DateCreation { get; set; } = DateTime.UtcNow;
         public string CreePar { get; set; } = string.Empty;
 
         /// <summary>Vérifie si cet IDN correspond à ce modèle (contains insensible à la casse).</summary>

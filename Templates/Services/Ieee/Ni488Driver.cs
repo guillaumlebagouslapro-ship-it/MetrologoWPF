@@ -134,6 +134,28 @@ namespace Metrologo.Services.Ieee
             }
         }
 
+        public void AborterToutesSessions()
+        {
+            if (_disposed) return;
+            lock (_lock)
+            {
+                foreach (var kv in _handles)
+                {
+                    try
+                    {
+                        Ni488Native.ibclr(kv.Value);
+                        JournalLog.Warn(CategorieLog.Mesure, "GPIB_ABORT_SDC",
+                            $"Device Clear envoyé à GPIB0::{kv.Key} (arrêt utilisateur).");
+                    }
+                    catch (Exception ex)
+                    {
+                        JournalLog.Warn(CategorieLog.Mesure, "GPIB_ABORT_SDC_ECHEC",
+                            $"Device Clear sur GPIB0::{kv.Key} échoué : {ex.Message}.");
+                    }
+                }
+            }
+        }
+
         public void DefinirTimeout(int adresse, int timeoutMs)
         {
             EnsureNotDisposed();

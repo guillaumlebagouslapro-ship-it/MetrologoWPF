@@ -140,7 +140,8 @@ namespace Metrologo.Services.Journal
                 cmd.Parameters.AddWithValue("@id", SessionActuelleId);
                 cmd.Parameters.AddWithValue("@u", utilisateur);
                 cmd.Parameters.AddWithValue("@m", Environment.MachineName);
-                cmd.Parameters.AddWithValue("@d", DateTime.Now.ToString("o"));
+                // UTC en base, conversion en local à la lecture pour gérer DST automatiquement.
+                cmd.Parameters.AddWithValue("@d", DateTime.UtcNow.ToString("o"));
                 await cmd.ExecuteNonQueryAsync();
             }
             finally { _ecritureSema.Release(); }
@@ -162,7 +163,7 @@ namespace Metrologo.Services.Journal
                 await c.OpenAsync();
                 using var cmd = c.CreateCommand();
                 cmd.CommandText = "UPDATE Sessions SET Fin = @f WHERE SessionId = @id;";
-                cmd.Parameters.AddWithValue("@f", DateTime.Now.ToString("o"));
+                cmd.Parameters.AddWithValue("@f", DateTime.UtcNow.ToString("o"));
                 cmd.Parameters.AddWithValue("@id", SessionActuelleId);
                 await cmd.ExecuteNonQueryAsync();
             }
@@ -198,7 +199,7 @@ namespace Metrologo.Services.Journal
                 cmd.CommandText = @"INSERT INTO LogEntries (SessionId, Timestamp, Categorie, Action, Message, Details, Severite)
                                     VALUES (@s, @t, @c, @a, @m, @d, @sev);";
                 cmd.Parameters.AddWithValue("@s", SessionActuelleId);
-                cmd.Parameters.AddWithValue("@t", DateTime.Now.ToString("o"));
+                cmd.Parameters.AddWithValue("@t", DateTime.UtcNow.ToString("o"));
                 cmd.Parameters.AddWithValue("@c", categorie.ToString());
                 cmd.Parameters.AddWithValue("@a", action);
                 cmd.Parameters.AddWithValue("@m", message ?? "");
@@ -226,8 +227,10 @@ namespace Metrologo.Services.Journal
                 if (!string.IsNullOrEmpty(filtre.Utilisateur)) where += " AND Utilisateur = @u";
 
                 cmd.CommandText = $"SELECT SessionId, Utilisateur, Machine, Debut, Fin, Poste FROM Sessions WHERE {where} ORDER BY Debut DESC LIMIT 200;";
-                if (filtre.Depuis.HasValue) cmd.Parameters.AddWithValue("@depuis", filtre.Depuis.Value.ToString("o"));
-                if (filtre.Jusqu_a.HasValue) cmd.Parameters.AddWithValue("@jusqu", filtre.Jusqu_a.Value.ToString("o"));
+                // Les filtres viennent de l'UI en heure locale — on convertit en UTC pour
+                // matcher les valeurs stockées (UtcNow) en base.
+                if (filtre.Depuis.HasValue) cmd.Parameters.AddWithValue("@depuis", filtre.Depuis.Value.ToUniversalTime().ToString("o"));
+                if (filtre.Jusqu_a.HasValue) cmd.Parameters.AddWithValue("@jusqu", filtre.Jusqu_a.Value.ToUniversalTime().ToString("o"));
                 if (!string.IsNullOrEmpty(filtre.Utilisateur)) cmd.Parameters.AddWithValue("@u", filtre.Utilisateur);
 
                 using var reader = await cmd.ExecuteReaderAsync();
@@ -238,8 +241,8 @@ namespace Metrologo.Services.Journal
                         SessionId = reader.GetString(0),
                         Utilisateur = reader.GetString(1),
                         Machine = reader.GetString(2),
-                        Debut = DateTime.Parse(reader.GetString(3)),
-                        Fin = reader.IsDBNull(4) ? null : DateTime.Parse(reader.GetString(4)),
+                        Debut = ParseUtcVersLocal(reader.GetString(3)),
+                        Fin = reader.IsDBNull(4) ? null : ParseUtcVersLocal(reader.GetString(4)),
                         Poste = reader.IsDBNull(5) ? null : reader.GetString(5)
                     };
                     sessions[s.SessionId] = s;
@@ -310,7 +313,7 @@ namespace Metrologo.Services.Journal
                     {
                         EntryId = reader.GetInt64(0),
                         SessionId = sid,
-                        Timestamp = DateTime.Parse(reader.GetString(2)),
+                        Timestamp = ParseUtcVersLocal(reader.GetString(2)),
                         Categorie = Enum.TryParse<CategorieLog>(reader.GetString(3), out var cat) ? cat : CategorieLog.Systeme,
                         Action = reader.GetString(4),
                         Message = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
@@ -323,6 +326,21 @@ namespace Metrologo.Services.Journal
             var result = new List<SessionJournal>(sessions.Values);
             result.Sort((a, b) => b.Debut.CompareTo(a.Debut));
             return result;
+        }
+
+        /// <summary>
+        /// Parse un timestamp ISO 8601 lu en base (stocké en UTC depuis le fix horaire) et
+        /// le convertit en heure locale du poste. Compatible avec les anciennes entrées
+        /// écrites avant le fix : <c>DateTime.Parse</c> respecte le fuseau si présent dans
+        /// la chaîne (« +02:00 »), sinon on suppose UTC. La conversion en local laisse la
+        /// stack horaire Windows gérer les bascules été/hiver automatiquement.
+        /// </summary>
+        private static DateTime ParseUtcVersLocal(string iso8601)
+        {
+            var dt = DateTime.Parse(iso8601, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind);
+            if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            return dt.ToLocalTime();
         }
 
         public async Task<List<string>> ChargerListeUtilisateursAsync()

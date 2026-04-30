@@ -14,7 +14,10 @@ namespace Metrologo.ViewModels
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(EstEnModeAdmin))]
+        [NotifyPropertyChangedFor(nameof(EstEnSelectionPoste))]
+        [NotifyPropertyChangedFor(nameof(NavigationActive))]
         [NotifyPropertyChangedFor(nameof(TexteMode))]
+        [NotifyPropertyChangedFor(nameof(TexteUtilisateurConnecte))]
         private object? _vueActuelle;
 
         [ObservableProperty]
@@ -30,11 +33,27 @@ namespace Metrologo.ViewModels
         public bool EstAdmin => UtilisateurConnecte?.Role == RoleUtilisateur.Administrateur;
         public bool EstEnModeAdmin => VueActuelle is AdminViewModel;
         public bool EstEnSelectionPoste => VueActuelle is SelectionPosteViewModel;
+
+        /// <summary>
+        /// Faux tant que l'utilisateur n'a pas choisi son poste : la barre de navigation
+        /// (Accueil / Admin / Retour) et la barre de statut sont alors masquées pour
+        /// éviter qu'on contourne l'écran de sélection en cliquant sur « Accueil ».
+        /// </summary>
+        public bool NavigationActive => !EstEnSelectionPoste;
+
         public string TexteMode => EstEnModeAdmin ? "Mode : Administration" : "Mode : Exploitation";
-        public string TexteUtilisateurConnecte =>
-            UtilisateurConnecte == null
-                ? "Utilisateur : non connecté"
-                : $"Utilisateur : {UtilisateurConnecte.Login} ({(EstSurBaie ? "Baie" : "Paillasse")})";
+
+        public string TexteUtilisateurConnecte
+        {
+            get
+            {
+                if (UtilisateurConnecte == null) return "Utilisateur : non connecté";
+                // Tant que le poste n'a pas été choisi, on n'affiche pas Baie/Paillasse
+                // — sinon on lit la valeur par défaut (Paillasse) avant clic utilisateur.
+                if (EstEnSelectionPoste) return $"Utilisateur : {UtilisateurConnecte.Login}";
+                return $"Utilisateur : {UtilisateurConnecte.Login} ({(EstSurBaie ? "Baie" : "Paillasse")})";
+            }
+        }
         public string RubidiumActifTexte => _accueilViewModel.RubidiumActifTexte;
 
         public MainViewModel()

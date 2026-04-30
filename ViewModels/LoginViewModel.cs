@@ -29,16 +29,27 @@ namespace Metrologo.ViewModels
         {
             MessageErreur = "Connexion en cours..."; // Maintenant accessible
 
-            var utilisateur = await _authService.AuthentifierAsync(LoginStr, motDePasse); // Maintenant accessible
+            var utilisateur = await _authService.AuthentifierAsync(LoginStr, motDePasse);
 
-            // Fallback simulation locale (sans SQL)
+            // ---------------------------------------------------------------------
+            // TODO BDD-CENTRALE : retirer ce fallback une fois SQL Server Express
+            // installé et la table T_UTILISATEURS peuplée en prod. Tant que le
+            // serveur n'est pas joignable, AuthentifierAsync retourne null et on
+            // tombe ici — sans ce bloc, plus aucune connexion possible.
+            // Le compte admin par défaut côté serveur (admin/admin123) prendra
+            // le relais une fois la base opérationnelle.
+            // ---------------------------------------------------------------------
             if (utilisateur == null)
             {
                 if ((LoginStr == "admin" && motDePasse == "admin") ||
                     (LoginStr == "metrologo" && motDePasse == "metrologo") ||
                     (LoginStr == "test" && motDePasse == "test"))
                 {
-                    utilisateur = new Utilisateur();
+                    utilisateur = new Utilisateur
+                    {
+                        Login = LoginStr,
+                        Role = LoginStr == "admin" ? RoleUtilisateur.Administrateur : RoleUtilisateur.Utilisateur
+                    };
                 }
             }
 

@@ -37,6 +37,16 @@ namespace Metrologo.ViewModels
         [NotifyCanExecuteChangedFor(nameof(StopperMesureCommand))]
         private bool _mesureEnCours;
 
+        /// <summary>
+        /// Vrai entre le clic sur « Arrêter » et la fin réelle de la mesure (token annulé +
+        /// Device Clear envoyé). Donne un feedback visuel instantané au user (le bouton
+        /// passe à « Arrêt en cours… ») le temps que le compteur libère son <c>:FETCh?</c>
+        /// en cours et que la boucle de mesure sorte.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(StopperMesureCommand))]
+        private bool _arretEnCours;
+
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(RelancerMesureCommand))]
         private bool _derniereMesureDisponible;
@@ -341,6 +351,18 @@ namespace Metrologo.ViewModels
             _cts = new CancellationTokenSource();
             MesureEnCours = true;
 
+            // Ferme explicitement le classeur Excel ouvert par la mesure précédente
+            // (relance mêmes paramètres). Sans ça, ClosedXML échoue à sauver dans le
+            // .xlsm encore tenu ouvert par Interop, OU la finalisation Interop tente
+            // d'ouvrir un classeur déjà ouvert dans la même instance Excel — ce qui
+            // stoppe la mesure à la dernière gate.
+            try { await ExcelInteropHost.Instance.FermerClasseurActifAsync(); }
+            catch (Exception ex)
+            {
+                Journal.Warn(CategorieLog.Excel, "FERMETURE_INTEROP_RELANCE_ERR",
+                    $"Fermeture classeur Interop avant relance échouée : {ex.Message}");
+            }
+
             string nomAppareilLog = ResolvedNomAppareil(config);
             Log("═══════════════════════════════════════════");
             Log($"{preambule} : {config.NbMesures} mesures sur {nomAppareilLog}");
@@ -422,6 +444,7 @@ namespace Metrologo.ViewModels
             finally
             {
                 MesureEnCours = false;
+                ArretEnCours = false;
                 _cts?.Dispose();
                 _cts = null;
             }
@@ -479,13 +502,23 @@ namespace Metrologo.ViewModels
         {
             if (_cts != null && !_cts.IsCancellationRequested)
             {
+                // Feedback visuel instantané : le bouton bascule en "Arrêt en cours…"
+                // dès le clic, sans attendre que le compteur libère son :FETCh?.
+                ArretEnCours = true;
+
                 _cts.Cancel();
+                try { _orchestrator.AborterMesureEnCours(); }
+                catch (Exception ex)
+                {
+                    Journal.Warn(CategorieLog.Mesure, "MESURE_STOP_SDC_ERR",
+                        $"Device Clear d'arrêt échoué : {ex.Message} — annulation continue malgré tout.");
+                }
                 Log("⏹ Arrêt demandé — en cours…");
                 Journal.Warn(CategorieLog.Mesure, "MESURE_STOP", "Arrêt demandé par l'utilisateur.");
             }
         }
 
-        private bool PeutStopper() => MesureEnCours;
+        private bool PeutStopper() => MesureEnCours && !ArretEnCours;
 
         // -------- Utilitaires --------
 

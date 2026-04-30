@@ -41,6 +41,16 @@ namespace Metrologo.Services.Ieee
         void ReinitialiserSessions();
 
         /// <summary>
+        /// Envoie un Selected Device Clear (SDC) sur toutes les sessions ouvertes en cache.
+        /// Synchrone et thread-safe : conçu pour être appelé depuis le clic « Arrêter la mesure »
+        /// pendant qu'un autre thread est bloqué dans un <c>:FETCh?</c>. Le SDC débloque la
+        /// lecture côté instrument (qui rendra la main avec un buffer vide ou une exception),
+        /// ce qui permet à la boucle de mesure de voir le <see cref="System.Threading.CancellationToken"/>
+        /// annulé sans attendre la fin de la gate en cours.
+        /// </summary>
+        void AborterToutesSessions();
+
+        /// <summary>
         /// Ajuste le timeout VISA sur la session de l'appareil. Utile avant une boucle de mesures
         /// dont la gate dépasse le timeout par défaut (ex : gate 20 s → timeout ≥ 22 s), sinon
         /// chaque <c>:READ?</c> renvoie une chaîne vide et l'appareil reste avec sa réponse dans

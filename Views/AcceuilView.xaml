@@ -106,27 +106,88 @@
                 </StackPanel>
             </Button>
 
-            <!-- Stop -->
+            <!-- Stop : style amplifié quand une mesure tourne (fond rouge vif, bordure
+                 épaisse, texte plus gros). Bascule en "Arrêt en cours…" dès le clic
+                 pour donner un feedback visuel instantané, le temps que le Device Clear
+                 + token soient honorés par le compteur (qq centaines de ms max). -->
             <Button Grid.Column="4"
-                    Command="{Binding StopperMesureCommand}"
-                    Style="{StaticResource ActionCardStyle}">
+                    Command="{Binding StopperMesureCommand}">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource ActionCardStyle}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MesureEnCours}" Value="True">
+                                <Setter Property="BorderBrush" Value="#FFDC2626"/>
+                                <Setter Property="BorderThickness" Value="3"/>
+                                <Setter Property="Background" Value="#FFFFE4E4"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
                 <StackPanel>
                     <Border Width="44" Height="44" CornerRadius="10"
-                            HorizontalAlignment="Left" Margin="0,0,0,14"
-                            Background="#FFFEE2E2">
+                            HorizontalAlignment="Left" Margin="0,0,0,14">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#FFFEE2E2"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding MesureEnCours}" Value="True">
+                                        <Setter Property="Background" Value="#FFDC2626"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <ui:SymbolIcon Symbol="Stop24" FontSize="22"
-                                       Foreground="#FFDC2626"
                                        HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center">
+                            <ui:SymbolIcon.Style>
+                                <Style TargetType="ui:SymbolIcon">
+                                    <Setter Property="Foreground" Value="#FFDC2626"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding MesureEnCours}" Value="True">
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ui:SymbolIcon.Style>
+                        </ui:SymbolIcon>
                     </Border>
                     <TextBlock Text="STOP" FontSize="11" FontWeight="Bold"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
-                    <TextBlock Text="Arrêter"
-                               FontSize="16" FontWeight="SemiBold"
-                               Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Interrompt la mesure en cours"
-                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock FontSize="16" FontWeight="Bold">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="Arrêter"/>
+                                <Setter Property="Foreground" Value="{StaticResource AsertiNavyBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ArretEnCours}" Value="True">
+                                        <Setter Property="Text" Value="Arrêt en cours…"/>
+                                        <Setter Property="Foreground" Value="#FFDC2626"/>
+                                    </DataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding MesureEnCours}" Value="True"/>
+                                            <Condition Binding="{Binding ArretEnCours}" Value="False"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Text" Value="Arrêter la mesure"/>
+                                        <Setter Property="Foreground" Value="#FFDC2626"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="Interrompt la mesure en cours"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding MesureEnCours}" Value="True">
+                                        <Setter Property="Text" Value="Cliquez pour stopper immédiatement"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StackPanel>
             </Button>
 

@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
+using Metrologo.Services;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
 using System;
@@ -123,8 +124,9 @@ namespace Metrologo.ViewModels
         private void OuvrirUtilisateurs()
         {
             Journal.Info(CategorieLog.Administration, "OUVERTURE_UTILISATEURS", "Accès à la gestion des utilisateurs.");
-            MessageBox.Show("Gestion des utilisateurs — à implémenter.",
-                "En développement", MessageBoxButton.OK, MessageBoxImage.Information);
+            var vm = new GestionUtilisateursViewModel(new UtilisateursService());
+            var win = new GestionUtilisateursWindow(vm) { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
         }
 
         [RelayCommand]
@@ -143,6 +145,42 @@ namespace Metrologo.ViewModels
             win.ShowDialog();
         }
 
+        /// <summary>
+        /// Force l'archivage du mois précédent immédiatement (sans attendre que l'app
+        /// redémarre le 1er du mois). Utile pour test ou pour rattraper un mois qui
+        /// aurait été manqué (PC éteint pendant plusieurs jours).
+        /// </summary>
+        [RelayCommand]
+        private async System.Threading.Tasks.Task ArchiverMaintenantAsync()
+        {
+            var maintenant = DateTime.Now;
+            var moisPrec = new DateTime(maintenant.Year, maintenant.Month, 1).AddMonths(-1);
+
+            var conf = MessageBox.Show(
+                $"Archiver les logs de {moisPrec:MMMM yyyy} maintenant ?\n\n" +
+                "Les logs de ce mois seront exportés dans des fichiers JSON " +
+                $"({Metrologo.Services.Journal.ArchivesLogsService.DossierArchivesRacine}) " +
+                "puis supprimés de la base SQL Server.",
+                "Archiver les logs",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (conf != MessageBoxResult.Yes) return;
+
+            try
+            {
+                int n = await Metrologo.Services.Journal.ArchivesLogsService
+                    .ArchiverMoisAsync(moisPrec, force: true);
+                MessageBox.Show(
+                    $"Archivage terminé : {n} entrée(s) exportée(s).\n\n" +
+                    $"Dossier : {Metrologo.Services.Journal.ArchivesLogsService.DossierArchivesRacine}\\{moisPrec:yyyy-MM}",
+                    "Archivage OK", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Archivage échoué : {ex.Message}",
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         [RelayCommand]
         private void OuvrirGestionAppareils()
         {
@@ -150,7 +188,9 @@ namespace Metrologo.ViewModels
                 "Accès à la gestion du catalogue d'appareils.");
 
             string utilisateur = Journal.Utilisateur ?? "admin";
-            var vm = new GestionAppareilsViewModel(utilisateur);
+            // Cette commande est dans AdminViewModel, donc forcément lancée par un admin
+            // (la nav vers AdminView n'est exposée qu'aux comptes Administrateur).
+            var vm = new GestionAppareilsViewModel(utilisateur, estAdmin: true);
             var win = new GestionAppareilsWindow(vm) { Owner = Application.Current.MainWindow };
             win.ShowDialog();
         }

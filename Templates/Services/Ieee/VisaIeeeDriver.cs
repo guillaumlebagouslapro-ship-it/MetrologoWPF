@@ -174,6 +174,28 @@ namespace Metrologo.Services.Ieee
             }
         }
 
+        public void AborterToutesSessions()
+        {
+            if (_disposed) return;
+            lock (_lock)
+            {
+                foreach (var kv in _sessions)
+                {
+                    try
+                    {
+                        kv.Value.Clear();   // SDC : débloque le ReadString en cours côté instrument.
+                        JournalLog.Warn(CategorieLog.Mesure, "GPIB_ABORT_SDC",
+                            $"Device Clear envoyé à GPIB0::{kv.Key} (arrêt utilisateur).");
+                    }
+                    catch (Exception ex)
+                    {
+                        JournalLog.Warn(CategorieLog.Mesure, "GPIB_ABORT_SDC_ECHEC",
+                            $"Device Clear sur GPIB0::{kv.Key} échoué : {ex.GetType().Name} — {ex.Message}.");
+                    }
+                }
+            }
+        }
+
         // ---------------- Interne ----------------
 
         private GpibSession ObtenirSession(int adresse)

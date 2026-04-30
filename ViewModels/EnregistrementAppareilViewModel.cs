@@ -236,7 +236,7 @@ namespace Metrologo.ViewModels
                     Entrees = SplitCSV(EntreesTexte),
                     Couplages = SplitCSV(CouplagesTexte),
                     Reglages = ConstruireReglages(),
-                    DateCreation = DateTime.Now,
+                    DateCreation = DateTime.UtcNow,
                     CreePar = _utilisateurActuel
                 };
 

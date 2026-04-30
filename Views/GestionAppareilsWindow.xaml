@@ -8,6 +8,10 @@
         WindowBackdropType="Mica"
         ExtendsContentIntoTitleBar="True">
 
+    <ui:FluentWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </ui:FluentWindow.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -160,6 +164,10 @@
                                             </StackPanel>
                                         </Button>
 
+                                        <!-- Bouton Supprimer : réservé aux administrateurs.
+                                             La modification reste accessible à tous (bouton précédent),
+                                             la suppression purge le catalogue de manière irréversible
+                                             donc gardée pour les admins uniquement. -->
                                         <Button Grid.Column="2"
                                                 Command="{Binding DataContext.SupprimerModeleCommand,
                                                          RelativeSource={RelativeSource AncestorType=Window}}"
@@ -168,7 +176,10 @@
                                                 Background="#FFFEE2E2"
                                                 BorderBrush="#FFFCA5A5"
                                                 BorderThickness="1"
-                                                Foreground="#FF991B1B">
+                                                Foreground="#FF991B1B"
+                                                Visibility="{Binding DataContext.EstAdmin,
+                                                             RelativeSource={RelativeSource AncestorType=Window},
+                                                             Converter={StaticResource BoolToVisibilityConverter}}">
                                             <StackPanel Orientation="Horizontal">
                                                 <ui:SymbolIcon Symbol="Delete24" FontSize="12"
                                                                Foreground="#FF991B1B"

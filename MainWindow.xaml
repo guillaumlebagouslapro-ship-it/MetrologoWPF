@@ -41,7 +41,8 @@
         <!-- Barre de navigation avec logo -->
         <Border Grid.Row="1"
                 Padding="20,12"
-                Background="{StaticResource AsertiNavyBrush}">
+                Background="{StaticResource AsertiNavyBrush}"
+                Visibility="{Binding NavigationActive, Converter={StaticResource BoolToVisibilityConverter}}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -114,7 +115,8 @@
                 Padding="20,10"
                 Background="{DynamicResource LayerFillColorDefaultBrush}"
                 BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                Visibility="{Binding NavigationActive, Converter={StaticResource BoolToVisibilityConverter}}">
             <StackPanel Orientation="Horizontal">
                 <Border Width="8" Height="8" CornerRadius="4"
                         Background="{StaticResource AsertiOrangeBrush}"

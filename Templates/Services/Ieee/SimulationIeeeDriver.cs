@@ -66,6 +66,12 @@ namespace Metrologo.Services.Ieee
             _gateSecondes.Clear();
         }
 
+        public void AborterToutesSessions()
+        {
+            // Pas d'instrument réel à débloquer en simulation : le LireAsync simulé est court
+            // (await Task.Delay(20, ct)) et déjà annulable via le token.
+        }
+
         public void DefinirTimeout(int adresse, int timeoutMs)
         {
             // No-op en simulation.
