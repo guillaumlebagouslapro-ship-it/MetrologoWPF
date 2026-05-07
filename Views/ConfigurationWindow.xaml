@@ -110,7 +110,7 @@
                         </StackPanel>
 
                         <TextBlock Text="N° FICHE D'INTERVENTION" Style="{StaticResource FormLabelStyle}"/>
-                        <ui:TextBox Text="{Binding MesureConfig.NumFI}"
+                        <ui:TextBox Text="{Binding MesureConfig.NumFI, UpdateSourceTrigger=PropertyChanged}"
                                     PlaceholderText="Ex: D0123456"
                                     MaxLength="8"
                                     Padding="10,8"/>
@@ -192,6 +192,24 @@
                                        FontSize="11"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                         </Grid>
+
+                        <!-- Module d'incertitude : filtré par type de mesure. Si aucun module
+                             n'est défini pour ce type, on affiche un message d'aide pointant
+                             vers Administration → Gérer les modules d'incertitude. -->
+                        <TextBlock Text="MODULE D'INCERTITUDE"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,14,0,4"/>
+                        <ComboBox ItemsSource="{Binding ModulesDisponibles}"
+                                  SelectedItem="{Binding ModuleSelectionne, Mode=TwoWay}"
+                                  DisplayMemberPath="LibelleAffiche"
+                                  Padding="10,6"
+                                  Visibility="{Binding AModulesIncertitude, Converter={StaticResource BoolToVis}}"/>
+                        <TextBlock Text="Aucun module d'incertitude défini pour ce type de mesure — coefficients par défaut utilisés."
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   FontStyle="Italic"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Visibility="{Binding AModulesIncertitude, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     </StackPanel>
                 </Border>
 

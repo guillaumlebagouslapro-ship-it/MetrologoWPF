@@ -68,6 +68,39 @@ namespace Metrologo
             // d'une mesure soit instantanée — plus de temps COM à payer dans la boucle chaude.
             _ = ExcelInteropHost.Instance.DemarrerAsync();
 
+            // Warm-up ClosedXML : ouvre les 2 templates en arrière-plan pour pré-JIT les
+            // assemblies (ClosedXML.dll, DocumentFormat.OpenXml.dll) + déclencher le cache
+            // disque OS du fichier .xltm. Sans ce warm-up, la 1ère InitialiserRapportAsync
+            // d'une mesure prend ~1 s ; après warm-up, ~25 ms (gain mesuré dans le profiler).
+            // Fire-and-forget : ne bloque pas le démarrage de l'app.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                    foreach (var nomTpl in new[] { "METROLOGO.xltm", "METROLOGO_Stab.xltm" })
+                    {
+                        string chemin = Path.Combine(baseDir, "Templates", nomTpl);
+                        if (!File.Exists(chemin)) continue;
+                        using var wb = new ClosedXML.Excel.XLWorkbook(chemin);
+                        // Touche chaque feuille pour forcer le lazy-load complet (sinon
+                        // ClosedXML ne charge réellement la feuille qu'au premier accès).
+                        foreach (var ws in wb.Worksheets)
+                        {
+                            _ = ws.Name;
+                            _ = ws.RowsUsed().Count();
+                        }
+                    }
+                    Journal.Info(CategorieLog.Excel, "WARMUP_OK",
+                        "Warm-up ClosedXML terminé — 1ère mesure aura un démarrage instantané.");
+                }
+                catch (Exception ex)
+                {
+                    Journal.Warn(CategorieLog.Excel, "WARMUP_KO",
+                        $"Warm-up ClosedXML échoué : {ex.Message}");
+                }
+            });
+
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);
             var loginWin = new Metrologo.Views.LoginWindow(loginVM);

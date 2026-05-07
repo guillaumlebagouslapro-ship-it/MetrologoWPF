@@ -93,6 +93,47 @@ namespace Metrologo.ViewModels
                 new { modele.Id, modele.Nom });
         }
 
+        /// <summary>
+        /// Importe un (ou plusieurs) modèles d'appareil depuis un fichier .json — format
+        /// hérité du catalogue local (cf. <c>AppareilsCatalogue.json</c>). Permet à l'admin
+        /// d'ajouter en un clic un appareil pré-configuré (53131A, 53230A, SR620, etc.) sans
+        /// ressaisir manuellement chaque commande SCPI dans la UI.
+        /// </summary>
+        [RelayCommand]
+        private async Task ImporterJsonAsync()
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Importer un modèle d'appareil",
+                Filter = "Fichiers JSON (*.json)|*.json|Tous les fichiers (*.*)|*.*",
+                Multiselect = false
+            };
+            if (dlg.ShowDialog() != true) return;
+
+            try
+            {
+                string json = await File.ReadAllTextAsync(dlg.FileName);
+                int n = await CatalogueAppareilsService.Instance.ImporterDepuisJsonAsync(json);
+
+                MessageBox.Show(
+                    $"{n} modèle(s) importé(s) avec succès depuis {Path.GetFileName(dlg.FileName)}.",
+                    "Import terminé", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                JournalLog.Info(CategorieLog.Administration, "CATALOGUE_IMPORT_UI",
+                    $"{n} modèle(s) importé(s) depuis {dlg.FileName} par {_utilisateurActuel}.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Import échoué :\n\n{ex.Message}\n\n"
+                  + "Vérifie que le fichier est un JSON valide au format catalogue.",
+                    "Erreur d'import", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                JournalLog.Erreur(CategorieLog.Administration, "CATALOGUE_IMPORT_ERR",
+                    $"Échec import JSON depuis {dlg.FileName} : {ex.Message}");
+            }
+        }
+
         [RelayCommand]
         private void OuvrirDossierCatalogue()
         {

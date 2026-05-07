@@ -71,6 +71,13 @@ namespace Metrologo.Models
         // Voie du multiplexeur (1..4). 0 = pas de multiplexeur.
         public int VoieMux { get; set; } = 0;
 
+        /// <summary>
+        /// Identifiant du module d'incertitude sélectionné (= nom du fichier CSV sans extension
+        /// dans <c>%LocalAppData%\Metrologo\Incertitudes\</c>). Vide = aucun module sélectionné,
+        /// l'<c>ExcelService</c> retombera alors sur les coefficients hardcoded par défaut.
+        /// </summary>
+        public string NumModuleIncertitude { get; set; } = string.Empty;
+
         public Mesure()
         {
             TypeMesure = TypeMesure.Frequence;

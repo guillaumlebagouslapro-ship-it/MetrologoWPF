@@ -119,6 +119,66 @@ namespace Metrologo.Services.Catalogue
             NotifierChange();
         }
 
+        /// <summary>
+        /// Importe un modèle d'appareil depuis une chaîne JSON (format hérité du fichier
+        /// <c>AppareilsCatalogue.json</c>). Accepte un objet seul ou un tableau d'objets.
+        /// Si un modèle existant a le même Id, il est mis à jour ; sinon ajouté.
+        /// Permet de partager des configurations d'appareils entre postes en quelques
+        /// secondes via copier-coller, sans ressaisir tous les réglages dans la UI.
+        /// </summary>
+        public async Task<int> ImporterDepuisJsonAsync(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                throw new ArgumentException("JSON vide.");
+
+            var trimmed = json.TrimStart();
+            List<ModeleAppareil>? modeles;
+            if (trimmed.StartsWith("["))
+            {
+                modeles = JsonSerializer.Deserialize<List<ModeleAppareil>>(json, _jsonOpts);
+            }
+            else
+            {
+                var unique = JsonSerializer.Deserialize<ModeleAppareil>(json, _jsonOpts);
+                modeles = unique != null ? new List<ModeleAppareil> { unique } : null;
+            }
+
+            if (modeles == null || modeles.Count == 0)
+                throw new InvalidOperationException("JSON parsé en collection vide.");
+
+            int n = 0;
+            foreach (var m in modeles)
+            {
+                if (string.IsNullOrEmpty(m.Id)) m.Id = GenererId(m.Nom);
+                if (string.IsNullOrEmpty(m.CreePar)) m.CreePar = "import";
+
+                bool dejaPresent = Modeles.Any(x => x.Id == m.Id);
+                if (dejaPresent)
+                {
+                    await ModifierAsync(m.Id, cible =>
+                    {
+                        cible.Nom = m.Nom;
+                        cible.FabricantIdn = m.FabricantIdn;
+                        cible.ModeleIdn = m.ModeleIdn;
+                        cible.Parametres = m.Parametres;
+                        cible.Gates = m.Gates;
+                        cible.Entrees = m.Entrees;
+                        cible.Couplages = m.Couplages;
+                        cible.Reglages = m.Reglages;
+                    });
+                }
+                else
+                {
+                    await AjouterAsync(m);
+                }
+                n++;
+            }
+
+            JournalLog.Info(CategorieLog.Administration, "CATALOGUE_IMPORT",
+                $"{n} modèle(s) d'appareil importé(s) depuis JSON.");
+            return n;
+        }
+
         public async Task ModifierAsync(string id, Action<ModeleAppareil> modification)
         {
             var cible = Modeles.FirstOrDefault(m => m.Id == id);

@@ -237,7 +237,7 @@ namespace Metrologo.ViewModels
         }
 
         [RelayCommand]
-        private void OuvrirConfiguration()
+        private async Task OuvrirConfigurationAsync()
         {
             if (MesureConfig == null) MesureConfig = new Mesure();
 
@@ -267,6 +267,12 @@ namespace Metrologo.ViewModels
                         gateIndex = MesureConfig.GateIndex,
                         fNominale = MesureConfig.FNominale
                     });
+
+                // Enchaînement automatique : après validation de la config, on déclenche
+                // directement le lancement de mesure — pour la Stabilité ça ouvre la
+                // fenêtre de sélection des gates ; pour les autres types ça démarre la
+                // boucle de mesures sans étape supplémentaire à cliquer.
+                await ExecuterMesureAsync();
             }
         }
 
@@ -289,16 +295,14 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // 2) Configuration (FI obligatoire)
+            // 2) Configuration (FI obligatoire) — si manquant, on délègue à
+            // OuvrirConfigurationAsync qui ré-appellera ExecuterMesureAsync à sa fin sur
+            // validation. On RETURN ici pour ne pas continuer le workflow en double.
             if (string.IsNullOrWhiteSpace(MesureConfig?.NumFI))
             {
                 Log("ℹ Configuration requise avant de lancer une mesure.");
-                OuvrirConfiguration();
-                if (MesureConfig == null || string.IsNullOrWhiteSpace(MesureConfig.NumFI))
-                {
-                    Log("✖ Mesure annulée (configuration incomplète).");
-                    return;
-                }
+                await OuvrirConfigurationAsync();
+                return;
             }
 
             // 3) Gate — déjà sélectionné dans la fenêtre Configuration (MesureConfig.GateIndex).
@@ -309,6 +313,14 @@ namespace Metrologo.ViewModels
                 var gateWin = new SelectionGateWindow(MesureConfig) { Owner = Application.Current.MainWindow };
                 if (gateWin.ShowDialog() != true) { Log("✖ Mesure annulée (sélection gates)."); return; }
                 MesureConfig.GateIndices = gateWin.ViewModel.IndicesGatesResultats;
+            }
+            else if (MesureConfig.GateIndices.Count > 1)
+            {
+                // Filet de sécurité : si on lance une mesure non-Stab juste après une Stab,
+                // les multiples gates sélectionnées par la Stab sont encore en mémoire.
+                // On force la liste à un seul élément (la 1ère gate) — sinon la mesure
+                // Fréquence boucle sur toutes les gates de la Stab précédente.
+                MesureConfig.GateIndex = MesureConfig.GateIndices[0]; // setter remet la liste à 1 élément
             }
             Log($"⏱ Gates à balayer : {string.Join(", ", MesureConfig.GateIndices)}");
 
@@ -332,8 +344,56 @@ namespace Metrologo.ViewModels
                     "Impossible de relancer", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
+
+            // Choix : conserver les anciennes mesures (= ajouter une feuille au fichier
+            // existant) ou écraser (= repartir d'un fichier neuf à partir du template).
+            //   Oui = écraser (fichier supprimé)
+            //   Non = conserver (= comportement par défaut, mesures ajoutées à la suite)
+            //   Annuler = on ne lance rien.
+            var choix = MessageBox.Show(
+                "Voulez-vous écraser les mesures précédentes ?\n\n"
+              + "• Oui : repart d'un fichier vierge (les anciennes mesures sont perdues).\n"
+              + "• Non : conserve l'historique et ajoute la nouvelle mesure à la suite.\n"
+              + "• Annuler : ne lance rien.",
+                "Relancer la mesure",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Question);
+
+            if (choix == MessageBoxResult.Cancel) return;
+
+            if (choix == MessageBoxResult.Yes)
+            {
+                // Ferme d'abord le classeur Interop pour libérer le fichier sur disque,
+                // sinon File.Delete plante avec IOException.
+                try { await ExcelInteropHost.Instance.FermerClasseurActifAsync(); }
+                catch { /* best-effort */ }
+
+                string cible = _excelService.CheminFichierGenere;
+                if (!string.IsNullOrEmpty(cible) && System.IO.File.Exists(cible))
+                {
+                    try
+                    {
+                        System.IO.File.Delete(cible);
+                        Log($"🗑 Fichier précédent supprimé : {System.IO.Path.GetFileName(cible)}");
+                        Journal.Info(CategorieLog.Mesure, "MESURE_RELANCE_ECRASE",
+                            $"Fichier supprimé avant relance : {cible}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"⚠ Impossible de supprimer le fichier précédent : {ex.Message}");
+                        MessageBox.Show(
+                            $"Impossible de supprimer le fichier précédent :\n{ex.Message}\n\n"
+                          + "Ferme-le dans Excel et relance.",
+                            "Fichier verrouillé", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                }
+            }
+
             await LancerMesureAsync(MesureConfig, rubi, _derniereFNominale,
-                preambule: "🔁 Relance (mêmes paramètres)");
+                preambule: choix == MessageBoxResult.Yes
+                    ? "🔁 Relance (fichier neuf)"
+                    : "🔁 Relance (mêmes paramètres)");
         }
 
         private bool PeutRelancer() => DerniereMesureDisponible && !MesureEnCours;
@@ -522,9 +582,32 @@ namespace Metrologo.ViewModels
 
         // -------- Utilitaires --------
 
+        // Plafond du nombre de lignes gardées dans InformationsGenerales pour éviter
+        // que la string ne grossisse à plusieurs Ko, ce qui ralentit le re-render WPF
+        // de la TextBox liée (chaque update prend alors 200-500 ms et bloque visuellement
+        // l'UI — y compris le bouton Arrêter pendant une mesure longue).
+        private const int LOG_MAX_LIGNES = 200;
+
         private void Log(string message)
         {
-            InformationsGenerales += $"\n[{DateTime.Now:HH:mm:ss}] {message}";
+            string nouvelle = $"\n[{DateTime.Now:HH:mm:ss}] {message}";
+            string courant = InformationsGenerales + nouvelle;
+
+            // Trim au-delà du plafond : on garde la queue (les lignes les plus récentes).
+            // Coût : O(n) une fois par overflow, négligeable face au gain UI.
+            int nbLignes = courant.Count(c => c == '\n');
+            if (nbLignes > LOG_MAX_LIGNES)
+            {
+                int aRetirer = nbLignes - LOG_MAX_LIGNES;
+                int idx = 0;
+                for (int i = 0; i < aRetirer; i++)
+                {
+                    idx = courant.IndexOf('\n', idx) + 1;
+                }
+                courant = courant.Substring(idx);
+            }
+
+            InformationsGenerales = courant;
         }
     }
 }

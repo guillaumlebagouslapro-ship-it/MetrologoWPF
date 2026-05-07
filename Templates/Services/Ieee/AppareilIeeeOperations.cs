@@ -129,7 +129,12 @@ namespace Metrologo.Services.Ieee
             // Vérification : relit les valeurs d'arming pour confirmer que l'instrument a pris
             // en compte nos commandes. Coût : ~200 ms (3 paires query/read). Skippable dans les
             // boucles de balayage où l'arming est déjà éprouvé.
-            if (verifierArming)
+            //
+            // Réservé aux modèles qui supportent la syntaxe :FREQ:ARM:* (HP/Agilent 53131A et
+            // compatibles). Les autres compteurs (53230A, SR620, etc.) renvoient -113
+            // Undefined header sur ces commandes, ce qui s'affiche à l'écran de l'instrument.
+            // → contrôlé par le champ catalogue VerifArmingActive (défaut false = universel).
+            if (verifierArming && appareil.VerifArmingActive)
             {
                 await VerifierArmingAsync(appareil, driver, ct);
             }

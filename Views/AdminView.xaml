@@ -243,7 +243,7 @@
             </Button>
 
             <Button Grid.Column="2"
-                    Command="{Binding OuvrirIncertitudesCommand}"
+                    Command="{Binding OuvrirGestionModulesCommand}"
                     Style="{StaticResource ActionCardStyle}">
                 <StackPanel>
                     <Border Width="40" Height="40" CornerRadius="10"
@@ -256,7 +256,7 @@
                     </Border>
                     <TextBlock Text="Incertitudes" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Coefficients A/B, rubidiums, plages"
+                    <TextBlock Text="Coefficients A/B par module, plage, temps de mesure"
                                FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>

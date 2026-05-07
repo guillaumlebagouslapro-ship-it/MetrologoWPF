@@ -9,6 +9,7 @@ using System.Windows;
 using Metrologo.Models;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
+using Metrologo.Services.Incertitude;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;
 
@@ -83,6 +84,70 @@ namespace Metrologo.ViewModels
             CatalogueAppareilsService.Instance.CatalogueChange += (_, _) => RebuildReglagesDynamiques();
             RebuildAppareils();
             RebuildReglagesDynamiques();
+            RebuildModulesIncertitude();
+        }
+
+        // ------- Modules d'incertitude (filtrés par TypeMesure) -------
+
+        /// <summary>
+        /// Liste des modules d'incertitude affichables dans la ComboBox "Module" — filtrés
+        /// pour ne garder que ceux qui couvrent la <see cref="TypeMesure"/> courante (au
+        /// moins une ligne CSV avec <c>Fonction</c> = équivalent du type).
+        /// </summary>
+        public ObservableCollection<ModuleIncertitude> ModulesDisponibles { get; } = new();
+
+        private ModuleIncertitude? _moduleSelectionne;
+
+        /// <summary>
+        /// Module choisi par l'opérateur — son <c>NumModule</c> est sérialisé dans
+        /// <see cref="MesureConfig"/> pour que l'<c>ExcelService</c> retrouve les coefficients
+        /// CoeffA/CoeffB à la fin de la mesure.
+        /// </summary>
+        public ModuleIncertitude? ModuleSelectionne
+        {
+            get
+            {
+                if (_moduleSelectionne != null && ModulesDisponibles.Contains(_moduleSelectionne))
+                    return _moduleSelectionne;
+                return null;
+            }
+            set
+            {
+                if (ReferenceEquals(_moduleSelectionne, value)) return;
+                _moduleSelectionne = value;
+                MesureConfig.NumModuleIncertitude = value?.NumModule ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>Vrai si au moins un module couvre le type de mesure courant.</summary>
+        public bool AModulesIncertitude => ModulesDisponibles.Count > 0;
+
+        /// <summary>
+        /// Reconstruit la liste des modules selon <see cref="MesureConfig.TypeMesure"/>.
+        /// Lit le sous-dossier dédié à ce type (ex. <c>Incertitudes\Frequence\</c>).
+        /// Restaure la sélection persistée (<c>NumModuleIncertitude</c>) si elle est encore valide.
+        /// </summary>
+        private void RebuildModulesIncertitude()
+        {
+            ModulesDisponibles.Clear();
+
+            foreach (var m in ModulesIncertitudeService.Lister(MesureConfig.TypeMesure))
+            {
+                ModulesDisponibles.Add(m);
+            }
+
+            // Restaure la sélection précédente si toujours pertinente.
+            string numPersist = MesureConfig?.NumModuleIncertitude ?? string.Empty;
+            _moduleSelectionne = ModulesDisponibles.FirstOrDefault(m =>
+                string.Equals(m.NumModule, numPersist, StringComparison.OrdinalIgnoreCase));
+            if (_moduleSelectionne == null && MesureConfig != null)
+            {
+                MesureConfig.NumModuleIncertitude = string.Empty;
+            }
+
+            OnPropertyChanged(nameof(ModuleSelectionne));
+            OnPropertyChanged(nameof(AModulesIncertitude));
         }
 
         /// <summary>
@@ -96,6 +161,7 @@ namespace Metrologo.ViewModels
         {
             RebuildAppareils();
             RebuildReglagesDynamiques();
+            RebuildModulesIncertitude();
             RefreshAll();
         }
 
@@ -403,6 +469,19 @@ namespace Metrologo.ViewModels
             // Si le mode indirect n'est plus dispo, on bascule sur Direct
             if (MesureConfig.ModeMesure == ModeMesure.Indirect && !IndirectDisponible)
                 MesureConfig.ModeMesure = ModeMesure.Direct;
+
+            // Si on quitte la Stabilité, on reset GateIndices à un seul élément (= la 1ère
+            // gate de la sélection multi-gates). Sans ce reset, une mesure Fréquence
+            // lancée juste après une Stabilité boucle sur toutes les gates qu'avait
+            // sélectionnées la Stab — comportement non voulu.
+            if (MesureConfig.TypeMesure != TypeMesure.Stabilite
+                && MesureConfig.GateIndices.Count > 1)
+            {
+                MesureConfig.GateIndex = MesureConfig.GateIndices[0]; // setter remet la liste à 1 élément
+            }
+
+            // Le filtrage des modules d'incertitude dépend de TypeMesure → relister.
+            RebuildModulesIncertitude();
 
             OnPropertyChanged(nameof(MesureConfig));
             RefreshAll();

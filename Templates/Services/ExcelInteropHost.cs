@@ -92,7 +92,17 @@ namespace Metrologo.Services
             {
                 lock (_sync)
                 {
-                    if (_excel == null) return;
+                    // Vérifie que l'instance Excel est encore vivante (l'utilisateur a pu
+                    // fermer la fenêtre Excel manuellement, ou Excel a planté). Si KO,
+                    // on relance une nouvelle instance avant de continuer — sinon RPC
+                    // disconnecté (0x800706BA) au prochain accès à _excel.
+                    if (!EstInstanceVivante())
+                    {
+                        JournalLog.Warn(CategorieLog.Excel, "EXCEL_HOTE_REDEMARRE",
+                            "Instance Excel hôte indisponible (fermée ou crashée) — redémarrage automatique.");
+                        RedemarrerInstanceInterne();
+                        if (_excel == null) return;   // redémarrage a échoué, on abandonne
+                    }
 
                     // Ferme tout classeur précédent (une seule mesure live à la fois).
                     FermerClasseurActifInterne();
@@ -126,6 +136,13 @@ namespace Metrologo.Services
                             $"CalculateFullRebuild échoué : {ex.Message}");
                     }
 
+                    // Ferme les éventuels classeurs résiduels (Book1 vide par défaut au
+                    // démarrage Excel, ou anciens fichiers ouverts manuellement par
+                    // l'utilisateur via double-clic) — sans ce nettoyage, plusieurs fenêtres
+                    // Excel grises parasites apparaissent à côté du classeur actif après
+                    // une relance.
+                    FermerClasseursParasitesInterne();
+
                     _excel.ScreenUpdating = true;
                     _excel.Visible = true;
 
@@ -150,9 +167,11 @@ namespace Metrologo.Services
                     try
                     {
                         int row = ligneDebut + indexMesure;
-                        // Cells(row, col) : col=1 (A) = HEURE, col=2 (B) = mesure.
-                        _feuilleMesure.Cells[row, 1].Value2 = horodatage.ToString("HH:mm:ss");
-                        _feuilleMesure.Cells[row, 2].Value2 = valeur;
+                        // Décalage de 3 colonnes : col=4 (D) = HEURE, col=5 (E) = mesure brute.
+                        // Les colonnes 1-3 (A/B/C) sont réservées à n°Module/Fonction/Condition 1
+                        // (écrites une fois par ExcelService.InitialiserRapportAsync).
+                        _feuilleMesure.Cells[row, 4].Value2 = horodatage.ToString("HH:mm:ss");
+                        _feuilleMesure.Cells[row, 5].Value2 = valeur;
                     }
                     catch (Exception ex)
                     {
@@ -260,6 +279,102 @@ namespace Metrologo.Services
                 return chemin;
             }
         });
+
+        /// <summary>
+        /// Ping l'instance Excel pour vérifier qu'elle répond encore au COM. Utilisé avant
+        /// chaque ouverture de classeur pour éviter le RPC disconnect (0x800706BA) si
+        /// l'utilisateur a fermé la fenêtre Excel manuellement ou si le process a crashé.
+        /// </summary>
+        private bool EstInstanceVivante()
+        {
+            if (_excel == null) return false;
+            try
+            {
+                _ = _excel.Version;   // accès trivial qui plante si COM down
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Recrée une instance Excel après que la précédente ait été perdue (fermée par
+        /// l'utilisateur, crashée, etc.). Doit être appelé sous lock <see cref="_sync"/>.
+        /// </summary>
+        private void RedemarrerInstanceInterne()
+        {
+            // Libère ce qui reste de l'ancienne instance (best-effort).
+            try { if (_classeurActif != null) Marshal.ReleaseComObject(_classeurActif); } catch { }
+            try { if (_feuilleMesure != null) Marshal.ReleaseComObject(_feuilleMesure); } catch { }
+            try { if (_excel != null) Marshal.ReleaseComObject(_excel); } catch { }
+            _classeurActif = null;
+            _feuilleMesure = null;
+            _excel = null;
+            _cheminClasseurActif = string.Empty;
+
+            try
+            {
+                var excelType = Type.GetTypeFromProgID("Excel.Application");
+                if (excelType == null) return;
+                _excel = Activator.CreateInstance(excelType);
+                if (_excel == null) return;
+                _excel.Visible = false;
+                _excel.DisplayAlerts = false;
+                _excel.ScreenUpdating = false;
+                _excel.AskToUpdateLinks = false;
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_HOTE_REDEMARRAGE_KO",
+                    $"Redémarrage Excel échoué : {ex.Message}");
+                _excel = null;
+            }
+        }
+
+        /// <summary>
+        /// Ferme tous les classeurs ouverts dans l'instance Excel hôte SAUF
+        /// <see cref="_classeurActif"/>. Évite que des fenêtres grises parasites (Book1
+        /// par défaut, anciens classeurs) restent visibles à côté du classeur de mesure.
+        /// Doit être appelée sous lock <see cref="_sync"/>.
+        /// </summary>
+        private void FermerClasseursParasitesInterne()
+        {
+            if (_excel == null) return;
+            try
+            {
+                // On itère sur Workbooks via index décroissant — la collection se met à
+                // jour à chaque Close, et un foreach risque de lever InvalidOperationException.
+                int nb = _excel.Workbooks.Count;
+                for (int i = nb; i >= 1; i--)
+                {
+                    dynamic wb = _excel.Workbooks[i];
+                    try
+                    {
+                        // Compare via le chemin complet — comparer les références dynamic
+                        // est peu fiable en COM (proxy différent à chaque accès).
+                        string fullName = (string)wb.FullName;
+                        if (!string.Equals(fullName, _cheminClasseurActif,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { wb.Close(false); }   // SaveChanges = false : pas de save sur classeurs parasites
+                            catch { /* best-effort */ }
+                        }
+                    }
+                    catch { /* best-effort */ }
+                    finally
+                    {
+                        try { Marshal.ReleaseComObject(wb); } catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_PARASITES_KO",
+                    $"Nettoyage des classeurs parasites échoué : {ex.Message}");
+            }
+        }
 
         private void FermerClasseurActifInterne()
         {

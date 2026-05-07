@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -77,19 +78,14 @@ namespace Metrologo.Services
         {
             var result = new ResultatMesure();
 
-            // -------- Profiling : chronomètre chaque étape et logue la durée dans le journal --------
-            // Chaque appel à Perf("...") logue le temps écoulé depuis le précédent Perf, avec un
-            // total cumulé (T=). Utile pour identifier où va le temps. Filtre = catégorie Mesure
-            // + action PERF dans la base sqlite.
-            var swPerf = Stopwatch.StartNew();
-            long lastT = 0;
-            void Perf(string label)
-            {
-                long now = swPerf.ElapsedMilliseconds;
-                JournalLog.Info(CategorieLog.Mesure, "PERF",
-                    $"+{(now - lastT),5} ms  T={now,6} ms  {label}");
-                lastT = now;
-            }
+            // -------- Profiling : accumulé en mémoire pendant la mesure, dumpé en fichier à la fin --------
+            // Les 30+ Perf("...") par gate écrivaient en SQL pendant la mesure (~5-10 ms/écriture
+            // = jusqu'à 300 ms d'overhead par gate sur des mesures rapides). On accumule
+            // maintenant en mémoire (Stopwatch + List.Add ≈ 10 ns/marqueur), et on écrit le
+            // tout dans un fichier texte au moment de la finalisation — visible à côté du
+            // .xlsm pour analyse post-mesure.
+            var profiler = new ProfilerSession();
+            void Perf(string label) => profiler.Mark(label);
 
             try
             {
@@ -286,23 +282,40 @@ namespace Metrologo.Services
                     bool fetchBloquant = !string.IsNullOrWhiteSpace(appareil.CommandeFetchFresh);
                     string? cmdFetchUsed = fetchBloquant ? appareil.CommandeFetchFresh : cmdFetch;
 
+                    // Types qui font des séries de mesures (≠ Interval/Tachy/Strobo en 1 shot).
+                    bool typeFaitSeries = mesure.TypeMesure == TypeMesure.Stabilite
+                        || mesure.TypeMesure == TypeMesure.Frequence
+                        || mesure.TypeMesure == TypeMesure.FreqAvantInterv
+                        || mesure.TypeMesure == TypeMesure.FreqFinale;
+
+                    // Mode streaming : acquisition gap-free + lecture une-par-une via
+                    // CommandeFetchFresh (typ. ":DATA:REM? 1,WAIT" sur 53230A). Compatible
+                    // avec live UI ET Stab batch. Réservé aux gates ≥ 1 s : sous ce seuil,
+                    // chaque DATA:REM coûte ~30-50 ms de roundtrip GPIB qui polluerait la
+                    // cadence de mesures rapides — on préfère le bulk classique.
+                    bool modeStreamingPossible = !string.IsNullOrWhiteSpace(appareil.CommandeBulkInit)
+                        && !string.IsNullOrWhiteSpace(appareil.CommandeFetchFresh)
+                        && gateSecondes >= 1.0
+                        && typeFaitSeries
+                        && !bulkDejaEchoue;
+
                     // Mode bulk : timestamps simulés (l'instrument fait les mesures en interne sans
                     // nous prévenir) — incompatible avec l'écriture live Excel cellule-par-cellule.
                     // On le réserve donc à la Stabilité (où on bufferise de toute façon).
-                    bool modeBulk = !string.IsNullOrWhiteSpace(appareil.CommandeMesureMultiple)
+                    // Désactivé si le streaming est utilisé (les 2 sont mutuellement exclusifs).
+                    bool modeBulk = !modeStreamingPossible
+                        && !string.IsNullOrWhiteSpace(appareil.CommandeMesureMultiple)
                         && mesure.TypeMesure == TypeMesure.Stabilite
                         && !bulkDejaEchoue;
                     // Mode rapide :FETCh? : applicable à TOUS les types de mesure qui font des séries
                     // (Fréquence, Stabilité, FreqAvant/Final). Compatible avec l'écriture live Excel.
                     // Gain ~3× vs :READ? classique sur le 53131A. Désactivé pour Interval (1 mesure)
                     // et les types tachy/strobo (chemins de mesure différents).
-                    bool typeAutoriseModeRapide = mesure.TypeMesure == TypeMesure.Stabilite
-                        || mesure.TypeMesure == TypeMesure.Frequence
-                        || mesure.TypeMesure == TypeMesure.FreqAvantInterv
-                        || mesure.TypeMesure == TypeMesure.FreqFinale;
                     bool modeRapide = !modeBulk
+                        && !modeStreamingPossible
                         && !string.IsNullOrEmpty(cmdFetchUsed)
-                        && typeAutoriseModeRapide;
+                        && typeFaitSeries
+                        && appareil.ModeRapideActif;   // bloqué pour 53230A & co (cf. catalogue)
 
                     // Délai inter-fetch :
                     //   - 0 si la commande est bloquante (l'instrument fait l'attente)
@@ -353,19 +366,118 @@ namespace Metrologo.Services
                     // dans la boucle classique).
                     int totalDoublons = 0;
 
+                    // Écritures Excel via Interop COM lancées en fire-and-forget : chaque
+                    // EcrireValeurLiveAsync prend ~50-100 ms (lock COM), ce qui ajoute autant
+                    // de latence par mesure si on les await en série. En parallélisant avec
+                    // la mesure GPIB suivante (gate ~1 s), on récupère ce temps et on retombe
+                    // sur la cadence physique de l'instrument. Le lock(_sync) interne
+                    // d'ExcelInteropHost garantit la sérialisation FIFO des écritures (à
+                    // cadence ≤ 10 Hz typique du fréquencemètre, pas de race possible).
+                    // Vide en mode batch (Stab) — on ne touche pas à Interop pendant les gates.
+                    var pendingWrites = new List<Task>(mesure.NbMesures);
+
+                    // ===== MODE STREAMING : prioritaire sur tous les autres si applicable =====
+                    // Acquisition gap-free + lecture une-par-une via CommandeFetchFresh
+                    // (typ. ":DATA:REM? 1,WAIT" sur 53230A). Compatible avec live UI ET batch
+                    // Stab. Réservé aux gates ≥ 1 s (en dessous, le DATA:REM coûte ~30-50 ms
+                    // de roundtrip GPIB qui polluerait la cadence).
+                    if (modeStreamingPossible)
+                    {
+                        // Timeout : gate × N + 3 s, comme le bulk classique.
+                        int timeoutStream = Math.Max(5000,
+                            (int)(gateSecondes * 1000 * mesure.NbMesures) + 3000);
+                        _driver.DefinirTimeout(appareil.Adresse, timeoutStream);
+
+                        var swStream = Stopwatch.StartNew();
+                        bool streamOk = false;
+                        try
+                        {
+                            // 1. Lancer l'acquisition gap-free en arrière-plan.
+                            string cmdInit = appareil.CommandeBulkInit.Replace("{N}",
+                                mesure.NbMesures.ToString(CultureInfo.InvariantCulture));
+                            await _driver.EcrireAsync(appareil.Adresse, cmdInit, appareil.WriteTerm, ct);
+
+                            // 2. Boucle : lire chaque valeur dès qu'elle est dispo (WAIT bloque
+                            //    jusqu'à dispo dans la mémoire de readings du compteur).
+                            for (int i = 0; i < mesure.NbMesures; i++)
+                            {
+                                ct.ThrowIfCancellationRequested();
+                                double val = await appareil.FetcherAsync(
+                                    _driver, appareil.CommandeFetchFresh, ct);
+                                var ts = DateTime.Now;
+                                valeurs.Add(val);
+
+                                if (ecritureBatch)
+                                    bufferBatch!.Add((ts, val));
+                                else
+                                    pendingWrites.Add(ExcelInteropHost.Instance.EcrireValeurLiveAsync(i, val, ts));
+
+                                // Throttle UI uniforme : 1/5 + dernière mesure (cf. boucle classique).
+                                if ((i % 5 == 0) || (i == mesure.NbMesures - 1))
+                                {
+                                    progress?.Report(new ProgressionMesure
+                                    {
+                                        Message = nbIterations > 1
+                                            ? $"Gate {g + 1}/{nbIterations} — mesure {i + 1}/{mesure.NbMesures}"
+                                            : $"Mesure {i + 1}/{mesure.NbMesures}",
+                                        EtapeActuelle = etape + i + 1,
+                                        EtapesTotales = totalEtapes,
+                                        DerniereValeur = val
+                                    });
+                                }
+                            }
+                            swStream.Stop();
+                            JournalLog.Info(CategorieLog.Mesure, "BULK_STREAM",
+                                $"Streaming gap-free : {mesure.NbMesures} valeurs lues en "
+                              + $"{swStream.ElapsedMilliseconds} ms via DATA:REM (live UI).");
+                            streamOk = true;
+                            etape += mesure.NbMesures;
+                            goto FinBoucleMesures;
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            JournalLog.Warn(CategorieLog.Mesure, "BULK_STREAM_ERR",
+                                $"Mode streaming échoué : {ex.Message} — fallback sur les autres modes.");
+                            try { await _driver.EcrireAsync(appareil.Adresse, ":ABORT", appareil.WriteTerm, ct); }
+                            catch { /* best-effort */ }
+                            valeurs.Clear();
+                            pendingWrites.Clear();
+                            bufferBatch?.Clear();
+                        }
+                    }
+
                     if (modeBulk)
                     {
                         // ----- Mode BULK : 1 seul aller-retour GPIB pour N mesures -----
-                        // Timeout court (2 s) pour détecter rapidement les commandes non reconnues
-                        // — au lieu d'attendre 5 s × N gates de pénalité.
-                        _driver.DefinirTimeout(appareil.Adresse, 2000);
+                        // Timeout adapté au volume réel : gate × N + 3 s de marge (init mode
+                        // CONT, transmission CSV des N valeurs, parsing).
+                        int timeoutBulk = Math.Max(5000,
+                            (int)(gateSecondes * 1000 * mesure.NbMesures) + 3000);
+                        _driver.DefinirTimeout(appareil.Adresse, timeoutBulk);
+
+                        // Message UI clair : en mode bulk, l'instrument fait les N mesures en
+                        // interne sans qu'on puisse les remonter une par une à l'utilisateur.
+                        double dureeAttendueSec = gateSecondes * mesure.NbMesures;
+                        progress?.Report(new ProgressionMesure
+                        {
+                            Message = nbIterations > 1
+                                ? $"Gate {g + 1}/{nbIterations} ({EnTetesMesureHelper.LibelleGate(gateIdx)}) — "
+                                  + $"acquisition gap-free de {mesure.NbMesures} mesures en cours (~{dureeAttendueSec:F1} s)..."
+                                : $"Acquisition gap-free de {mesure.NbMesures} mesures en cours (~{dureeAttendueSec:F1} s)...",
+                            EtapeActuelle = etape,
+                            EtapesTotales = totalEtapes
+                        });
 
                         bool bulkOk = false;
+                        var swBulkProgress = Stopwatch.StartNew();
+
                         try
                         {
                             var lot = await appareil.MesurerEnLotAsync(
                                 _driver, appareil.CommandeMesureMultiple, mesure.NbMesures, ct);
                             int nbRecu = lot.Count;
+                            swBulkProgress.Stop();
 
                             // On considère le bulk OK si on a reçu au moins 80 % des mesures
                             // attendues. Sinon (instrument refuse la commande, retour vide,
@@ -375,14 +487,27 @@ namespace Metrologo.Services
                                 JournalLog.Info(CategorieLog.Mesure, "BULK_FETCH",
                                     $"Lot reçu : {nbRecu}/{mesure.NbMesures} valeurs en 1 transaction GPIB.");
 
+                                // Message UI : confirme à l'utilisateur que les valeurs ont
+                                // bien été acquises et combien de temps ça a pris.
+                                progress?.Report(new ProgressionMesure
+                                {
+                                    Message = nbIterations > 1
+                                        ? $"Gate {g + 1}/{nbIterations} — {nbRecu} mesures reçues en {swBulkProgress.ElapsedMilliseconds / 1000.0:F1} s"
+                                        : $"{nbRecu} mesures reçues en {swBulkProgress.ElapsedMilliseconds / 1000.0:F1} s",
+                                    EtapeActuelle = etape,
+                                    EtapesTotales = totalEtapes
+                                });
+
                                 var tsBase = DateTime.Now.AddMilliseconds(-(gateSecondes * 1000) * mesure.NbMesures);
                                 for (int i = 0; i < mesure.NbMesures; i++)
                                 {
                                     double val = i < nbRecu ? lot[i] : 0.0;
                                     var ts = tsBase.AddMilliseconds(gateSecondes * 1000 * i);
                                     valeurs.Add(val);
-                                    if (ecritureBatch) bufferBatch!.Add((ts, val));
-                                    else await ExcelInteropHost.Instance.EcrireValeurLiveAsync(i, val, ts);
+                                    if (ecritureBatch)
+                                        bufferBatch!.Add((ts, val));
+                                    else
+                                        pendingWrites.Add(ExcelInteropHost.Instance.EcrireValeurLiveAsync(i, val, ts));
                                 }
                                 bulkOk = true;
                             }
@@ -521,15 +646,19 @@ namespace Metrologo.Services
                         }
                         else
                         {
-                            await ExcelInteropHost.Instance.EcrireValeurLiveAsync(i, val, ts);
+                            // Fire-and-forget : l'écriture Excel via Interop tourne en
+                            // parallèle de la prochaine mesure GPIB. Flushé en fin de boucle
+                            // par Task.WhenAll(pendingWrites).
+                            pendingWrites.Add(ExcelInteropHost.Instance.EcrireValeurLiveAsync(i, val, ts));
                         }
 
-                        // En mode batch (Stabilité), on throttle le progress à 1 sur 5 + dernière
-                        // mesure. Chaque Report() trigge un re-render du TextBox UI sur le thread
-                        // dispatcher, ce qui prend 200-500 ms par update quand InformationsGenerales
-                        // commence à faire plusieurs Ko (concaténation à chaque ligne) — donc 30
-                        // updates = 6-15 s d'overhead pur UI sur une boucle qui devrait durer ~1 s.
-                        bool reporter = !ecritureBatch || (i % 5 == 0) || (i == mesure.NbMesures - 1);
+                        // Throttle UNIFORME (Stab + Freq) : 1 sur 5 + dernière mesure. Chaque
+                        // Report() trigge un re-render du TextBox UI sur le thread dispatcher,
+                        // ce qui peut bloquer l'UI 200-500 ms quand InformationsGenerales fait
+                        // plusieurs Ko. Sans throttle uniforme, en mode Freq les 30 reports/gate
+                        // saturaient le UI thread et le bouton « Arrêter » devenait incliquable
+                        // pendant la mesure (le click était mis en queue jusqu'à libération).
+                        bool reporter = (i % 5 == 0) || (i == mesure.NbMesures - 1);
                         if (reporter)
                         {
                             progress?.Report(new ProgressionMesure
@@ -545,6 +674,22 @@ namespace Metrologo.Services
                     }
                 FinBoucleMesures:
                     etape += mesure.NbMesures;
+
+                    // Flush des écritures Excel encore en vol — la boucle GPIB peut finir
+                    // avant que les dernières cellules soient écrites côté Interop COM.
+                    // Sans ce WhenAll, on enchaînerait sur EcrireStatsAsync alors qu'Excel
+                    // n'a pas encore reçu toutes les valeurs → cellules vides côté user.
+                    if (pendingWrites.Count > 0)
+                    {
+                        try { await Task.WhenAll(pendingWrites); }
+                        catch (Exception ex)
+                        {
+                            JournalLog.Warn(CategorieLog.Excel, "EXCEL_FLUSH_ERREUR",
+                                $"Erreur durant flush des écritures live ({pendingWrites.Count} en attente) : {ex.Message}");
+                        }
+                        Perf($"Flush écritures Excel ({pendingWrites.Count} cellules)");
+                    }
+
                     swBoucle.Stop();
                     string modeTag = modeBulk ? "BULK"
                         : modeRapide ? (fetchBloquant ? "FETCH-FRESH" : "FETCH")
@@ -705,7 +850,37 @@ namespace Metrologo.Services
             }
             finally
             {
+                Perf("Fin de mesure");
                 _excel.FermerExcel();
+
+                // Dump du fichier de profiling à côté du .xlsm (ou dans le dossier FI si
+                // la mesure a échoué avant la 1ère sauvegarde Excel). Toujours exécuté,
+                // même en cas de cancellation ou d'erreur — on garde la chronologie pour
+                // diagnostiquer les blocages. Best-effort : une erreur d'écriture ne doit
+                // pas masquer l'erreur réelle de la mesure.
+                try
+                {
+                    string dossier = !string.IsNullOrEmpty(result.CheminExcel)
+                        ? (Path.GetDirectoryName(result.CheminExcel) ?? "")
+                        : Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                            "Metrologo",
+                            string.IsNullOrWhiteSpace(mesure.NumFI) ? "sans-FI" : mesure.NumFI);
+
+                    if (!string.IsNullOrEmpty(dossier))
+                    {
+                        string nom = $"Profiling_{(string.IsNullOrWhiteSpace(mesure.NumFI) ? "sans-FI" : mesure.NumFI)}"
+                                   + $"_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+                        string entete = $"Profiling FI={mesure.NumFI} | Type={mesure.TypeMesure} | "
+                                      + $"NbMesures={mesure.NbMesures} | Date={DateTime.Now:dd/MM/yyyy HH:mm:ss}";
+                        profiler.EcrireFichier(Path.Combine(dossier, nom), entete);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    JournalLog.Warn(CategorieLog.Mesure, "PROFILING_KO",
+                        $"Écriture fichier profiling échouée : {ex.Message}");
+                }
             }
 
             return result;

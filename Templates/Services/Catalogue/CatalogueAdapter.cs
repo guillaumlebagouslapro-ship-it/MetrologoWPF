@@ -43,6 +43,9 @@ namespace Metrologo.Services.Catalogue
                 GereSRQ = p.GereSrq,
                 SRQOn = p.SrqOn ?? string.Empty,
                 SRQOff = p.SrqOff ?? string.Empty,
+                VerifArmingActive = p.VerifArmingActive,
+                ModeRapideActif = p.ModeRapideActif,
+                CommandeBulkInit = p.CommandeBulkInit ?? string.Empty,
                 Gates = ConstruireGates(modele.Gates, p.CommandeGate)
             };
 

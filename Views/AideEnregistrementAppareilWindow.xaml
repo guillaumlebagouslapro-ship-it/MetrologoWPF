@@ -1,0 +1,263 @@
+<ui:FluentWindow x:Class="Metrologo.Views.AideEnregistrementAppareilWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Aide : enregistrer un appareil"
+        Height="780" Width="900"
+        WindowStartupLocation="CenterOwner"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True">
+
+    <ui:FluentWindow.Resources>
+        <Style x:Key="ChampStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
+            <Setter Property="Foreground" Value="{StaticResource AsertiOrangeBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="ParaStyle" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,8"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style x:Key="TitreSection" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{StaticResource AsertiNavyBrush}"/>
+            <Setter Property="Margin" Value="0,16,0,8"/>
+        </Style>
+        <Style x:Key="ExempleStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FFF1F5F9"/>
+            <Setter Property="BorderBrush" Value="#FFCBD5E1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="Margin" Value="0,4,0,12"/>
+        </Style>
+        <Style x:Key="ExempleText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Aide : enregistrer un appareil"/>
+
+        <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="20,16,20,8">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="{StaticResource AsertiNavyDarkColor}" Offset="0"/>
+                    <GradientStop Color="{StaticResource AsertiNavyColor}" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <StackPanel>
+                <TextBlock Text="GUIDE DE SAISIE" FontSize="11" FontWeight="Bold" Margin="0,0,0,4">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush Color="{StaticResource AsertiOrangeLightColor}"/>
+                    </TextBlock.Foreground>
+                </TextBlock>
+                <TextBlock Text="Comment configurer un appareil au catalogue" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                <TextBlock FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush Color="White" Opacity="0.78"/>
+                    </TextBlock.Foreground>
+                    <Run Text="Le code de Metrologo est entièrement universel : il pilote n'importe quel fréquencemètre SCPI à partir des champs renseignés ici. Aucune logique en dur — tu peux ajouter des modèles que tu n'as jamais utilisés en saisissant juste leur syntaxe SCPI."/>
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="20,8,20,16">
+            <StackPanel>
+
+                <!-- Identification -->
+                <TextBlock Text="1. Identification de l'appareil" Style="{StaticResource TitreSection}" Margin="0,0,0,8"/>
+
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Nom affiché"/>
+                    <Run Text=" : libellé qui apparaît dans la liste de la fenêtre Configuration. Ex. « KEYSIGHT 53230A »."/>
+                </TextBlock>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Motif fabricant (IDN)"/>
+                    <Run Text=" : sous-chaîne du fabricant que renvoie l'instrument à la commande "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="*IDN?"/>
+                    <Run Text=". Matching insensible à la casse, type « contains ». Laisse "/>
+                    <Run FontWeight="SemiBold" Text="vide"/>
+                    <Run Text=" pour matcher tout fabricant — utile quand le même modèle existe sous plusieurs marques (Agilent / Keysight / HP)."/>
+                </TextBlock>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Motif modèle (IDN)"/>
+                    <Run Text=" : sous-chaîne du modèle. Ex. « 53230A », « SR620 ». Suffisamment spécifique pour ne pas matcher d'autres appareils."/>
+                </TextBlock>
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="Exemple — IDN renvoyé par le 53230A : "/>
+                        <Run FontWeight="Bold" Text="Agilent Technologies,53230A,MY50001182,01.09"/>
+                        <LineBreak/>
+                        <Run Text="→ FabricantIdn = "/><Run FontWeight="Bold" Text="(vide)"/><Run Text="  ·  ModeleIdn = "/><Run FontWeight="Bold" Text="53230A"/>
+                    </TextBlock>
+                </Border>
+
+                <!-- Commandes de base -->
+                <TextBlock Text="2. Commandes de base" Style="{StaticResource TitreSection}"/>
+
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Chaîne d'initialisation"/>
+                    <Run Text=" : envoyée au tout début de chaque mesure pour mettre l'appareil dans un état connu. Standard SCPI : "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="*RST;*CLS"/>
+                    <Run Text=" (reset + clear errors)."/>
+                </TextBlock>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Configuration d'entrée"/>
+                    <Run Text=" : envoyée juste après l'init. Configure la fonction (FREQ), la voie, et tout réglage qui ne change pas pendant la mesure. Ex. 53230A : "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="CONF:FREQ DEF,DEF,(@1)"/>
+                </TextBlock>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Commande de mesure"/>
+                    <Run Text=" : la query SCPI qui déclenche une mesure et retourne la valeur. Le code l'envoie une fois par mesure en mode classique. Standard : "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":READ?"/>
+                    <Run Text=" ou "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":READ:FREQ?"/>
+                </TextBlock>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Commande de gate"/>
+                    <Run Text=" : template qui programme le temps de porte. Le placeholder "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="{}{0}"/>
+                    <Run Text=" sera remplacé par le temps en secondes (ex. "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="0.1"/>
+                    <Run Text="). Ex. 53131A : "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":FREQ:ARM:STOP:TIM {0}"/>
+                    <Run Text="  ·  Ex. 53230A : "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":SENS:FREQ:GATE:SOUR TIME;:SENS:FREQ:GATE:TIME {0}"/>
+                </TextBlock>
+
+                <!-- Modes accélérés -->
+                <TextBlock Text="3. Modes d'acquisition rapides (optionnels)" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    Si l'appareil supporte des modes d'acquisition optimisés, renseigne les champs ci-dessous. Le code détecte automatiquement et utilise le mode le plus rapide disponible. Tous les champs sont <Run FontWeight="Bold" Text="optionnels"/> — laisse vide ce que ton appareil ne supporte pas.
+                </TextBlock>
+
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Commande mesure multiple ({N})"/>
+                    <Run Text=" : si renseignée, l'orchestrator envoie cette commande une fois pour récupérer N mesures en CSV. Beaucoup plus rapide pour les gates courtes (gain ~3× sur 30 mesures × 100 ms). "/>
+                    <Run FontWeight="SemiBold" Text="Activé uniquement pour la Stabilité."/>
+                    <Run Text=" Le placeholder "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="{}{N}"/>
+                    <Run Text=" est remplacé par le nombre de mesures."/>
+                </TextBlock>
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="Ex. 53230A : "/>
+                        <Run FontWeight="Bold" Text=":SENS:FREQ:MODE CONT;:SAMP:COUN {N};:READ?"/>
+                        <LineBreak/>
+                        <Run Text="→ active le mode "/><Run FontWeight="Bold" Text="gap-free"/><Run Text=" (pas de dead-time entre les mesures), N mesures lues d'un coup."/>
+                    </TextBlock>
+                </Border>
+
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Commande bulk init ({N})"/>
+                    <Run Text=" : combinée à la "/>
+                    <Run FontStyle="Italic" Text="Commande fetch bloquante"/>
+                    <Run Text=" ci-dessous, active le "/>
+                    <Run FontWeight="SemiBold" Text="mode streaming gap-free"/>
+                    <Run Text=" (visu live). Le code lance l'acquisition gap-free puis lit chaque valeur dès qu'elle est dispo. Activé pour gates ≥ 1 s uniquement (les gates plus courtes restent en bulk classique pour vitesse max)."/>
+                </TextBlock>
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="Ex. 53230A — bulk init : "/>
+                        <Run FontWeight="Bold" Text=":SENS:FREQ:MODE CONT;:SAMP:COUN {N};:INIT:IMM"/>
+                        <LineBreak/>
+                        <Run Text="                — fetch bloquant : "/>
+                        <Run FontWeight="Bold" Text=":DATA:REM? 1,WAIT"/>
+                    </TextBlock>
+                </Border>
+
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Commande fetch bloquante"/>
+                    <Run Text=" : query SCPI qui bloque jusqu'à ce qu'une nouvelle mesure soit disponible (anti-doublon). Utilisée par le mode streaming. Sans cela, l'orchestrator lit la dernière valeur connue (et risque de la lire 2 fois)."/>
+                </TextBlock>
+
+                <!-- Flags compatibilité -->
+                <TextBlock Text="4. Flags de compatibilité" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    Ces flags adaptent le comportement de l'orchestrator à des modèles d'appareils différents. À cocher ou décocher selon le manuel de ton instrument.
+                </TextBlock>
+
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Mode rapide actif"/>
+                    <Run Text=" : si "/><Run FontWeight="Bold" Text="vrai"/><Run Text=", l'orchestrator peut utiliser la séquence "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":INIT:CONT ON"/>
+                    <Run Text=" + boucle "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":FETCh?"/>
+                    <Run Text=" pour gagner ~3× sur le 53131A. À "/><Run FontWeight="Bold" Text="désactiver"/>
+                    <Run Text=" pour les compteurs modernes (53230A, SR620…) qui interprètent "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":INIT:CONT ON"/>
+                    <Run Text=" différemment et génèrent des erreurs."/>
+                </TextBlock>
+
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" FontWeight="SemiBold" Text="Vérification d'arming active"/>
+                    <Run Text=" : si "/><Run FontWeight="Bold" Text="vrai"/><Run Text=", l'orchestrator interroge "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":FREQ:ARM:STOP:SOUR?"/>
+                    <Run Text=" + "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":FREQ:ARM:STOP:TIM?"/>
+                    <Run Text=" après chaque commande de gate pour confirmer la bonne prise en compte. "/>
+                    <Run FontWeight="Bold" Text="Spécifique 53131A"/>
+                    <Run Text=" — désactiver pour les autres modèles (les commandes "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text=":FREQ:ARM:*"/>
+                    <Run Text=" n'existent pas sur 53230A → erreur -113 affichée à l'écran)."/>
+                </TextBlock>
+
+                <!-- Réglages dynamiques -->
+                <TextBlock Text="5. Réglages dynamiques (impédance, couplage, filtre…)" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    Ces commandes apparaissent comme des ComboBox/champs dans la fenêtre Configuration de l'utilisateur. Saisis les commandes SCPI exactes du manuel de ton appareil. <Run FontWeight="Bold" Text="Tout champ vide est masqué automatiquement"/> dans la UI — ne renseigne que ce que ton appareil supporte.
+                </TextBlock>
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="Ex. 53230A — Impédance Voie A :"/>
+                        <LineBreak/>
+                        <Run Text="  50 Ω  → "/><Run FontWeight="Bold" Text=":INP1:IMP 50"/>
+                        <LineBreak/>
+                        <Run Text="  1 MΩ  → "/><Run FontWeight="Bold" Text=":INP1:IMP 1E6"/>
+                        <LineBreak/><LineBreak/>
+                        <Run Text="Ex. Trigger Voie A (template avec {0} pour la valeur en V) :"/>
+                        <LineBreak/>
+                        <Run Text="  → "/><Run FontWeight="Bold" Text=":INP1:LEV {0}"/>
+                    </TextBlock>
+                </Border>
+
+                <!-- Recap stratégie -->
+                <TextBlock Text="6. Récap : ordre de priorité des modes" Style="{StaticResource TitreSection}"/>
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="L'orchestrator choisit automatiquement le mode le plus rapide compatible :"/>
+                        <LineBreak/>
+                        <LineBreak/>
+                        <Run Text="1. "/><Run FontWeight="Bold" Text="Streaming gap-free"/><Run Text=" (gate ≥ 1 s + bulk init + fetch bloquant) → live UI + perf max"/>
+                        <LineBreak/>
+                        <Run Text="2. "/><Run FontWeight="Bold" Text="Bulk classique"/><Run Text=" (Stabilité + commande mesure multiple) → perf max sans live"/>
+                        <LineBreak/>
+                        <Run Text="3. "/><Run FontWeight="Bold" Text="Mode rapide :INIT:CONT ON"/><Run Text=" (mode rapide actif + dérivation :FETCh?) → 53131A"/>
+                        <LineBreak/>
+                        <Run Text="4. "/><Run FontWeight="Bold" Text="Mode classique :READ?"/><Run Text=" → fallback universel, marche partout"/>
+                    </TextBlock>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="3" Background="{DynamicResource LayerFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0" Padding="20,12">
+            <Button Content="Fermer" Click="OnFermer"
+                    HorizontalAlignment="Right" Padding="20,8" MinWidth="100"/>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

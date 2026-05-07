@@ -182,6 +182,15 @@ namespace Metrologo.ViewModels
         }
 
         [RelayCommand]
+        private void OuvrirGestionModules()
+        {
+            Journal.Info(CategorieLog.Administration, "OUVERTURE_GESTION_MODULES",
+                "Accès à la gestion des modules d'incertitude.");
+            var win = new GestionModulesIncertitudeWindow { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        [RelayCommand]
         private void OuvrirGestionAppareils()
         {
             Journal.Info(CategorieLog.Administration, "OUVERTURE_GESTION_APPAREILS",

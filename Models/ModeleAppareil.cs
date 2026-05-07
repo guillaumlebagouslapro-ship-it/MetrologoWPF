@@ -113,5 +113,50 @@ namespace Metrologo.Models
         public bool GereSrq { get; set; } = false;
         public string SrqOn { get; set; } = string.Empty;
         public string SrqOff { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Vérification optionnelle de l'arming après envoi de la commande de gate :
+        /// envoie <c>:FREQ:ARM:STOP:SOUR?</c> + <c>:FREQ:ARM:STOP:TIM?</c> + <c>:SYST:ERR?</c>
+        /// pour confirmer que l'instrument a bien pris en compte les commandes.
+        /// <para/>
+        /// <b>Spécifique au HP/Agilent 53131A</b> et compatibles. Les autres modèles
+        /// (Keysight 53230A, Stanford SR620, etc.) renvoient <c>-113 Undefined header</c>
+        /// sur ces commandes ARM, qui s'affichent ensuite à l'écran de l'instrument.
+        /// <para/>
+        /// Défaut : <c>false</c> (pas de vérif). À activer uniquement pour les modèles
+        /// qui supportent la syntaxe <c>:FREQ:ARM:*</c> historique.
+        /// </summary>
+        public bool VerifArmingActive { get; set; } = false;
+
+        /// <summary>
+        /// Active le mode rapide <c>:INIT:CONT ON</c> + boucle <c>:FETCh?</c> dans
+        /// l'orchestrator. Convient au 53131A et compatibles (où <c>:INIT:CONT ON</c>
+        /// met le compteur en acquisition continue lisible par <c>:FETCh?</c>).
+        /// <para/>
+        /// <b>À désactiver pour le 53230A et les compteurs modernes</b> : leur
+        /// <c>:INIT:CONT ON</c> a un comportement différent (mode "front panel running")
+        /// et la combinaison <c>:INIT:CONT ON</c> + <c>:FETCh?</c> génère <c>-113
+        /// Undefined header</c> ou <c>+230 Data corrupt or stale</c>. Ces compteurs
+        /// utilisent à la place <c>SAMP:COUN N</c> + <c>READ?</c> via <c>CommandeMesureMultiple</c>.
+        /// <para/>
+        /// Défaut : <c>true</c> (rétrocompat 53131A historique). Mettre <c>false</c>
+        /// pour les compteurs modernes — l'orchestrator retombera alors sur le mode
+        /// classique (<c>:READ?</c> par mesure) ou sur le bulk fetch si configuré.
+        /// </summary>
+        public bool ModeRapideActif { get; set; } = true;
+
+        /// <summary>
+        /// Commande pour <b>lancer</b> une acquisition gap-free de N mesures sans renvoyer
+        /// les valeurs (placeholder <c>{N}</c>). Utilisée uniquement en <b>mode streaming</b>
+        /// (= bulk avec lecture une-par-une via <see cref="CommandeFetchFresh"/>) pour les
+        /// gates longues (≥ 1 s) où on veut afficher les valeurs en live malgré le gap-free.
+        /// <para/>
+        /// Ex 53230A : <c>:SENS:FREQ:MODE CONT;:SAMP:COUN {N};:INIT:IMM</c>
+        /// <para/>
+        /// Si vide ou si <see cref="CommandeFetchFresh"/> vide, le mode streaming est désactivé
+        /// et l'orchestrator utilise <see cref="CommandeMesureMultiple"/> classique (bulk en
+        /// 1 seule transaction GPIB, sans live UI).
+        /// </summary>
+        public string CommandeBulkInit { get; set; } = string.Empty;
     }
 }
