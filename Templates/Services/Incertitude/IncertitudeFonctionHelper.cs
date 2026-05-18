@@ -22,6 +22,7 @@ namespace Metrologo.Services.Incertitude
             TypeMesure.Stabilite       => "Stab",
             TypeMesure.Interval        => "Interv",
             TypeMesure.TachyContact    => "TachyC",
+            TypeMesure.TachyOptique    => "TachyO",
             TypeMesure.Stroboscope     => "Strobo",
             _                          => string.Empty
         };

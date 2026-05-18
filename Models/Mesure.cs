@@ -64,7 +64,7 @@ namespace Metrologo.Models
         public double FNominale { get; set; } = 10000000;
         public int IndexMultiplicateur { get; set; }
 
-        // Paramètres d'incertitude (ajustables via dialogue ParamsIncert)
+        // Paramètres d'incertitude (saisis post-mesure via SaisiePostMesureFreqWindow)
         public double Resolution { get; set; } = 0.01;
         public double IncertSupp { get; set; } = 0.0;
 
@@ -75,8 +75,23 @@ namespace Metrologo.Models
         /// Identifiant du module d'incertitude sélectionné (= nom du fichier CSV sans extension
         /// dans <c>%LocalAppData%\Metrologo\Incertitudes\</c>). Vide = aucun module sélectionné,
         /// l'<c>ExcelService</c> retombera alors sur les coefficients hardcoded par défaut.
+        ///
+        /// Pour les types Fréquence/Stab/etc., ce module fournit ZNCoeffA et ZNCoeffB.
+        /// Pour les types Tachymètre (Contact/Optique), ce module fournit ZNCoeffC et ZNCoeffD
+        /// (côté RPM, formule I29) — les coeffs A/B (côté Hz) viennent du module Fréquence
+        /// auxiliaire <see cref="NumModuleIncertitudeFreq"/>.
         /// </summary>
         public string NumModuleIncertitude { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Module d'incertitude Fréquence auxiliaire — utilisé uniquement pour les mesures
+        /// Tachymètre. Le tachymètre s'appuie sur un fréquencemètre dont l'incertitude (A/B
+        /// en Hz) est caractérisée par un module CSV de la catégorie Fréquence ; cette
+        /// information est ensuite combinée avec l'incertitude propre au tachymètre (C/D
+        /// en RPM, issus de <see cref="NumModuleIncertitude"/>) dans le rapport Excel.
+        /// Ignoré pour tous les autres types de mesure.
+        /// </summary>
+        public string NumModuleIncertitudeFreq { get; set; } = string.Empty;
 
         public Mesure()
         {

@@ -23,6 +23,14 @@ namespace Metrologo.Services.Incertitude
         public string NomAffichage { get; set; } = string.Empty;
 
         /// <summary>
+        /// Faux pour les modules dont l'incertitude ne dépend pas d'une porte temporelle —
+        /// typiquement les tachymètres à contacts et les stroboscopes, qui comptent par
+        /// événement plutôt que par fenêtre de comptage. Quand faux, la colonne Temps est
+        /// masquée dans l'UI et <see cref="Trouver"/> ignore cette dimension.
+        /// </summary>
+        public bool UtiliseTempsDeMesure { get; set; } = true;
+
+        /// <summary>
         /// Toutes les lignes du tableau d'incertitudes de ce module.
         /// <see cref="ObservableCollection{T}"/> pour que le DataGrid de l'UI admin
         /// se rafraîchisse automatiquement à chaque ajout/suppression.
@@ -50,7 +58,7 @@ namespace Metrologo.Services.Incertitude
         {
             return Lignes.FirstOrDefault(l =>
                 string.Equals(l.Fonction, fonction, System.StringComparison.OrdinalIgnoreCase) &&
-                System.Math.Abs(l.TempsDeMesure - tempsSec) < 1e-9 &&
+                (!UtiliseTempsDeMesure || System.Math.Abs(l.TempsDeMesure - tempsSec) < 1e-9) &&
                 l.Couvre(freqHz));
         }
 

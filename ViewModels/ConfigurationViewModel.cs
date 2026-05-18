@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using Metrologo.Models;
+using Metrologo.Services;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
 using Metrologo.Services.Incertitude;
@@ -123,10 +124,44 @@ namespace Metrologo.ViewModels
         /// <summary>Vrai si au moins un module couvre le type de mesure courant.</summary>
         public bool AModulesIncertitude => ModulesDisponibles.Count > 0;
 
+        // ------------------------------------------------------------------------------------
+        // Module Fréquence auxiliaire (utilisé uniquement en Tachymètre Contact/Optique pour
+        // alimenter ZNCoeffA / ZNCoeffB côté Hz, en complément du module tachy qui alimente
+        // ZNCoeffC / ZNCoeffD côté RPM).
+        // ------------------------------------------------------------------------------------
+        public ObservableCollection<ModuleIncertitude> ModulesFreqDisponibles { get; } = new();
+
+        private ModuleIncertitude? _moduleFreqSelectionne;
+        public ModuleIncertitude? ModuleFreqSelectionne
+        {
+            get
+            {
+                if (_moduleFreqSelectionne != null && ModulesFreqDisponibles.Contains(_moduleFreqSelectionne))
+                    return _moduleFreqSelectionne;
+                return null;
+            }
+            set
+            {
+                if (ReferenceEquals(_moduleFreqSelectionne, value)) return;
+                _moduleFreqSelectionne = value;
+                MesureConfig.NumModuleIncertitudeFreq = value?.NumModule ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Vrai pour les types Tachymètre uniquement — déclenche l'affichage du second
+        /// ComboBox « Module Fréquence (Hz) » dans la fenêtre Configuration.
+        /// </summary>
+        public bool ModuleFreqRequis =>
+            EnTetesMesureHelper.EstTachymetre(MesureConfig.TypeMesure);
+
         /// <summary>
         /// Reconstruit la liste des modules selon <see cref="MesureConfig.TypeMesure"/>.
         /// Lit le sous-dossier dédié à ce type (ex. <c>Incertitudes\Frequence\</c>).
         /// Restaure la sélection persistée (<c>NumModuleIncertitude</c>) si elle est encore valide.
+        /// Reconstruit également la liste des modules Fréquence auxiliaires (utilisée
+        /// uniquement en tachymétrie).
         /// </summary>
         private void RebuildModulesIncertitude()
         {
@@ -146,8 +181,25 @@ namespace Metrologo.ViewModels
                 MesureConfig.NumModuleIncertitude = string.Empty;
             }
 
+            // Liste auxiliaire des modules Fréquence (uniquement pertinente pour tachy).
+            ModulesFreqDisponibles.Clear();
+            if (ModuleFreqRequis)
+            {
+                foreach (var m in ModulesIncertitudeService.Lister(TypeMesure.Frequence))
+                    ModulesFreqDisponibles.Add(m);
+            }
+            string numFreqPersist = MesureConfig?.NumModuleIncertitudeFreq ?? string.Empty;
+            _moduleFreqSelectionne = ModulesFreqDisponibles.FirstOrDefault(m =>
+                string.Equals(m.NumModule, numFreqPersist, StringComparison.OrdinalIgnoreCase));
+            if (_moduleFreqSelectionne == null && MesureConfig != null)
+            {
+                MesureConfig.NumModuleIncertitudeFreq = string.Empty;
+            }
+
             OnPropertyChanged(nameof(ModuleSelectionne));
             OnPropertyChanged(nameof(AModulesIncertitude));
+            OnPropertyChanged(nameof(ModuleFreqSelectionne));
+            OnPropertyChanged(nameof(ModuleFreqRequis));
         }
 
         /// <summary>
@@ -425,6 +477,7 @@ namespace Metrologo.ViewModels
             EstSurBaie
             && MesureConfig.TypeMesure != TypeMesure.Interval
             && MesureConfig.TypeMesure != TypeMesure.TachyContact
+            && MesureConfig.TypeMesure != TypeMesure.TachyOptique
             && MesureConfig.TypeMesure != TypeMesure.Stroboscope;
 
         public bool IsModeDirect

@@ -18,11 +18,12 @@ namespace Metrologo.Services.Journal
 
         public SqliteJournalService()
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Metrologo");
-            Directory.CreateDirectory(dir);
-            var chemin = Path.Combine(dir, "journal.db");
+            // Cache local SQLite (legacy) : utilisé en fallback si le SQL Server centralisé
+            // n'est pas joignable. Le fichier vit dans Metrologo\Cache\ pour rester groupé
+            // avec les autres caches locaux.
+            Directory.CreateDirectory(CheminsMetrologo.Cache);
+            string chemin = CheminsMetrologo.ResoudreCheminAvecFallback(
+                CheminsMetrologo.FichierJournalDbLegacy, "journal.db");
             _connectionString = $"Data Source={chemin};Cache=Shared";
 
             InitialiserSchemaAsync().GetAwaiter().GetResult();

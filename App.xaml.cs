@@ -20,6 +20,42 @@ namespace Metrologo
 
             Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+            // Migration silencieuse des fichiers locaux historiques (à plat dans
+            // %LocalAppData%\Metrologo\) vers la nouvelle organisation par sous-dossier
+            // (Configuration\, Presets\, Catalogues\, Cache\). Idempotent — ne fait rien
+            // si la migration a déjà eu lieu. À appeler en TOUT PREMIER pour que les
+            // services qui suivent (DatabaseInitializer, etc.) lisent depuis le nouveau
+            // emplacement.
+            CheminsMetrologo.MigrerAnciensFichiers();
+
+            // Charge les overrides de chemins (Configuration\paths.config.json) — permet à
+            // l'admin de pointer Incertitudes / Presets / Catalogues vers un partage réseau
+            // commun. Sans fichier, les services utilisent les chemins locaux par défaut.
+            CheminsMetrologo.ChargerConfigChemins();
+
+            // Migration des anciens noms de sous-dossier de modules d'incertitude
+            // (ex. TachyContact → TachymetreContact). Idempotent — ne fait rien si déjà
+            // migré ou si l'ancien dossier n'existe pas.
+            Services.Incertitude.ModulesIncertitudeService.MigrerAnciensNomsDossiers();
+
+            // Premier démarrage : si le chemin local de sauvegarde des rapports n'est pas
+            // configuré, on propose à l'utilisateur de le saisir maintenant. Skip = bandeau
+            // d'alerte permanent dans MainWindow jusqu'à configuration. Ne bloque pas le
+            // démarrage — si l'utilisateur abandonne, on continue normalement.
+            if (!CheminsMetrologo.MesuresLocalConfigure)
+            {
+                try
+                {
+                    var dlg = new Views.PremierDemarrageCheminLocalWindow();
+                    dlg.ShowDialog();
+                }
+                catch (Exception ex)
+                {
+                    Journal.Warn(CategorieLog.Systeme, "PREMIER_DEMARRAGE_DIALOG_ERR",
+                        $"Affichage popup chemin local échoué : {ex.Message}");
+                }
+            }
+
             await DatabaseInitializer.InitialiserAsync();
 
             // Journal centralisé sur SQL Server : les logs de tous les postes (Baie,
@@ -100,6 +136,45 @@ namespace Metrologo
                         $"Warm-up ClosedXML échoué : {ex.Message}");
                 }
             });
+
+            // ===== BYPASS DEV =====
+            // Si le fichier Configuration\dev_bypass.flag existe, on saute l'écran de
+            // login et la sélection Baie/Paillasse. Pratique pendant le dev pour ne pas
+            // re-saisir à chaque démarrage. Le contenu du fichier (1ère ligne) peut être
+            // "Baie" ou "Paillasse" pour forcer un poste précis (défaut : Baie).
+            // Pour désactiver le bypass : supprimer le fichier.
+            string flagBypass = Path.Combine(CheminsMetrologo.Configuration, "dev_bypass.flag");
+            if (File.Exists(flagBypass))
+            {
+                string contenu = string.Empty;
+                try { contenu = File.ReadAllText(flagBypass).Trim(); } catch { }
+                bool baie = !contenu.Equals("Paillasse", StringComparison.OrdinalIgnoreCase);
+
+                var fakeUser = new Utilisateur
+                {
+                    Login = "dev",
+                    Nom = "Bypass",
+                    Prenom = "Dev",
+                    Role = RoleUtilisateur.Administrateur,
+                    Actif = true,
+                    DateCreation = DateTime.UtcNow
+                };
+
+                Journal.Warn(CategorieLog.Systeme, "DEV_BYPASS",
+                    $"Bypass login activé via dev_bypass.flag — utilisateur=dev (admin), poste={(baie ? "Baie" : "Paillasse")}.");
+
+                await Journal.DemarrerSessionAsync(fakeUser.Login);
+
+                var mainVMBypass = new MainViewModel { UtilisateurConnecte = fakeUser };
+                mainVMBypass.BypassSelectionPoste(baie);
+
+                var mainWinBypass = new MainWindow { DataContext = mainVMBypass };
+                mainWinBypass.Closed += async (_, _) => await Journal.TerminerSessionAsync();
+                Application.Current.MainWindow = mainWinBypass;
+                Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
+                mainWinBypass.Show();
+                return;
+            }
 
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);

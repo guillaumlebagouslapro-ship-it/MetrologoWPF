@@ -8,6 +8,7 @@ namespace Metrologo.Models
         FreqAvantInterv,
         FreqFinale,
         TachyContact,
+        TachyOptique,
         Stroboscope
     }
 

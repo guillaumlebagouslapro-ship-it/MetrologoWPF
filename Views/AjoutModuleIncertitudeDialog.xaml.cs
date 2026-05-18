@@ -1,4 +1,5 @@
 using System.Windows;
+using Metrologo.Models;
 using Wpf.Ui.Controls;
 
 namespace Metrologo.Views
@@ -7,10 +8,21 @@ namespace Metrologo.Views
     {
         public string NumModuleSaisi => TbNumModule.Text.Trim();
         public string NomAffichageSaisi => TbNomAffichage.Text.Trim();
+        public bool SansTempsDeMesure => CbSansTemps.IsChecked == true;
 
-        public AjoutModuleIncertitudeDialog()
+        public AjoutModuleIncertitudeDialog() : this(null) { }
+
+        /// <summary>
+        /// <paramref name="categorie"/> = type de mesure courant. Pré-coche « Sans temps
+        /// de mesure » pour Tachy/Strobo (cas par défaut), laisse vide sinon.
+        /// </summary>
+        public AjoutModuleIncertitudeDialog(TypeMesure? categorie)
         {
             InitializeComponent();
+            if (categorie == TypeMesure.TachyContact
+                || categorie == TypeMesure.TachyOptique
+                || categorie == TypeMesure.Stroboscope)
+                CbSansTemps.IsChecked = true;
             Loaded += (_, _) => TbNumModule.Focus();
         }
 

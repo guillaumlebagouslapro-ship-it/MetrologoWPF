@@ -46,7 +46,8 @@ namespace Metrologo.Services
         public static void Recharger() => _cache = null;
 
         public static string CheminFichier =>
-            Path.Combine(DossierConfig(), NomFichier);
+            CheminsMetrologo.ResoudreCheminAvecFallback(
+                CheminsMetrologo.FichierMesuresConfig, NomFichier);
 
         // -------------------------------------------------------------------------
 

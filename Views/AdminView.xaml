@@ -263,26 +263,6 @@
             </Button>
 
             <Button Grid.Column="4"
-                    Command="{Binding OuvrirParamsIncertCommand}"
-                    Style="{StaticResource ActionCardStyle}">
-                <StackPanel>
-                    <Border Width="40" Height="40" CornerRadius="10"
-                            HorizontalAlignment="Left" Margin="0,0,0,12"
-                            Background="#FFE0E7FF">
-                        <ui:SymbolIcon Symbol="Ruler24" FontSize="20"
-                                       Foreground="#FF4F46E5"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="Résolution &amp; incert. supp." FontSize="15" FontWeight="SemiBold"
-                               Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Paramètres à ajuster par mesure"
-                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
-            </Button>
-
-            <Button Grid.Column="6"
                     Command="{Binding OuvrirJournalCommand}"
                     Style="{StaticResource ActionCardStyle}">
                 <StackPanel>
@@ -302,7 +282,7 @@
                 </StackPanel>
             </Button>
 
-            <Button Grid.Column="8"
+            <Button Grid.Column="6"
                     Command="{Binding OuvrirGestionAppareilsCommand}"
                     Style="{StaticResource ActionCardStyle}">
                 <StackPanel>
@@ -317,6 +297,26 @@
                     <TextBlock Text="Gérer les appareils" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
                     <TextBlock Text="Catalogue des modèles enregistrés"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="8"
+                    Command="{Binding OuvrirCheminsStockageCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="40" Height="40" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,12"
+                            Background="#FFE0F2FE">
+                        <ui:SymbolIcon Symbol="Folder24" FontSize="20"
+                                       Foreground="#FF0284C7"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Chemins de stockage" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Configurer où sont stockés les fichiers (local / réseau)"
                                FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>

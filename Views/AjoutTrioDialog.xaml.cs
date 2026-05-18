@@ -21,6 +21,9 @@ namespace Metrologo.Views
         public string Fonction { get; private set; } = "Freq";
         public double TempsDeMesure { get; private set; } = 1.0;
 
+        /// <summary>1 pour une plage unique, 3 pour le trio basse/moyenne/haute (défaut).</summary>
+        public int NombrePlages { get; private set; } = 3;
+
         public AjoutTrioDialog() : this(null) { }
 
         /// <summary>
@@ -32,8 +35,34 @@ namespace Metrologo.Views
         {
             InitializeComponent();
             _module = module;
-            CbFonction.SelectionChanged += (_, _) => RafraichirTempsDisponibles();
-            Loaded += (_, _) => RafraichirTempsDisponibles();
+
+            // Module sans temps de mesure : on masque tout le bloc et on fixe TempsDeMesure
+            // à 0 dans OnValider — la sélection du temps ne fait pas sens (tachy/strobo).
+            // Dans ce cas on pré-sélectionne aussi « 1 plage » (cas par défaut tachy).
+            if (module != null && !module.UtiliseTempsDeMesure)
+            {
+                PanelTemps.Visibility = System.Windows.Visibility.Collapsed;
+                Title = "Ajouter une plage de fréquence";
+                Height = 320;
+                RbUnePlage.IsChecked = true;
+            }
+            else
+            {
+                CbFonction.SelectionChanged += (_, _) => RafraichirTempsDisponibles();
+                Loaded += (_, _) => RafraichirTempsDisponibles();
+            }
+
+            // Le libellé du bouton suit le choix de l'utilisateur en temps réel.
+            RbUnePlage.Checked   += (_, _) => MajLibelleBouton();
+            RbTroisPlages.Checked += (_, _) => MajLibelleBouton();
+            Loaded += (_, _) => MajLibelleBouton();
+        }
+
+        private void MajLibelleBouton()
+        {
+            BtnCreer.Content = RbUnePlage.IsChecked == true
+                ? "Créer la plage"
+                : "Créer les 3 plages";
         }
 
         private void RafraichirTempsDisponibles()
@@ -72,6 +101,15 @@ namespace Metrologo.Views
         private void OnValider(object sender, RoutedEventArgs e)
         {
             Fonction = (CbFonction.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Freq";
+            NombrePlages = RbUnePlage.IsChecked == true ? 1 : 3;
+
+            // Module sans temps de mesure : on saute toute la validation du temps.
+            if (_module != null && !_module.UtiliseTempsDeMesure)
+            {
+                TempsDeMesure = 0;
+                DialogResult = true;
+                return;
+            }
 
             string texte = (CbTemps.Text ?? "").Trim().Replace(',', '.');
             if (!double.TryParse(texte, NumberStyles.Float, CultureInfo.InvariantCulture, out double t) || t <= 0)

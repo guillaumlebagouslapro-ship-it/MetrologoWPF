@@ -5,8 +5,18 @@ using System.Globalization;
 
 namespace Metrologo.ViewModels
 {
-    public partial class ParamsIncertViewModel : ObservableObject
+    /// <summary>
+    /// Saisie post-mesure consolidée pour Fréquence + source Fréquencemètre :
+    /// fréquence lue sur l'afficheur, résolution du compteur et incertitude
+    /// supplémentaire relative (dégradation). Page unique injectée dans Excel
+    /// via les zones nommées ZNFreqRef / ZNIncertResol / ZNIncertSup.
+    /// </summary>
+    public partial class SaisiePostMesureFreqViewModel : ObservableObject
     {
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasError))]
+        private string _frequenceLueTexte = "10000000";
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(HasError))]
         private string _resolutionTexte = "0.01";
@@ -21,15 +31,17 @@ namespace Metrologo.ViewModels
 
         public bool HasError => !string.IsNullOrEmpty(MessageErreur);
 
+        public double FrequenceLue { get; private set; }
         public double Resolution { get; private set; }
         public double IncertSupp { get; private set; }
 
         public Action<bool>? CloseAction { get; set; }
 
-        public ParamsIncertViewModel() { }
+        public SaisiePostMesureFreqViewModel() { }
 
-        public ParamsIncertViewModel(double resolution, double incertSupp)
+        public SaisiePostMesureFreqViewModel(double frequenceInitiale, double resolution, double incertSupp)
         {
+            FrequenceLueTexte = frequenceInitiale.ToString("R", CultureInfo.InvariantCulture);
             ResolutionTexte = resolution.ToString("R", CultureInfo.InvariantCulture);
             IncertSuppTexte = incertSupp.ToString("R", CultureInfo.InvariantCulture);
         }
@@ -37,17 +49,23 @@ namespace Metrologo.ViewModels
         [RelayCommand]
         private void Valider()
         {
+            if (!TryParse(FrequenceLueTexte, out var f) || f <= 0)
+            {
+                MessageErreur = $"Fréquence lue invalide : '{FrequenceLueTexte}' (doit être > 0).";
+                return;
+            }
             if (!TryParse(ResolutionTexte, out var res) || res < 0)
             {
-                MessageErreur = $"Résolution invalide : '{ResolutionTexte}'";
+                MessageErreur = $"Résolution invalide : '{ResolutionTexte}'.";
                 return;
             }
             if (!TryParse(IncertSuppTexte, out var supp) || supp < 0)
             {
-                MessageErreur = $"Incertitude supplémentaire invalide : '{IncertSuppTexte}'";
+                MessageErreur = $"Incertitude sup. relative invalide : '{IncertSuppTexte}'.";
                 return;
             }
 
+            FrequenceLue = f;
             Resolution = res;
             IncertSupp = supp;
             CloseAction?.Invoke(true);

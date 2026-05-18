@@ -1,18 +1,18 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using Metrologo.Services;
 
 namespace Metrologo.Models
 {
     /// <summary>
     /// Préférences persistées entre sessions.
-    /// Fichier JSON : %LocalAppData%\Metrologo\settings.json
+    /// Fichier JSON : <c>%LocalAppData%\Metrologo\Configuration\settings.json</c>
+    /// (chemin centralisé dans <see cref="CheminsMetrologo"/>).
     /// </summary>
     public static class Preferences
     {
-        private static readonly string _chemin = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Metrologo", "settings.json");
+        private static readonly string _chemin = CheminsMetrologo.FichierSettings;
 
         private static Settings _settings = new();
 

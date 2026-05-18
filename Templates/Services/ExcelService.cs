@@ -101,6 +101,11 @@ namespace Metrologo.Services
         // CoeffA/CoeffB depuis le module CSV (cf. ModulesIncertitudeService) en fonction
         // de la moyenne calculée. Vide → on garde les hardcoded de l'init.
         private string _numModuleIncertitudeCourant = string.Empty;
+
+        // Module Fréquence auxiliaire pour les mesures tachymètre : alimente ZNCoeffA et
+        // ZNCoeffB (côté Hz), tandis que _numModuleIncertitudeCourant alimente ZNCoeffC/D
+        // (côté RPM). Vide → A/B restent aux valeurs par défaut du template.
+        private string _numModuleIncertitudeFreqCourant = string.Empty;
         private double _tempsGateSecondesCourant;
 
         // Mémorisés pour reproduire en C# la conversion Indirect appliquée par la formule
@@ -143,12 +148,15 @@ namespace Metrologo.Services
         {
             int gateInscrite = gateIndexOverride ?? config.GateIndex;
             bool estStab = config.TypeMesure == TypeMesure.Stabilite;
+            bool estTachy = EnTetesMesureHelper.EstTachymetre(config.TypeMesure);
 
             await Task.Run(() =>
             {
                 // --- 1. Détermination du dossier et du fichier ---
                 //    La Stabilité utilise un fichier séparé (Récap. à 8 colonnes spécifique)
                 //    pour ne pas polluer la Récap. Fréquence du fichier principal du FI.
+                //    Les Tachymètres (Contact/Optique) utilisent leur propre fichier _Tachy_
+                //    pour ne pas se mélanger avec les rapports Fréquence du même FI.
                 string numFISafe = SanitizerNomFichier(numeroFI);
 
                 string dossier = Path.Combine(
@@ -156,7 +164,7 @@ namespace Metrologo.Services
                     "Metrologo", numFISafe);
                 Directory.CreateDirectory(dossier);
 
-                string suffixe = estStab ? "_Stab" : string.Empty;
+                string suffixe = estStab ? "_Stab" : (estTachy ? "_Tachy" : string.Empty);
                 _cheminFichier = Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}.xlsm");
                 FallbackTimestampUtilise = false;
 
@@ -178,8 +186,13 @@ namespace Metrologo.Services
 
                 // --- 2. Ouverture : fichier existant ou copie du template ---
                 //    Template Stab dédié pour la Stabilité (Récap. 8 cols + zones nommées
-                //    ZNRecapS_*), template Fréquence pour le reste.
-                string nomTemplate = estStab ? "METROLOGO_Stab.xltm" : "METROLOGO.xltm";
+                //    ZNRecapS_*), template Tachy dédié pour Contact/Optique (col I = stats
+                //    en tr/min, zones ZNCoeffC/D et ZNIncertResolRpm spécifiques), template
+                //    Fréquence universel pour le reste.
+                string nomTemplate =
+                    estStab ? "METROLOGO_Stab.xltm" :
+                    estTachy ? "METROLOGO_Tachy.xlsm" :
+                    "METROLOGO.xltm";
                 string templatePath = Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, "Templates", nomTemplate);
 
@@ -304,6 +317,7 @@ namespace Metrologo.Services
                 // de la boucle de mesures, à ce moment on appellera ObtenirCoefficients
                 // pour ce module avec (fonction, temps de gate, fréquence moyenne).
                 _numModuleIncertitudeCourant = config.NumModuleIncertitude ?? string.Empty;
+                _numModuleIncertitudeFreqCourant = config.NumModuleIncertitudeFreq ?? string.Empty;
                 _tempsGateSecondesCourant = EnTetesMesureHelper.SecondesGate(gateInscrite);
                 _indexMultiplicateurCourant = config.IndexMultiplicateur;
                 _fNominaleCourant = config.FNominale;
@@ -315,7 +329,7 @@ namespace Metrologo.Services
                 // à l'utilisateur. Colonne N (= ancienne K + 3) choisie loin de D-G pour
                 // ne pas interférer avec la Récap qui lit E/F/G via les zones nommées.
                 // Note : la mesure brute est désormais en col E (post-décalage de 3).
-                if (config.TypeMesure == TypeMesure.TachyContact)
+                if (EnTetesMesureHelper.EstTachymetre(config.TypeMesure))
                 {
                     _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}7").SetValue("Vitesse (tr/min)");
                     _feuilleMesure.Column(COL_CONVERSION_TR_MIN).Width = 18;
@@ -372,7 +386,7 @@ namespace Metrologo.Services
                 // Ajoute les formules Fréq. Réelle (col C) et delta (col D) pour les lignes
                 // créées par InsertRowsAbove. Les cellules HEURE/mesure restent vides — elles
                 // seront écrites en direct par ExcelInteropHost pendant la boucle de mesures.
-                bool conversionTrMin = _typeMesureCourant == TypeMesure.TachyContact;
+                bool conversionTrMin = EnTetesMesureHelper.EstTachymetre(_typeMesureCourant);
                 for (int i = 2; i < nbMesures; i++)
                 {
                     int row = LIGNE_DEBUT_MESURES + i;
@@ -515,11 +529,26 @@ namespace Metrologo.Services
 
                     if (coeffA > 0 || coeffB > 0)
                     {
-                        SetNamed("ZNCoeffA", coeffA);
-                        SetNamed("ZNCoeffB", coeffB);
-                        JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_RESOLUS",
-                            $"Module {_numModuleIncertitudeCourant} : CoeffA={coeffA:G6} CoeffB={coeffB:G6} "
-                          + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz)");
+                        // Pour les tachymètres, les coeffs A/B du CSV sont en réalité les
+                        // coeffs C/D du template tachy (formule I29 = Vitesse_RPM × C + D).
+                        // On les injecte donc dans ZNCoeffC/ZNCoeffD au lieu de ZNCoeffA/B.
+                        if (EnTetesMesureHelper.EstTachymetre(_typeMesureCourant))
+                        {
+                            SetNamed("ZNCoeffC", coeffA);
+                            SetNamed("ZNCoeffD", coeffB);
+                            JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_RESOLUS_TACHY",
+                                $"Module {_numModuleIncertitudeCourant} : CoeffC={coeffA:G6} CoeffD={coeffB:G6} "
+                              + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz) "
+                              + "[A/B du CSV → C/D du template tachy]");
+                        }
+                        else
+                        {
+                            SetNamed("ZNCoeffA", coeffA);
+                            SetNamed("ZNCoeffB", coeffB);
+                            JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_RESOLUS",
+                                $"Module {_numModuleIncertitudeCourant} : CoeffA={coeffA:G6} CoeffB={coeffB:G6} "
+                              + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz)");
+                        }
                     }
                     else
                     {
@@ -527,6 +556,37 @@ namespace Metrologo.Services
                             $"Module {_numModuleIncertitudeCourant} : aucune ligne ne couvre "
                           + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz) "
                           + "— coefficients par défaut utilisés.");
+                    }
+                }
+
+                // En tachymétrie, on alimente AUSSI ZNCoeffA / ZNCoeffB depuis le module
+                // Fréquence auxiliaire (qui caractérise le fréquencemètre support). Le
+                // module tachy a déjà rempli ZNCoeffC / ZNCoeffD ci-dessus.
+                if (EnTetesMesureHelper.EstTachymetre(_typeMesureCourant)
+                    && !string.IsNullOrEmpty(_numModuleIncertitudeFreqCourant))
+                {
+                    double moyenneBrute = resultats.Average();
+                    double moyenneReelle = ConvertirEnFreqReelle(moyenneBrute);
+                    string fonctionFreq = IncertitudeFonctionHelper.NomFonction(TypeMesure.Frequence);
+                    var (coeffAFreq, coeffBFreq) = ModulesIncertitudeService.ObtenirCoefficients(
+                        _numModuleIncertitudeFreqCourant, TypeMesure.Frequence, fonctionFreq,
+                        _tempsGateSecondesCourant, moyenneReelle);
+
+                    if (coeffAFreq > 0 || coeffBFreq > 0)
+                    {
+                        SetNamed("ZNCoeffA", coeffAFreq);
+                        SetNamed("ZNCoeffB", coeffBFreq);
+                        JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_AB_FREQ",
+                            $"Module Freq {_numModuleIncertitudeFreqCourant} : CoeffA={coeffAFreq:G6} CoeffB={coeffBFreq:G6} "
+                          + $"(gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz) "
+                          + "[module Fréquence auxiliaire pour tachymètre]");
+                    }
+                    else
+                    {
+                        JournalLog.Warn(CategorieLog.Mesure, "INCERT_NO_MATCH_FREQ",
+                            $"Module Freq {_numModuleIncertitudeFreqCourant} : aucune ligne ne couvre "
+                          + $"(gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz) "
+                          + "— ZNCoeffA/B restent aux valeurs par défaut.");
                     }
                 }
             });
@@ -653,7 +713,47 @@ namespace Metrologo.Services
                     try { RendreGrapheStabDynamique(_cheminFichier, nbGatesStab); }
                     catch { /* best-effort */ }
                 }
+
+                // Duplication best-effort vers le chemin local de sauvegarde si configuré.
+                // Préserve l'arborescence par FI pour cohérence avec le chemin source.
+                DupliquerVersCheminLocal();
             });
+        }
+
+        /// <summary>
+        /// Copie le fichier sauvegardé vers <c>CheminsMetrologo.MesuresLocal</c> si configuré.
+        /// Préserve la structure <c>&lt;dest&gt;\&lt;FI&gt;\&lt;nomFichier&gt;</c> pour rester aligné
+        /// sur l'organisation du chemin principal. Best-effort : un échec (réseau coupé,
+        /// permissions) est loggué mais ne lève pas — la mesure reste valide via le fichier
+        /// principal.
+        /// </summary>
+        private void DupliquerVersCheminLocal()
+        {
+            if (!CheminsMetrologo.MesuresLocalConfigure) return;
+            if (string.IsNullOrWhiteSpace(_cheminFichier) || !File.Exists(_cheminFichier)) return;
+
+            try
+            {
+                string racineLocale = CheminsMetrologo.MesuresLocal;
+                // Reconstitue l'arbo <FI>\<fichier> à partir du chemin source.
+                string nomFichier = Path.GetFileName(_cheminFichier);
+                string nomFI = Path.GetFileName(Path.GetDirectoryName(_cheminFichier) ?? "");
+                if (string.IsNullOrWhiteSpace(nomFI)) nomFI = "Mesures";
+
+                string dossierCible = Path.Combine(racineLocale, nomFI);
+                Directory.CreateDirectory(dossierCible);
+                string cheminCible = Path.Combine(dossierCible, nomFichier);
+
+                File.Copy(_cheminFichier, cheminCible, overwrite: true);
+                JournalLog.Info(CategorieLog.Excel, "EXCEL_DUPLIQUE_LOCAL",
+                    $"Rapport dupliqué localement : {cheminCible}");
+            }
+            catch (Exception ex)
+            {
+                // Best-effort : la perte de la copie locale ne doit pas casser la mesure.
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_DUPLIQUE_LOCAL_KO",
+                    $"Duplication vers {CheminsMetrologo.MesuresLocal} échouée : {ex.Message}");
+            }
         }
 
         /// <summary>

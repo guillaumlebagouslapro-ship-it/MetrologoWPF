@@ -34,9 +34,7 @@ namespace Metrologo.Services.Incertitude
     /// </summary>
     public static class ModulesIncertitudeService
     {
-        public static string DossierModules => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Metrologo", "Incertitudes");
+        public static string DossierModules => CheminsMetrologo.Incertitudes;
 
         // -------------------------------------------------------------------------
 
@@ -51,10 +49,47 @@ namespace Metrologo.Services.Incertitude
             TypeMesure.FreqFinale      => "FreqFinale",
             TypeMesure.Stabilite       => "Stabilite",
             TypeMesure.Interval        => "Interval",
-            TypeMesure.TachyContact    => "TachyContact",
+            TypeMesure.TachyContact    => "TachymetreContact",
+            TypeMesure.TachyOptique    => "TachymetreOptique",
             TypeMesure.Stroboscope     => "Stroboscope",
             _                          => string.Empty
         };
+
+        /// <summary>
+        /// Migration des anciens noms de dossier vers la convention courante. Idempotent :
+        /// si un dossier "TachyContact" existe à la racine Incertitudes, on le renomme en
+        /// "TachymetreContact". Appelé une seule fois au démarrage de l'app.
+        /// </summary>
+        public static void MigrerAnciensNomsDossiers()
+        {
+            var racine = DossierModules;
+            if (!Directory.Exists(racine)) return;
+
+            var migrations = new (string ancien, string nouveau)[]
+            {
+                ("TachyContact", "TachymetreContact"),
+            };
+
+            foreach (var (ancien, nouveau) in migrations)
+            {
+                string srcDir = Path.Combine(racine, ancien);
+                string dstDir = Path.Combine(racine, nouveau);
+                if (Directory.Exists(srcDir) && !Directory.Exists(dstDir))
+                {
+                    try
+                    {
+                        Directory.Move(srcDir, dstDir);
+                        JournalLog.Info(CategorieLog.Configuration, "INCERT_DOSSIER_MIGRE",
+                            $"Dossier modules renommé : {ancien} → {nouveau}");
+                    }
+                    catch (Exception ex)
+                    {
+                        JournalLog.Warn(CategorieLog.Configuration, "INCERT_DOSSIER_MIGRATION_KO",
+                            $"Renommage {ancien} → {nouveau} échoué : {ex.Message}");
+                    }
+                }
+            }
+        }
 
         /// <summary>Chemin absolu du sous-dossier d'un type de mesure.</summary>
         public static string DossierComplet(TypeMesure type) =>
@@ -128,10 +163,14 @@ namespace Metrologo.Services.Incertitude
                 if (string.IsNullOrEmpty(l)) continue;
                 if (l.StartsWith("#"))
                 {
-                    // Commentaire — on extrait le NomAffichage si format "# Nom: xxx"
-                    var m = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*Nom\s*:\s*(.+)$",
+                    // Commentaires métadonnées : "# Nom: xxx" et "# SansTemps: true"
+                    var mNom = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*Nom\s*:\s*(.+)$",
                         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    if (m.Success) module.NomAffichage = m.Groups[1].Value.Trim();
+                    if (mNom.Success) module.NomAffichage = mNom.Groups[1].Value.Trim();
+
+                    var mSansTemps = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*SansTemps\s*:\s*(true|1|oui)\s*$",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (mSansTemps.Success) module.UtiliseTempsDeMesure = false;
                     continue;
                 }
 
@@ -162,7 +201,7 @@ namespace Metrologo.Services.Incertitude
 
                     if (champs.Length >= 9)
                     {
-                        // Nouveau format : Fonction;Temps;Cond2;BB1;BH1;BB2;BH2;IncRel;IncAbs
+                        // Format 9 colonnes : Fonction;Temps;Cond2;BB1;BH1;BB2;BH2;IncRel;IncAbs
                         lg.Condition2          = champs[2].Trim();
                         lg.BorneBasse          = ParseDouble(champs[3]);
                         lg.BorneHaute          = ParseDouble(champs[4]);
@@ -207,7 +246,9 @@ namespace Metrologo.Services.Incertitude
             var sb = new StringBuilder();
             if (!string.IsNullOrWhiteSpace(module.NomAffichage))
                 sb.AppendLine("# Nom: " + module.NomAffichage);
-            // Format à 9 colonnes : Fonction ; Temps ; Condition2 ; BB1 ; BH1 ; BB2 ; BH2 ; IncRel ; IncAbs
+            if (!module.UtiliseTempsDeMesure)
+                sb.AppendLine("# SansTemps: true");
+            // Format 9 colonnes : Fonction ; Temps ; Condition2 ; BB1 ; BH1 ; BB2 ; BH2 ; IncRel ; IncAbs
             sb.AppendLine("Fonction;TempsDeMesure;Condition2;BorneBasse1;BorneHaute1;BorneBasse2;BorneHaute2;IncertRelative;IncertAbsolue");
             foreach (var lg in module.Lignes)
             {

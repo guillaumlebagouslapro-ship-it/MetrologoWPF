@@ -25,6 +25,9 @@
     <None Update="Templates\METROLOGO_Stab.xltm">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Templates\METROLOGO_Tachy.xlsm">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

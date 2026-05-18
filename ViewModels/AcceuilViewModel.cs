@@ -511,49 +511,86 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Flux post-mesure conforme au Delphi (F_Main.pas:2283) : pour une mesure de Fréquence
-        /// avec le fréquencemètre comme source, demande à l'utilisateur la fréquence lue sur
-        /// l'afficheur puis les incertitudes (résolution + autres). Les valeurs sont écrites
-        /// dans les zones nommées du classeur Excel via Interop.
-        /// Skip pour Générateur (incertitudes à 0) et pour tous les autres types de mesure.
+        /// Flux post-mesure : dispatch selon le type de mesure :
+        /// <list type="bullet">
+        ///   <item>Fréquence + Fréquencemètre → page unique fréq. lue + résolution + incert. sup.</item>
+        ///   <item>TachyContact → page minimale résolution (tr/min) uniquement.</item>
+        ///   <item>Autres types → pas de popup.</item>
+        /// </list>
+        /// Les valeurs saisies sont injectées dans les zones nommées du classeur via Interop.
         /// </summary>
         private async Task SaisiePostMesureAsync(Mesure config)
         {
-            if (config.TypeMesure != TypeMesure.Frequence) return;
-            if (config.SourceMesure != SourceMesure.Frequencemetre) return;
-
-            // 1) Fréquence lue sur l'afficheur
-            var saisieLue = new SaisieValFreqViewModel(
-                config.FNominale,
-                titre: "Fréquence lue",
-                sousTitre: "Saisissez la valeur affichée par le fréquencemètre",
-                libelle: "FRÉQUENCE LUE (HZ)");
-
-            var winLue = new SaisieValFreqWindow(saisieLue) { Owner = Application.Current.MainWindow };
-            if (winLue.ShowDialog() != true)
+            if (config.TypeMesure == TypeMesure.Frequence
+                && config.SourceMesure == SourceMesure.Frequencemetre)
             {
-                Log("ℹ Saisie post-mesure ignorée (fréquence lue).");
+                await SaisiePostMesureFrequenceAsync(config);
                 return;
             }
 
-            // 2) Incertitude de résolution + autres incertitudes
-            var paramsVm = new ParamsIncertViewModel(config.Resolution, config.IncertSupp);
-            var winIncert = new ParamsIncertWindow(paramsVm) { Owner = Application.Current.MainWindow };
-            if (winIncert.ShowDialog() != true)
+            if (config.TypeMesure == TypeMesure.TachyContact
+                || config.TypeMesure == TypeMesure.TachyOptique)
             {
-                Log("ℹ Saisie post-mesure ignorée (incertitudes).");
+                await SaisiePostMesureTachyAsync(config);
+                return;
+            }
+        }
+
+        private async Task SaisiePostMesureFrequenceAsync(Mesure config)
+        {
+            var vm = new SaisiePostMesureFreqViewModel(
+                config.FNominale, config.Resolution, config.IncertSupp);
+
+            var win = new SaisiePostMesureFreqWindow(vm) { Owner = Application.Current.MainWindow };
+            if (win.ShowDialog() != true)
+            {
+                Log("ℹ Saisie post-mesure ignorée.");
                 return;
             }
 
-            config.Resolution = paramsVm.Resolution;
-            config.IncertSupp = paramsVm.IncertSupp;
+            config.Resolution = vm.Resolution;
+            config.IncertSupp = vm.IncertSupp;
 
-            Log($"📝 Post-mesure : FLue={saisieLue.ValeurLue:F6} Hz · Résolution={paramsVm.Resolution:E3} · Autres={paramsVm.IncertSupp:E3}");
+            Log($"📝 Post-mesure : FLue={vm.FrequenceLue:F6} Hz · Résolution={vm.Resolution:E3} · IncertSupRel={vm.IncertSupp:E3}");
 
             // Écrit via Interop dans le classeur actif (zones nommées du template).
-            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNFLue", saisieLue.ValeurLue);
-            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertResol", paramsVm.Resolution);
-            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertSup", paramsVm.IncertSupp);
+            // ZNFreqRef = cellule "Valeur de réf. (Hz) =" du bloc stats : on l'aligne sur
+            // la fréquence saisie (ex. 15 kHz) au lieu de la valeur héritée du rubidium
+            // (10 MHz par défaut). Cette zone alimente aussi la formule ZNFreqCorr.
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNFreqRef", vm.FrequenceLue);
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertResol", vm.Resolution);
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertSup", vm.IncertSupp);
+            await ExcelInteropHost.Instance.SauvegarderAsync();
+        }
+
+        private async Task SaisiePostMesureTachyAsync(Mesure config)
+        {
+            // Pour le tachy, l'utilisateur saisit la résolution en tr/min (unité naturelle
+            // de l'appareil). On écrit deux zones :
+            //   - ZNIncertResolRpm (cellule I25) : valeur brute saisie en tr/min, visible
+            //     dans le bloc stats RPM du template tachy.
+            //   - ZNIncertResol (cellule F25, Hz) : valeur convertie pour rester cohérente
+            //     avec les formules historiques en Hz (incert. globale, etc.).
+            double initialeRpm = config.Resolution * 60.0;
+            var vm = new SaisiePostMesureTachyViewModel(initialeRpm);
+
+            var win = new SaisiePostMesureTachyWindow(vm) { Owner = Application.Current.MainWindow };
+            if (win.ShowDialog() != true)
+            {
+                Log("ℹ Saisie post-mesure tachy ignorée.");
+                return;
+            }
+
+            config.Resolution = vm.ResolutionHz;
+            // IncertSupp non saisie pour tachy : la dégradation est portée par les coeffs
+            // C/D du module RPM, pas par une saisie manuelle.
+            config.IncertSupp = 0.0;
+
+            Log($"📝 Post-mesure tachy : Résolution={vm.ResolutionRpm:F4} tr/min ({vm.ResolutionHz:E3} Hz)");
+
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertResolRpm", vm.ResolutionRpm);
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertResol", vm.ResolutionHz);
+            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertSup", 0.0);
             await ExcelInteropHost.Instance.SauvegarderAsync();
         }
 

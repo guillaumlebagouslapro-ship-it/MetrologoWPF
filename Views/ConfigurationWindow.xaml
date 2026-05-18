@@ -210,6 +210,26 @@
                                    FontStyle="Italic"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                    Visibility="{Binding AModulesIncertitude, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+
+                        <!-- Module Fréquence auxiliaire : visible uniquement en Tachymètre.
+                             Fournit les coeffs A/B (Hz) du fréquencemètre support — combinés
+                             avec les coeffs C/D (RPM) du tachymètre dans le rapport Excel. -->
+                        <StackPanel Visibility="{Binding ModuleFreqRequis, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="MODULE FRÉQUENCE (HZ — POUR COEFF A / B)"
+                                       Style="{StaticResource FormLabelStyle}"
+                                       Margin="0,14,0,4"/>
+                            <ComboBox ItemsSource="{Binding ModulesFreqDisponibles}"
+                                      SelectedItem="{Binding ModuleFreqSelectionne, Mode=TwoWay}"
+                                      DisplayMemberPath="LibelleAffiche"
+                                      Padding="10,6"
+                                      ToolTip="Module de la catégorie Fréquence qui caractérise le fréquencemètre support du tachymètre. Alimente ZNCoeffA / ZNCoeffB du rapport."/>
+                            <TextBlock Text="Sélectionne le module du fréquencemètre utilisé (Admin → catégorie Fréquence)."
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       FontStyle="Italic"
+                                       Margin="0,4,0,0"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

@@ -52,6 +52,19 @@ namespace Metrologo.Services
                 LabelIncertGlob = "Incert. Globale (tr/min) ="
             },
 
+            TypeMesure.TachyOptique => new EnTetesMesure
+            {
+                Unite = "tr/min",
+                EnteteMesuree = "Vitesse mesurée (tr/min)",
+                EnteteReelle = "Vitesse réelle (tr/min)",
+                EnteteDelta = "N(i) - N(i+1)",
+                LabelMoyenne = "Vit. Moy. Réel. (tr/min) =",
+                LabelFreqRef = "Valeur de réf. (tr/min) =",
+                LabelFreqCorr = "Valeur corrigée (tr/min) =",
+                LabelIncertResol = "Incert. résol. (tr/min) =",
+                LabelIncertGlob = "Incert. Globale (tr/min) ="
+            },
+
             TypeMesure.Stroboscope => new EnTetesMesure
             {
                 Unite = "Hz",
@@ -89,10 +102,19 @@ namespace Metrologo.Services
             TypeMesure.Interval => "Intervalle de temps",
             TypeMesure.FreqAvantInterv => "Fréquence avant intervention",
             TypeMesure.FreqFinale => "Fréquence finale",
-            TypeMesure.TachyContact => "Tachymétrie par contacts",
+            TypeMesure.TachyContact => "Tachymètre Contact",
+            TypeMesure.TachyOptique => "Tachymètre Optique",
             TypeMesure.Stroboscope => "Stroboscope",
             _ => t.ToString()
         };
+
+        /// <summary>
+        /// Vrai pour les types de mesure tachymétriques (contact et optique).
+        /// Ces deux types partagent le template Excel METROLOGO_Tachy.xlsm et la
+        /// conversion automatique Hz → tr/min en colonne N.
+        /// </summary>
+        public static bool EstTachymetre(TypeMesure t) =>
+            t == TypeMesure.TachyContact || t == TypeMesure.TachyOptique;
 
         // Gate time helpers (index → libellé et secondes). L'échelle doit rester alignée avec la
         // combo GateTimes de ConfigurationViewModel/SelectionGateViewModel et avec CatalogueAdapter.

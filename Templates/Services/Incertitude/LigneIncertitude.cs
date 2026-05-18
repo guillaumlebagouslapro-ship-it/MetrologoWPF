@@ -35,10 +35,19 @@ namespace Metrologo.Services.Incertitude
         /// <summary>Borne haute du domaine 2 (0 si non utilisé).</summary>
         public double BorneHauteDomaine2 { get; set; }
 
-        /// <summary>Incertitude relative (sans dimension) — devient <c>ZNCoeffA</c> dans le Excel.</summary>
+        /// <summary>
+        /// Incertitude relative (sans dimension) — devient <c>ZNCoeffA</c> dans le
+        /// Excel pour les modules Fréquence/Stab/etc. Pour les modules tachymètre
+        /// (Contact/Optique), cette même valeur est injectée dans <c>ZNCoeffC</c> du
+        /// template tachy (formule I29 = Vitesse_RPM × C + D).
+        /// </summary>
         public double IncertRelative { get; set; }
 
-        /// <summary>Incertitude absolue (en Hz) — devient <c>ZNCoeffB</c> dans le Excel.</summary>
+        /// <summary>
+        /// Incertitude absolue (en Hz, ou en tr/min pour les modules tachymètre) —
+        /// devient <c>ZNCoeffB</c> dans le Excel pour les types Fréquence/Stab/etc.,
+        /// et <c>ZNCoeffD</c> dans le template tachy (cf. <see cref="IncertRelative"/>).
+        /// </summary>
         public double IncertAbsolue { get; set; }
 
         /// <summary>

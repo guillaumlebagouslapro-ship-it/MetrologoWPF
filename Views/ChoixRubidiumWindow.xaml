@@ -54,31 +54,130 @@
                             <TextBlock Text="Rubidium actif" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
                         </StackPanel>
 
-                        <!-- État vide -->
-                        <Border Visibility="{Binding ListeVide, Converter={StaticResource BoolToVis}}"
-                                Background="#FFFFF7ED"
-                                BorderBrush="#FFFED7AA"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="14,12"
-                                Margin="0,0,0,6">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="Info24" FontSize="18"
-                                               Foreground="{StaticResource AsertiOrangeBrush}"
-                                               Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <StackPanel>
-                                    <TextBlock Text="Aucun rubidium configuré"
-                                               FontWeight="SemiBold" FontSize="13"
-                                               Foreground="#FF7C2D12"/>
-                                    <TextBlock Text="La liste sera chargée depuis la base de données des rubidiums."
-                                               FontSize="11"
-                                               Foreground="#FF9A3412"
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
+                        <!-- Sélecteur Mode : choisir un rubidium du catalogue OU saisir
+                             une fréquence à la main (cas où aucun rubidium n'est raccordé
+                             ou tests avec une fréquence de référence custom). -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                        <ListBox ItemsSource="{Binding Rubidiums}"
+                            <Border Grid.Column="0" CornerRadius="6" BorderThickness="1" Padding="14,10">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding EstModeListe}" Value="True">
+                                                <Setter Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
+                                                <Setter Property="BorderThickness" Value="2"/>
+                                                <Setter Property="Background">
+                                                    <Setter.Value>
+                                                        <SolidColorBrush Color="{StaticResource AsertiOrangeColor}" Opacity="0.08"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <RadioButton GroupName="ModeRub"
+                                             IsChecked="{Binding EstModeListe, Mode=OneWay}"
+                                             Checked="OnModeListeChecked"
+                                             FontWeight="SemiBold">
+                                    <StackPanel>
+                                        <TextBlock Text="Catalogue" FontSize="13"/>
+                                        <TextBlock Text="Choisir un rubidium prédéfini"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   Margin="22,2,0,0"/>
+                                    </StackPanel>
+                                </RadioButton>
+                            </Border>
+
+                            <Border Grid.Column="2" CornerRadius="6" BorderThickness="1" Padding="14,10">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ModeManuel}" Value="True">
+                                                <Setter Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
+                                                <Setter Property="BorderThickness" Value="2"/>
+                                                <Setter Property="Background">
+                                                    <Setter.Value>
+                                                        <SolidColorBrush Color="{StaticResource AsertiOrangeColor}" Opacity="0.08"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <RadioButton GroupName="ModeRub"
+                                             IsChecked="{Binding ModeManuel, Mode=TwoWay}"
+                                             FontWeight="SemiBold">
+                                    <StackPanel>
+                                        <TextBlock Text="Réglage manuel" FontSize="13"/>
+                                        <TextBlock Text="Saisir la fréquence à la main"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   Margin="22,2,0,0"/>
+                                    </StackPanel>
+                                </RadioButton>
+                            </Border>
+                        </Grid>
+
+                        <!-- Mode Manuel : TextBox pour saisir la fréquence -->
+                        <StackPanel Visibility="{Binding ModeManuel, Converter={StaticResource BoolToVis}}"
+                                    Margin="0,0,0,8">
+                            <TextBlock Text="FRÉQUENCE MOYENNE (Hz)" Style="{StaticResource FormLabelStyle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ui:TextBox Grid.Column="0"
+                                            Text="{Binding FrequenceManuelleTexte, UpdateSourceTrigger=PropertyChanged}"
+                                            PlaceholderText="ex. 10000000"
+                                            FontFamily="Cascadia Mono, Consolas"
+                                            Padding="10,8"/>
+                                <TextBlock Grid.Column="1" Text="Hz"
+                                           VerticalAlignment="Center" Margin="10,0,0,0"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource AsertiNavyBrush}"/>
+                            </Grid>
+                            <TextBlock Text="Cette valeur est utilisée comme fréquence de référence (ZNFreqRef) dans le calcul des incertitudes Excel."
+                                       FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+
+                        <!-- Bloc Liste (visible en mode Catalogue uniquement) -->
+                        <StackPanel Visibility="{Binding EstModeListe, Converter={StaticResource BoolToVis}}">
+                            <Border Visibility="{Binding ListeVide, Converter={StaticResource BoolToVis}}"
+                                    Background="#FFFFF7ED"
+                                    BorderBrush="#FFFED7AA"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="14,12"
+                                    Margin="0,0,0,6">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Info24" FontSize="18"
+                                                   Foreground="{StaticResource AsertiOrangeBrush}"
+                                                   Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                    <StackPanel>
+                                        <TextBlock Text="Aucun rubidium configuré"
+                                                   FontWeight="SemiBold" FontSize="13"
+                                                   Foreground="#FF7C2D12"/>
+                                        <TextBlock Text="La liste sera chargée depuis la base de données des rubidiums."
+                                                   FontSize="11"
+                                                   Foreground="#FF9A3412"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <ListBox ItemsSource="{Binding Rubidiums}"
                                  SelectedItem="{Binding RubidiumSelectionne, Mode=TwoWay}"
                                  BorderThickness="0"
                                  Background="Transparent"
@@ -159,6 +258,7 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

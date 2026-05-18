@@ -15,6 +15,25 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="6,0"/>
             <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
+            <Setter Property="Foreground" Value="#FF111827"/>
+        </Style>
+
+        <!-- Style TextBox utilisé en mode édition : fond blanc + texte sombre quelle que
+             soit la couleur de fond de la cellule (évite l'invisibilité sur la sélection
+             crème quand on tape une valeur). -->
+        <Style x:Key="MonoEditCell" TargetType="TextBox">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
+            <Setter Property="Foreground" Value="#FF111827"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="EditCell" TargetType="TextBox">
+            <Setter Property="Foreground" Value="#FF111827"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
         <!-- Style item de la liste des modules (sidebar) -->
@@ -272,6 +291,7 @@
                             <Style TargetType="DataGridCell">
                                 <Setter Property="Padding" Value="6,4"/>
                                 <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Foreground" Value="#FF111827"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="DataGridCell">
@@ -282,8 +302,12 @@
                                     </Setter.Value>
                                 </Setter>
                                 <Style.Triggers>
+                                    <!-- Sélection : surligne en crème mais force le texte
+                                         en sombre, sinon WPF applique son foreground
+                                         système (~blanc) et le texte devient illisible. -->
                                     <Trigger Property="IsSelected" Value="True">
                                         <Setter Property="Background" Value="#FFFEF3C7"/>
+                                        <Setter Property="Foreground" Value="#FF111827"/>
                                     </Trigger>
                                 </Style.Triggers>
                             </Style>
@@ -306,29 +330,37 @@
                                     </Style>
                                 </DataGridComboBoxColumn.EditingElementStyle>
                             </DataGridComboBoxColumn>
-                            <DataGridTextColumn Header="Temps (s)" Binding="{Binding TempsDeMesure}" Width="80"/>
-                            <DataGridTextColumn Header="Borne basse (Hz)"
+                            <DataGridTextColumn x:Name="ColTemps"
+                                                Header="Temps (s)" Binding="{Binding TempsDeMesure}" Width="80"
+                                                EditingElementStyle="{StaticResource EditCell}"/>
+                            <DataGridTextColumn Header="Borne basse"
                                                 Binding="{Binding BorneBasse, StringFormat=G}"
                                                 Width="150"
-                                                ElementStyle="{StaticResource MonoCell}"/>
-                            <DataGridTextColumn Header="Borne haute (Hz)"
+                                                ElementStyle="{StaticResource MonoCell}"
+                                                EditingElementStyle="{StaticResource MonoEditCell}"/>
+                            <DataGridTextColumn Header="Borne haute"
                                                 Binding="{Binding BorneHaute, StringFormat=G}"
                                                 Width="150"
-                                                ElementStyle="{StaticResource MonoCell}"/>
+                                                ElementStyle="{StaticResource MonoCell}"
+                                                EditingElementStyle="{StaticResource MonoEditCell}"/>
                             <DataGridTextColumn Header="Dom 2 — basse"
                                                 Binding="{Binding BorneBasseDomaine2, StringFormat=G}"
                                                 Width="120"
-                                                ElementStyle="{StaticResource MonoCell}"/>
+                                                ElementStyle="{StaticResource MonoCell}"
+                                                EditingElementStyle="{StaticResource MonoEditCell}"/>
                             <DataGridTextColumn Header="Dom 2 — haute"
                                                 Binding="{Binding BorneHauteDomaine2, StringFormat=G}"
                                                 Width="120"
-                                                ElementStyle="{StaticResource MonoCell}"/>
+                                                ElementStyle="{StaticResource MonoCell}"
+                                                EditingElementStyle="{StaticResource MonoEditCell}"/>
                             <DataGridTextColumn Header="Condition 2"
                                                 Binding="{Binding Condition2}"
-                                                Width="110"/>
+                                                Width="110"
+                                                EditingElementStyle="{StaticResource EditCell}"/>
                             <DataGridTextColumn Header="Coeff A"
                                                 Binding="{Binding IncertRelative, StringFormat='0.00E+00'}"
-                                                Width="140">
+                                                Width="140"
+                                                EditingElementStyle="{StaticResource MonoEditCell}">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource MonoCell}">
                                         <Setter Property="Foreground" Value="#FF4338CA"/>
@@ -338,7 +370,8 @@
                             </DataGridTextColumn>
                             <DataGridTextColumn Header="Coeff B"
                                                 Binding="{Binding IncertAbsolue, StringFormat='0.00E+00'}"
-                                                Width="140">
+                                                Width="140"
+                                                EditingElementStyle="{StaticResource MonoEditCell}">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource MonoCell}">
                                         <Setter Property="Foreground" Value="#FF991B1B"/>
@@ -354,8 +387,8 @@
                                    Content="Enregistrer"
                                    Command="{Binding EnregistrerCommand}" Margin="0,0,8,0"/>
                         <ui:Button Appearance="Caution" Icon="{ui:SymbolIcon Add24}"
-                                   Content="Ajouter un temps de mesure"
-                                   ToolTip="Crée automatiquement les 3 plages (basse / moyenne / haute) à remplir."
+                                   Content="{Binding LibelleAjouter}"
+                                   ToolTip="Crée une nouvelle ligne d'incertitude (1 ou 3 plages selon le choix dans le dialogue)."
                                    Command="{Binding AjouterTrioCommand}" Margin="0,0,8,0"/>
                         <ui:Button Appearance="Danger" Icon="{ui:SymbolIcon Delete24}"
                                    Content="Suppr. lignes sélect."
@@ -367,7 +400,11 @@
                                    Command="{Binding RechargerCommand}" Margin="0,0,8,0"/>
                         <ui:Button Appearance="Secondary" Icon="{ui:SymbolIcon FolderOpen24}"
                                    Content="Dossier"
-                                   Command="{Binding OuvrirDossierCommand}"/>
+                                   Command="{Binding OuvrirDossierCommand}" Margin="0,0,8,0"/>
+                        <ui:Button Appearance="Info" Icon="{ui:SymbolIcon QuestionCircle24}"
+                                   Content="Aide saisie A / B"
+                                   ToolTip="Comment écrire les coefficients en notation scientifique (E-11, E+5, etc.)."
+                                   Click="OnAideSaisie"/>
                     </StackPanel>
                 </Grid>
             </Border>

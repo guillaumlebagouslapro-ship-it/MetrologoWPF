@@ -107,20 +107,6 @@ namespace Metrologo.ViewModels
         }
 
         [RelayCommand]
-        private void OuvrirParamsIncert()
-        {
-            Journal.Info(CategorieLog.Administration, "OUVERTURE_PARAMS_INCERT", "Ouverture du dialogue résolution / incert. supp.");
-            var vm = new ParamsIncertViewModel(0.01, 0.0);
-            var win = new ParamsIncertWindow(vm) { Owner = Application.Current.MainWindow };
-            if (win.ShowDialog() == true)
-            {
-                Journal.Info(CategorieLog.Administration, "PARAMS_INCERT_MAJ",
-                    $"Résolution {vm.Resolution} · Incert. supp. {vm.IncertSupp}",
-                    new { vm.Resolution, vm.IncertSupp });
-            }
-        }
-
-        [RelayCommand]
         private void OuvrirUtilisateurs()
         {
             Journal.Info(CategorieLog.Administration, "OUVERTURE_UTILISATEURS", "Accès à la gestion des utilisateurs.");
@@ -201,6 +187,24 @@ namespace Metrologo.ViewModels
             // (la nav vers AdminView n'est exposée qu'aux comptes Administrateur).
             var vm = new GestionAppareilsViewModel(utilisateur, estAdmin: true);
             var win = new GestionAppareilsWindow(vm) { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>
+        /// Ouvre la fenêtre de configuration des chemins de stockage. Permet à l'admin
+        /// de surcharger les emplacements par défaut (locaux) pour pointer vers un partage
+        /// réseau commun à tous les postes du site (modules d'incertitude, presets,
+        /// archives logs, etc.). La BDD SQL Server reste centralisée et n'est pas
+        /// configurable ici (cf. CheminsMetrologo + paths.config.json).
+        /// </summary>
+        [RelayCommand]
+        private void OuvrirCheminsStockage()
+        {
+            Journal.Info(CategorieLog.Administration, "OUVERTURE_CHEMINS_STOCKAGE",
+                "Accès à la configuration des chemins de stockage.");
+
+            var vm = new CheminsStockageViewModel();
+            var win = new CheminsStockageWindow(vm) { Owner = Application.Current.MainWindow };
             win.ShowDialog();
         }
     }

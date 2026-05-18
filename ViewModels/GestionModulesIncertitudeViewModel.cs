@@ -31,6 +31,7 @@ namespace Metrologo.ViewModels
         [NotifyCanExecuteChangedFor(nameof(SupprimerLignesCommand))]
         [NotifyCanExecuteChangedFor(nameof(CopierVersCommand))]
         [NotifyPropertyChangedFor(nameof(InfosFonctions))]
+        [NotifyPropertyChangedFor(nameof(LibelleAjouter))]
         private ModuleIncertitude? _moduleSelectionne;
 
         [ObservableProperty] private string _statut = "Prêt.";
@@ -63,10 +64,26 @@ namespace Metrologo.ViewModels
             new OptionTypeMesure(TypeMesure.Stabilite,       EnTetesMesureHelper.LibelleType(TypeMesure.Stabilite)),
             new OptionTypeMesure(TypeMesure.Interval,        EnTetesMesureHelper.LibelleType(TypeMesure.Interval)),
             new OptionTypeMesure(TypeMesure.TachyContact,    EnTetesMesureHelper.LibelleType(TypeMesure.TachyContact)),
+            new OptionTypeMesure(TypeMesure.TachyOptique,    EnTetesMesureHelper.LibelleType(TypeMesure.TachyOptique)),
             new OptionTypeMesure(TypeMesure.Stroboscope,     EnTetesMesureHelper.LibelleType(TypeMesure.Stroboscope)),
         };
 
         public string LibelleCategorie => EnTetesMesureHelper.LibelleType(TypeMesureSelectionne);
+
+        /// <summary>
+        /// Libellé du bouton d'ajout d'une ligne d'incertitude — dépend du module :
+        /// <c>« Ajouter un temps de mesure »</c> si le module utilise un temps de porte,
+        /// <c>« Ajouter une plage »</c> sinon (tachymètre/stroboscope où le temps n'a pas
+        /// de sens). Permet d'éviter le label trompeur sur les modules sans gate.
+        /// </summary>
+        public string LibelleAjouter
+        {
+            get
+            {
+                bool sansTemps = ModuleSelectionne != null && !ModuleSelectionne.UtiliseTempsDeMesure;
+                return sansTemps ? "Ajouter une plage" : "Ajouter un temps de mesure";
+            }
+        }
 
         public string InfosFonctions
         {
@@ -74,7 +91,11 @@ namespace Metrologo.ViewModels
             {
                 if (ModuleSelectionne == null) return "";
                 var fns = ModuleSelectionne.FonctionsSupportees.ToList();
-                return fns.Count == 0 ? "Aucune ligne — clique « Ajouter un temps de mesure » pour démarrer."
+                bool sansTemps = !ModuleSelectionne.UtiliseTempsDeMesure;
+                string aide = sansTemps
+                    ? "Aucune ligne — clique « Ajouter une plage » pour démarrer."
+                    : "Aucune ligne — clique « Ajouter un temps de mesure » pour démarrer.";
+                return fns.Count == 0 ? aide
                                       : "Fonctions : " + string.Join(", ", fns);
             }
         }
@@ -88,7 +109,7 @@ namespace Metrologo.ViewModels
         /// <summary>Liste fermée des fonctions affichées dans le ComboBox de la colonne Fonction.</summary>
         public string[] FonctionsDisponibles { get; } = new[]
         {
-            "Freq", "FreqAv", "FreqFin", "Stab", "Interv", "TachyC", "Strobo"
+            "Freq", "FreqAv", "FreqFin", "Stab", "Interv", "TachyC", "TachyO", "Strobo"
         };
 
         /// <summary>Liste éditable des temps de mesure standards (en secondes) — l'admin
@@ -115,7 +136,8 @@ namespace Metrologo.ViewModels
         [RelayCommand]
         private void Ajouter()
         {
-            var dlg = new Views.AjoutModuleIncertitudeDialog { Owner = Application.Current.MainWindow };
+            var dlg = new Views.AjoutModuleIncertitudeDialog(TypeMesureSelectionne)
+            { Owner = Application.Current.MainWindow };
             if (dlg.ShowDialog() != true) return;
 
             string num = dlg.NumModuleSaisi;
@@ -130,7 +152,12 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            var nouveau = new ModuleIncertitude { NumModule = num, NomAffichage = nom };
+            var nouveau = new ModuleIncertitude
+            {
+                NumModule = num,
+                NomAffichage = nom,
+                UtiliseTempsDeMesure = !dlg.SansTempsDeMesure
+            };
             ModulesIncertitudeService.Sauvegarder(nouveau, TypeMesureSelectionne);
             Modules.Add(nouveau);
             ModuleSelectionne = nouveau;
@@ -199,27 +226,41 @@ namespace Metrologo.ViewModels
             string fn = dlg.Fonction;
             double t = dlg.TempsDeMesure;
 
-            // 3 plages typiques C.E.A.O. : basse / moyenne / haute. L'admin ajuste
-            // ensuite les bornes et incertitudes ligne par ligne.
-            ModuleSelectionne.Lignes.Add(new LigneIncertitude
+            if (dlg.NombrePlages == 1)
             {
-                Fonction = fn, TempsDeMesure = t,
-                BorneBasse = 0, BorneHaute = 10000.01
-            });
-            ModuleSelectionne.Lignes.Add(new LigneIncertitude
+                // 1 plage unique — typique tachymètre/stroboscope. Bornes par défaut larges,
+                // l'admin les ajustera dans le tableau.
+                ModuleSelectionne.Lignes.Add(new LigneIncertitude
+                {
+                    Fonction = fn, TempsDeMesure = t,
+                    BorneBasse = 0, BorneHaute = 1000000100.0
+                });
+                Statut = $"1 ligne ajoutée pour {fn} — ajuste les bornes et coefficients.";
+            }
+            else
             {
-                Fonction = fn, TempsDeMesure = t,
-                BorneBasse = 10000.01, BorneHaute = 1000001.0
-            });
-            ModuleSelectionne.Lignes.Add(new LigneIncertitude
-            {
-                Fonction = fn, TempsDeMesure = t,
-                BorneBasse = 1000001.0, BorneHaute = 1000000100.0
-            });
+                // 3 plages typiques C.E.A.O. : basse / moyenne / haute. L'admin ajuste
+                // ensuite les bornes et incertitudes ligne par ligne.
+                ModuleSelectionne.Lignes.Add(new LigneIncertitude
+                {
+                    Fonction = fn, TempsDeMesure = t,
+                    BorneBasse = 0, BorneHaute = 10000.01
+                });
+                ModuleSelectionne.Lignes.Add(new LigneIncertitude
+                {
+                    Fonction = fn, TempsDeMesure = t,
+                    BorneBasse = 10000.01, BorneHaute = 1000001.0
+                });
+                ModuleSelectionne.Lignes.Add(new LigneIncertitude
+                {
+                    Fonction = fn, TempsDeMesure = t,
+                    BorneBasse = 1000001.0, BorneHaute = 1000000100.0
+                });
+                Statut = $"3 lignes ajoutées pour {fn} @ {t} s — ajuste les bornes et coefficients.";
+            }
             OnPropertyChanged(nameof(InfosFonctions));
             OnPropertyChanged(nameof(NbTempsDistincts));
             OnPropertyChanged(nameof(NbLignes));
-            Statut = $"3 lignes ajoutées pour {fn} @ {t} s — ajuste les bornes et coefficients.";
         }
 
         /// <summary>Supprime les lignes sélectionnées dans le DataGrid.</summary>

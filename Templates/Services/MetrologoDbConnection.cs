@@ -46,10 +46,12 @@ namespace Metrologo.Services
                     return _connStringEnCache;
                 }
 
-                string dossier = DossierConfig();
-
                 // 2. Login SQL chiffré DPAPI (mode prod)
-                string cheminCreds = Path.Combine(dossier, NomFichierCredentials);
+                // ResoudreCheminAvecFallback gère la rétrocompat avec l'ancien emplacement
+                // à plat dans %LocalAppData%\Metrologo\db.credentials avant migration.
+                string cheminCreds = CheminsMetrologo.ResoudreCheminAvecFallback(
+                    CheminsMetrologo.FichierDbCredentials, NomFichierCredentials);
+                string dossier = CheminsMetrologo.Configuration;
                 if (File.Exists(cheminCreds))
                 {
                     try
@@ -69,7 +71,12 @@ namespace Metrologo.Services
                 }
 
                 // 3. Connection string brute en clair (legacy, débuggage)
-                string cheminConn = Path.Combine(dossier, NomFichierConfig);
+                string cheminConn = Path.Combine(CheminsMetrologo.Configuration, NomFichierConfig);
+                if (!File.Exists(cheminConn))
+                {
+                    // Fallback rétrocompat : ancien emplacement à plat.
+                    cheminConn = Path.Combine(CheminsMetrologo.Racine, NomFichierConfig);
+                }
                 if (File.Exists(cheminConn))
                 {
                     try
@@ -110,7 +117,7 @@ namespace Metrologo.Services
         /// </summary>
         public static void EcrireCredentialsDpapi(string user, string password)
         {
-            string dossier = DossierConfig();
+            string dossier = CheminsMetrologo.Configuration;
             Directory.CreateDirectory(dossier);
 
             // Format en clair avant chiffrement : "user\npassword"
@@ -118,8 +125,7 @@ namespace Metrologo.Services
             byte[] chiffre = ProtectedData.Protect(enClair, optionalEntropy: null,
                 scope: DataProtectionScope.CurrentUser);
 
-            string chemin = Path.Combine(dossier, NomFichierCredentials);
-            File.WriteAllBytes(chemin, chiffre);
+            File.WriteAllBytes(CheminsMetrologo.FichierDbCredentials, chiffre);
             ReinitialiserCache();
         }
 

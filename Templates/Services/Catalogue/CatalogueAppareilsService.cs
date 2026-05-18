@@ -237,9 +237,10 @@ namespace Metrologo.Services.Catalogue
 
         private async Task ImporterJsonHeriteSiPresentAsync(SqlConnection c)
         {
-            string cheminJson = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Metrologo", "AppareilsCatalogue.json");
+            // Cherche d'abord dans le nouvel emplacement (Catalogues\), puis fallback sur
+            // l'ancien chemin à plat dans Metrologo\ (compat avant migration auto).
+            string cheminJson = CheminsMetrologo.ResoudreCheminAvecFallback(
+                CheminsMetrologo.FichierAppareilsCatalogueLegacy, "AppareilsCatalogue.json");
             if (!File.Exists(cheminJson)) return;
 
             try

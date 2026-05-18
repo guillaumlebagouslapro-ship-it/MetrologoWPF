@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Nouveau module d'incertitude"
-        Height="350" Width="480"
+        Height="430" Width="480"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
         ResizeMode="NoResize"
@@ -25,7 +25,10 @@
             <ui:TextBox x:Name="TbNumModule" PlaceholderText="ex. MF51901A" Margin="0,0,0,12"/>
 
             <TextBlock Text="Nom d'affichage (optionnel)" FontWeight="SemiBold" Margin="0,0,0,4"/>
-            <ui:TextBox x:Name="TbNomAffichage" PlaceholderText="ex. Compteur de fréquence MF51901A"/>
+            <ui:TextBox x:Name="TbNomAffichage" PlaceholderText="ex. Compteur de fréquence MF51901A" Margin="0,0,0,16"/>
+
+            <CheckBox x:Name="CbSansTemps" Content="Sans temps de mesure (tachymètre, stroboscope…)"
+                      ToolTip="Coche cette case pour les modules dont l'incertitude ne dépend pas d'une porte temporelle. La colonne Temps disparaît du tableau."/>
         </StackPanel>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,24,16">

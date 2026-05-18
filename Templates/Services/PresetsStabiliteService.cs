@@ -31,9 +31,7 @@ namespace Metrologo.Services
 
         private PresetsStabiliteService()
         {
-            _cheminFichier = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Metrologo", "PresetsStabilite.json");
+            _cheminFichier = CheminsMetrologo.FichierPresetsStabilite;
         }
 
         public string CheminFichier => _cheminFichier;

@@ -64,9 +64,9 @@ namespace Metrologo.Services.Journal
                 // 1. Fichier de config par poste (priorité max — modifiable à chaud)
                 try
                 {
-                    string cheminConf = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "Metrologo", NOM_FICHIER_CONFIG);
+                    string cheminConf = CheminsMetrologo.ResoudreCheminAvecFallback(
+                        Path.Combine(CheminsMetrologo.Configuration, NOM_FICHIER_CONFIG),
+                        NOM_FICHIER_CONFIG);
                     if (File.Exists(cheminConf))
                     {
                         string contenu = File.ReadAllText(cheminConf).Trim();
@@ -94,11 +94,10 @@ namespace Metrologo.Services.Journal
         /// </summary>
         public static void DefinirDossierArchives(string chemin)
         {
-            string dossier = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Metrologo");
-            Directory.CreateDirectory(dossier);
-            File.WriteAllText(Path.Combine(dossier, NOM_FICHIER_CONFIG), chemin?.Trim() ?? "");
+            Directory.CreateDirectory(CheminsMetrologo.Configuration);
+            File.WriteAllText(
+                Path.Combine(CheminsMetrologo.Configuration, NOM_FICHIER_CONFIG),
+                chemin?.Trim() ?? "");
         }
 
         // -------------------------------------------------------------------------

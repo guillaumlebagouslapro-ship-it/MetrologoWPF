@@ -1,0 +1,257 @@
+<ui:FluentWindow x:Class="Metrologo.Views.AideSaisieIncertitudeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Aide : saisie des coefficients d'incertitude"
+        Height="780" Width="900"
+        WindowStartupLocation="CenterOwner"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True">
+
+    <ui:FluentWindow.Resources>
+        <Style x:Key="ParaStyle" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,8"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style x:Key="TitreSection" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{StaticResource AsertiNavyBrush}"/>
+            <Setter Property="Margin" Value="0,16,0,8"/>
+        </Style>
+        <Style x:Key="ExempleStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FFF1F5F9"/>
+            <Setter Property="BorderBrush" Value="#FFCBD5E1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="Margin" Value="0,4,0,12"/>
+        </Style>
+        <Style x:Key="ExempleText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="BadOk" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Aide : saisie des coefficients d'incertitude"/>
+
+        <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="20,16,20,8">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="{StaticResource AsertiNavyDarkColor}" Offset="0"/>
+                    <GradientStop Color="{StaticResource AsertiNavyColor}" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <StackPanel>
+                <TextBlock Text="GUIDE DE SAISIE" FontSize="11" FontWeight="Bold" Margin="0,0,0,4">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush Color="{StaticResource AsertiOrangeLightColor}"/>
+                    </TextBlock.Foreground>
+                </TextBlock>
+                <TextBlock Text="Comment saisir les coefficients A et B" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                <TextBlock FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush Color="White" Opacity="0.78"/>
+                    </TextBlock.Foreground>
+                    <Run Text="Les coefficients d'incertitude se saisissent en notation scientifique. Cette aide explique comment écrire les puissances de 10, le signe de l'exposant, et donne des exemples concrets pour les coefficients A (relatif) et B (absolu)."/>
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="20,8,20,16">
+            <StackPanel>
+
+                <!-- Notation scientifique -->
+                <TextBlock Text="1. Notation scientifique : la lettre E remplace × 10^" Style="{StaticResource TitreSection}" Margin="0,0,0,8"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run Text="En métrologie, les coefficients d'incertitude sont souvent très petits (de l'ordre de 10⁻¹¹). On les écrit en "/>
+                    <Run FontWeight="Bold" Text="notation scientifique"/>
+                    <Run Text=" en remplaçant « × 10 puissance » par la lettre "/>
+                    <Run FontWeight="Bold" FontFamily="Cascadia Mono, Consolas" Foreground="{StaticResource AsertiOrangeBrush}" Text="E"/>
+                    <Run Text=" (majuscule ou minuscule)."/>
+                </TextBlock>
+
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="Notation mathématique  →  Ce qu'on tape dans la case"/>
+                        <LineBreak/>
+                        <LineBreak/>
+                        <Run Text="    10⁵                  →  "/><Run FontWeight="Bold" Text="1E5"/><Run Text="     (ou 1E+5, ou 100000)"/>
+                        <LineBreak/>
+                        <Run Text="    2,2 × 10⁻⁶           →  "/><Run FontWeight="Bold" Text="2.2E-6"/><Run Text="    (= 0,0000022)"/>
+                        <LineBreak/>
+                        <Run Text="    1,10 × 10⁻¹¹         →  "/><Run FontWeight="Bold" Text="1.10E-11"/><Run Text="  (= 0,0000000000110)"/>
+                        <LineBreak/>
+                        <Run Text="    3 × 10⁻³             →  "/><Run FontWeight="Bold" Text="3E-3"/><Run Text="      (= 0,003)"/>
+                        <LineBreak/>
+                        <Run Text="    10⁰ = 1              →  "/><Run FontWeight="Bold" Text="1"/><Run Text="         (notation classique)"/>
+                    </TextBlock>
+                </Border>
+
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run Text="Le "/>
+                    <Run FontWeight="Bold" Text="signe de l'exposant"/>
+                    <Run Text=" est crucial : "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="E-11"/>
+                    <Run Text=" = très petit nombre (1/100 000 000 000), tandis que "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="E+11"/>
+                    <Run Text=" = très grand nombre (100 milliards). Si tu oublies le signe, le E est interprété comme +."/>
+                </TextBlock>
+
+                <!-- Séparateur décimal -->
+                <TextBlock Text="2. Séparateur décimal : point ou virgule" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run Text="Tu peux saisir indifféremment "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="2.2E-6"/>
+                    <Run Text=" ou "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="2,2E-6"/>
+                    <Run Text=". L'app convertit automatiquement les virgules en points avant le parsing. Pas d'espace dans le nombre."/>
+                </TextBlock>
+
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Foreground="#FF15803D" FontWeight="Bold" Text="✓ Accepté :"/>
+                        <Run Text="  1.10E-11    1,10E-11    1.10e-11    0.0000000000110"/>
+                        <LineBreak/>
+                        <Run Foreground="#FFB91C1C" FontWeight="Bold" Text="✗ Rejeté :"/>
+                        <Run Text="   1.10 E-11   1,10 × 10^-11   1·10⁻¹¹   1,10×10E-11"/>
+                    </TextBlock>
+                </Border>
+
+                <!-- Coeff A -->
+                <TextBlock Text="3. Coefficient A (incertitude relative)" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run Text="Le coefficient "/>
+                    <Run FontWeight="Bold" Foreground="#FF4338CA" Text="A"/>
+                    <Run Text=" est l'incertitude "/>
+                    <Run FontWeight="Bold" Text="relative"/>
+                    <Run Text=" — sans dimension. Il représente la part de l'incertitude qui croît proportionnellement à la fréquence mesurée. Dans Excel : zone "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="ZNCoeffA"/>
+                    <Run Text="."/>
+                </TextBlock>
+
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="Ordre de grandeur typique : "/><Run FontWeight="Bold" Text="1E-11 à 1E-9"/>
+                        <LineBreak/>
+                        <LineBreak/>
+                        <Run Text="Compteur HF stable (ex. MF51901A, gate 100 s)  →  "/><Run FontWeight="Bold" Text="1.10E-11"/>
+                        <LineBreak/>
+                        <Run Text="Compteur moins précis (gate 1 s)              →  "/><Run FontWeight="Bold" Text="1.10E-10"/>
+                        <LineBreak/>
+                        <Run Text="Plage où A ne s'applique pas (HF directe)     →  "/><Run FontWeight="Bold" Text="0"/>
+                        <LineBreak/>
+                        <LineBreak/>
+                        <Run Foreground="#FF15803D" Text="Pourquoi si petit ? Un coefficient relatif de 1.10E-11 signifie 11 ppt"/>
+                        <LineBreak/>
+                        <Run Foreground="#FF15803D" Text="(11 parties par mille milliards), ce qui correspond à la stabilité"/>
+                        <LineBreak/>
+                        <Run Foreground="#FF15803D" Text="d'une référence atomique sur quelques secondes."/>
+                    </TextBlock>
+                </Border>
+
+                <!-- Coeff B -->
+                <TextBlock Text="4. Coefficient B (incertitude absolue, en Hz)" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run Text="Le coefficient "/>
+                    <Run FontWeight="Bold" Foreground="#FF991B1B" Text="B"/>
+                    <Run Text=" est l'incertitude "/>
+                    <Run FontWeight="Bold" Text="absolue"/>
+                    <Run Text=" — exprimée en "/>
+                    <Run FontWeight="Bold" Text="Hz"/>
+                    <Run Text=". Indépendante de la fréquence mesurée. Inclut typiquement la résolution de l'instrument et les bruits indépendants. Dans Excel : zone "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="ZNCoeffB"/>
+                    <Run Text="."/>
+                </TextBlock>
+
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="Ordre de grandeur typique : "/><Run FontWeight="Bold" Text="1E-6 à 1E-4 Hz"/>
+                        <LineBreak/>
+                        <LineBreak/>
+                        <Run Text="Gate 100 s (résolution = 0,01 Hz / 100 s)     →  "/><Run FontWeight="Bold" Text="2.2E-6"/>
+                        <LineBreak/>
+                        <Run Text="Gate 50 s                                     →  "/><Run FontWeight="Bold" Text="2.6E-6"/>
+                        <LineBreak/>
+                        <Run Text="Gate 1 s (résolution moins fine)              →  "/><Run FontWeight="Bold" Text="1.7E-5"/>
+                        <LineBreak/>
+                        <Run Text="Plage où B ne s'applique pas (HF haute)       →  "/><Run FontWeight="Bold" Text="0"/>
+                    </TextBlock>
+                </Border>
+
+                <!-- Comment combiner -->
+                <TextBlock Text="5. Comment Excel combine A et B" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run Text="L'incertitude globale dans le rapport se calcule (formule simplifiée) :"/>
+                </TextBlock>
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}" HorizontalAlignment="Center">
+                        <Run FontSize="14" FontWeight="Bold"
+                             Text="U(f)  =  A × f  +  B"/>
+                        <LineBreak/>
+                        <LineBreak/>
+                        <Run Text="(A multiplie la fréquence f, B s'ajoute en valeur absolue)"/>
+                    </TextBlock>
+                </Border>
+
+                <!-- Cas particuliers -->
+                <TextBlock Text="6. Quand mettre 0 ?" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run Text="Mets "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="Bold" Text="0"/>
+                    <Run Text=" (zéro) pour désactiver une contribution dans une plage donnée. C'est fréquent dans les tableaux C.E.A.O. : sur les très basses fréquences seul B compte (A = 0), sur les très hautes seul A compte (B = 0). Le "/>
+                    <Run FontWeight="Bold" Text="0 simple suffit"/>
+                    <Run Text=", inutile d'écrire "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" Text="0E+00"/>
+                    <Run Text=" — mais l'app accepte les deux."/>
+                </TextBlock>
+
+                <Border Style="{StaticResource ExempleStyle}">
+                    <TextBlock Style="{StaticResource ExempleText}">
+                        <Run Text="Exemple module MF51901A, fonction Freq, gate 100 s :"/>
+                        <LineBreak/>
+                        <LineBreak/>
+                        <Run Text="Plage              "/><Run FontWeight="Bold" Text="A"/><Run Text="          "/><Run FontWeight="Bold" Text="B"/>
+                        <LineBreak/>
+                        <Run Text="0 → 10 kHz         "/><Run FontWeight="Bold" Text="0"/><Run Text="          "/><Run FontWeight="Bold" Text="2.2E-6"/>
+                        <LineBreak/>
+                        <Run Text="10 kHz → 1 MHz     "/><Run FontWeight="Bold" Text="1.10E-11"/><Run Text="    "/><Run FontWeight="Bold" Text="2.2E-6"/>
+                        <LineBreak/>
+                        <Run Text="1 MHz → 1 GHz      "/><Run FontWeight="Bold" Text="1.10E-11"/><Run Text="    "/><Run FontWeight="Bold" Text="0"/>
+                    </TextBlock>
+                </Border>
+
+                <!-- Validation -->
+                <TextBlock Text="7. Vérification rapide après saisie" Style="{StaticResource TitreSection}"/>
+                <TextBlock Style="{StaticResource ParaStyle}">
+                    <Run Text="Après avoir tapé une valeur, le tableau l'affiche reformatée en "/>
+                    <Run FontFamily="Cascadia Mono, Consolas" FontWeight="SemiBold" Text="0,00E+00"/>
+                    <Run Text=" (2 décimales). Si le format est différent ou si la cellule reste rouge/vide, c'est qu'un caractère est invalide — relis attentivement (un espace, un caractère unicode, etc.)."/>
+                </TextBlock>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="3" Background="{DynamicResource LayerFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0" Padding="20,12">
+            <Button Content="Fermer" Click="OnFermer"
+                    HorizontalAlignment="Right" Padding="20,8" MinWidth="100"/>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

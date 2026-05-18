@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Ajouter un temps de mesure"
-        Height="340" Width="450"
+        Height="430" Width="450"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
         ResizeMode="NoResize"
@@ -18,7 +18,7 @@
         <ui:TitleBar Grid.Row="0" Title="Nouveau temps de mesure"/>
 
         <StackPanel Grid.Row="1" Margin="24,16,24,0">
-            <TextBlock Text="L'app crée automatiquement les 3 lignes correspondant aux 3 plages de fréquence (basse / moyenne / haute). Tu n'auras plus qu'à remplir les bornes exactes et les incertitudes (relative + absolue) dans le tableau."
+            <TextBlock Text="Choisis le nombre de plages de fréquence à créer. Tu rempliras ensuite les bornes exactes et les incertitudes (relative + absolue) dans le tableau."
                        TextWrapping="Wrap" FontSize="12" Margin="0,0,0,16" Opacity="0.85"/>
 
             <TextBlock Text="Fonction" FontWeight="SemiBold" Margin="0,0,0,4"/>
@@ -29,20 +29,33 @@
                 <ComboBoxItem Content="Stab"/>
                 <ComboBoxItem Content="Interv"/>
                 <ComboBoxItem Content="TachyC"/>
+                <ComboBoxItem Content="TachyO"/>
                 <ComboBoxItem Content="Strobo"/>
             </ComboBox>
 
-            <TextBlock Text="Temps de mesure (s)" FontWeight="SemiBold" Margin="0,0,0,4"/>
-            <ComboBox x:Name="CbTemps" IsEditable="True"
-                      ToolTip="Liste filtrée : seuls les temps NON déjà présents dans le tableau pour cette fonction sont proposés."/>
-            <TextBlock Text="Astuce : tu peux taper un temps non standard (ex. 0.3) si besoin."
-                       FontSize="10" Margin="0,4,0,0"
-                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+            <StackPanel x:Name="PanelTemps">
+                <TextBlock Text="Temps de mesure (s)" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <ComboBox x:Name="CbTemps" IsEditable="True"
+                          ToolTip="Liste filtrée : seuls les temps NON déjà présents dans le tableau pour cette fonction sont proposés."/>
+                <TextBlock Text="Astuce : tu peux taper un temps non standard (ex. 0.3) si besoin."
+                           FontSize="10" Margin="0,4,0,4"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+            </StackPanel>
+
+            <TextBlock Text="Nombre de plages" FontWeight="SemiBold" Margin="0,12,0,4"/>
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="RbUnePlage" Content="1 plage"
+                             ToolTip="Une seule ligne — typique tachymètre/stroboscope."
+                             Margin="0,0,16,0"/>
+                <RadioButton x:Name="RbTroisPlages" Content="3 plages (basse / moyenne / haute)"
+                             ToolTip="Trois lignes pré-remplies suivant le format C.E.A.O."
+                             IsChecked="True"/>
+            </StackPanel>
         </StackPanel>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,24,16">
             <ui:Button Appearance="Secondary" Content="Annuler" Click="OnAnnuler" Margin="0,0,8,0"/>
-            <ui:Button Appearance="Primary" Content="Créer les 3 plages" Click="OnValider"/>
+            <ui:Button x:Name="BtnCreer" Appearance="Primary" Content="Créer les 3 plages" Click="OnValider"/>
         </StackPanel>
     </Grid>
 </ui:FluentWindow>

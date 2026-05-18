@@ -282,11 +282,15 @@ namespace Metrologo.Services
                     bool fetchBloquant = !string.IsNullOrWhiteSpace(appareil.CommandeFetchFresh);
                     string? cmdFetchUsed = fetchBloquant ? appareil.CommandeFetchFresh : cmdFetch;
 
-                    // Types qui font des séries de mesures (≠ Interval/Tachy/Strobo en 1 shot).
-                    bool typeFaitSeries = mesure.TypeMesure == TypeMesure.Stabilite
-                        || mesure.TypeMesure == TypeMesure.Frequence
-                        || mesure.TypeMesure == TypeMesure.FreqAvantInterv
-                        || mesure.TypeMesure == TypeMesure.FreqFinale;
+                    // Toute mesure avec NbMesures > 1 = série exploitable par streaming/mode
+                    // rapide. Cas spécial NbMesures == 1 : streaming/rapide n'apportent rien
+                    // (overhead bulk init pour 1 mesure), on garde le path :READ? classique.
+                    //
+                    // Les sécurités cumulatives en dessous (CommandeBulkInit/FetchFresh non
+                    // vides côté catalogue, gateSecondes ≥ 1 s, bulkDejaEchoue) font de toute
+                    // façon le tri : un instrument qui ne supporte pas le streaming pour un
+                    // type donné n'engage pas le mode, on retombe sur le fallback classique.
+                    bool typeFaitSeries = mesure.NbMesures > 1;
 
                     // Mode streaming : acquisition gap-free + lecture une-par-une via
                     // CommandeFetchFresh (typ. ":DATA:REM? 1,WAIT" sur 53230A). Compatible
@@ -307,10 +311,9 @@ namespace Metrologo.Services
                         && !string.IsNullOrWhiteSpace(appareil.CommandeMesureMultiple)
                         && mesure.TypeMesure == TypeMesure.Stabilite
                         && !bulkDejaEchoue;
-                    // Mode rapide :FETCh? : applicable à TOUS les types de mesure qui font des séries
-                    // (Fréquence, Stabilité, FreqAvant/Final). Compatible avec l'écriture live Excel.
-                    // Gain ~3× vs :READ? classique sur le 53131A. Désactivé pour Interval (1 mesure)
-                    // et les types tachy/strobo (chemins de mesure différents).
+                    // Mode rapide :FETCh? : applicable à tout type avec NbMesures > 1 dès lors
+                    // que l'appareil l'autorise via ModeRapideActif du catalogue. Compatible
+                    // avec l'écriture live Excel. Gain ~3× vs :READ? classique sur le 53131A.
                     bool modeRapide = !modeBulk
                         && !modeStreamingPossible
                         && !string.IsNullOrEmpty(cmdFetchUsed)
