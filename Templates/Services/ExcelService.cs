@@ -401,6 +401,19 @@ namespace Metrologo.Services
                         _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}{row}").FormulaA1 = $"=E{row}*60";
                 }
 
+                // Col A « N°Module » : on inscrit le numéro du module d'incertitude
+                // sélectionné sur CHAQUE ligne de mesure (de la 1ère à la N-ième). Permet
+                // au lecteur de retrouver d'un coup d'œil quel module a alimenté les
+                // coefficients du rapport, sans avoir à scroller jusqu'au bloc stats.
+                if (!string.IsNullOrWhiteSpace(_numModuleIncertitudeCourant))
+                {
+                    for (int i = 0; i < nbMesures; i++)
+                    {
+                        int row = LIGNE_DEBUT_MESURES + i;
+                        _feuilleMesure.Cell($"A{row}").Value = _numModuleIncertitudeCourant;
+                    }
+                }
+
                 // Restaure les formules métier historiques (héritage Stab1.xls) qui calculent
                 // les statistiques à partir des plages de mesures. Faites ici car ModFeuille
                 // du template Stab n'a aucune de ces formules (elles n'existaient que sur
@@ -522,10 +535,16 @@ namespace Metrologo.Services
                     double moyenneBrute = resultats.Average();
                     double moyenneReelle = ConvertirEnFreqReelle(moyenneBrute);
 
+                    // Pour les types en tr/min (tachy contact/optique + strobo), les bornes
+                    // du CSV sont saisies en tr/min côté admin → on convertit la moyenne
+                    // Hz × 60 avant le lookup. Les autres types restent en Hz.
+                    bool uniteRpm = EnTetesMesureHelper.EstUniteRpm(_typeMesureCourant);
+                    double valeurLookup = uniteRpm ? moyenneReelle * 60.0 : moyenneReelle;
+
                     string fonction = IncertitudeFonctionHelper.NomFonction(_typeMesureCourant);
                     var (coeffA, coeffB) = ModulesIncertitudeService.ObtenirCoefficients(
                         _numModuleIncertitudeCourant, _typeMesureCourant, fonction,
-                        _tempsGateSecondesCourant, moyenneReelle);
+                        _tempsGateSecondesCourant, valeurLookup);
 
                     if (coeffA > 0 || coeffB > 0)
                     {
@@ -538,23 +557,25 @@ namespace Metrologo.Services
                             SetNamed("ZNCoeffD", coeffB);
                             JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_RESOLUS_TACHY",
                                 $"Module {_numModuleIncertitudeCourant} : CoeffC={coeffA:G6} CoeffD={coeffB:G6} "
-                              + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz) "
-                              + "[A/B du CSV → C/D du template tachy]");
+                              + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, valeurLookup={valeurLookup:G6} tr/min) "
+                              + "[A/B du CSV → C/D du template tachy, lookup en tr/min]");
                         }
                         else
                         {
                             SetNamed("ZNCoeffA", coeffA);
                             SetNamed("ZNCoeffB", coeffB);
+                            string uniteLookup = uniteRpm ? "tr/min" : "Hz";
                             JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_RESOLUS",
                                 $"Module {_numModuleIncertitudeCourant} : CoeffA={coeffA:G6} CoeffB={coeffB:G6} "
-                              + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz)");
+                              + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, valeurLookup={valeurLookup:G6} {uniteLookup})");
                         }
                     }
                     else
                     {
+                        string uniteLookup = uniteRpm ? "tr/min" : "Hz";
                         JournalLog.Warn(CategorieLog.Mesure, "INCERT_NO_MATCH",
                             $"Module {_numModuleIncertitudeCourant} : aucune ligne ne couvre "
-                          + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz) "
+                          + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, valeurLookup={valeurLookup:G6} {uniteLookup}) "
                           + "— coefficients par défaut utilisés.");
                     }
                 }

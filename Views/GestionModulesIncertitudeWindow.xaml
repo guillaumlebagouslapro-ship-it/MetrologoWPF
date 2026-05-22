@@ -6,7 +6,8 @@
         Height="780" Width="1280"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
 
     <ui:FluentWindow.Resources>
         <!-- Style monospace pour cellules numériques -->
@@ -108,7 +109,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Modules d'incertitude"/>
+        <ui:TitleBar Grid.Row="0" Title="Modules d'incertitude">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <Border Grid.Row="1" CornerRadius="12" Padding="22,16" Margin="20,16,20,12">
             <Border.Background>

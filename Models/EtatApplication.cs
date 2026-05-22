@@ -48,8 +48,8 @@ namespace Metrologo.Models
                 AssurerChargement();
                 return _rubidiumActif == null
                     ? "Rubidium : non défini"
-                    : $"Rubidium : {_rubidiumActif.Designation} — "
-                        + (_rubidiumActif.AvecGPS ? "raccord GPS" : "raccord Allouis");
+                    : $"Rubidium : {_rubidiumActif.Designation} "
+                        + (_rubidiumActif.AvecGPS ? "raccord GPS" : "");
             }
         }
 

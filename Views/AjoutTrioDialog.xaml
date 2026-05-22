@@ -7,7 +7,8 @@
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
         ResizeMode="NoResize"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -15,7 +16,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Nouveau temps de mesure"/>
+        <ui:TitleBar Grid.Row="0" Title="Nouveau temps de mesure">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <StackPanel Grid.Row="1" Margin="24,16,24,0">
             <TextBlock Text="Choisis le nombre de plages de fréquence à créer. Tu rempliras ensuite les bornes exactes et les incertitudes (relative + absolue) dans le tableau."

@@ -6,7 +6,8 @@
         Height="640" Width="900"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -18,7 +19,11 @@
         </Grid.RowDefinitions>
 
         <!-- Titre bar -->
-        <ui:TitleBar Grid.Row="0" Title="Diagnostic GPIB — Scanner le bus IEEE-488"/>
+        <ui:TitleBar Grid.Row="0" Title="Diagnostic GPIB — Scanner le bus IEEE-488">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <!-- Bandeau d'intro -->
         <Border Grid.Row="1"

@@ -1,6 +1,7 @@
 using Metrologo.Services.Journal;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -31,13 +32,44 @@ namespace Metrologo.Services
         private dynamic? _feuilleMesure;
         private string _cheminClasseurActif = string.Empty;
 
+        /// <summary>
+        /// PID du process EXCEL.EXE qu'on a démarré, pour pouvoir le tuer en urgence
+        /// si les COM calls hangent (fermeture manuelle Excel par l'utilisateur pendant
+        /// une écriture en cours = appels RPC bloqués jusqu'à timeout système ~60 s).
+        /// 0 = pas démarré.
+        /// </summary>
+        private int _excelPid;
+
         private readonly object _sync = new();
         private bool _disposed;
+
+        // P/Invoke pour récupérer le PID du process Excel à partir de son handle.
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
         private ExcelInteropHost() { }
 
         /// <summary>Vrai si Excel est démarré et prêt à ouvrir un classeur.</summary>
         public bool EstDemarre => _excel != null;
+
+        /// <summary>
+        /// Vérifie au niveau OS si le process Excel (PID enregistré) est encore vivant.
+        /// Ne prend PAS le lock <c>_sync</c> — peut être appelé en boucle par un watchdog
+        /// sans bloquer ni être bloqué par les COM calls en cours. Retourne false aussi
+        /// si le PID n'est pas connu (Excel jamais démarré).
+        /// </summary>
+        public bool EstProcessExcelEnVie()
+        {
+            int pid = _excelPid;
+            if (pid <= 0) return false;
+            try
+            {
+                var p = Process.GetProcessById(pid);
+                return !p.HasExited;
+            }
+            catch (ArgumentException) { return false; }   // process introuvable = mort
+            catch { return true; }   // erreur transitoire, on suppose vivant (best-effort)
+        }
 
         /// <summary>
         /// Démarre une instance Excel cachée. À appeler au lancement de l'application pour
@@ -67,8 +99,22 @@ namespace Metrologo.Services
                     _excel.ScreenUpdating = false;
                     _excel.AskToUpdateLinks = false;
 
+                    // Récupère le PID du process Excel via son HWND principal — utilisé
+                    // par TuerProcessExcelAsync() pour libérer en urgence des COM calls
+                    // bloqués si l'utilisateur ferme Excel manuellement pendant une mesure.
+                    try
+                    {
+                        IntPtr hwnd = new IntPtr((int)_excel.Hwnd);
+                        if (hwnd != IntPtr.Zero)
+                        {
+                            GetWindowThreadProcessId(hwnd, out uint pid);
+                            _excelPid = (int)pid;
+                        }
+                    }
+                    catch { /* best-effort, on saura par le journal si la mesure freeze */ }
+
                     JournalLog.Info(CategorieLog.Excel, "EXCEL_HOTE_DEMARRE",
-                        "Instance Excel cachée prête en arrière-plan.");
+                        $"Instance Excel cachée prête en arrière-plan (PID={_excelPid}).");
                 }
                 catch (Exception ex)
                 {
@@ -281,6 +327,65 @@ namespace Metrologo.Services
         });
 
         /// <summary>
+        /// SOLUTION NUCLÉAIRE : tue le process EXCEL.EXE par son PID, sans passer par
+        /// <c>_sync</c> ni par aucun appel COM. À utiliser uniquement en cas d'urgence
+        /// quand un appel COM en cours est bloqué (typiquement : l'utilisateur a fermé
+        /// la fenêtre Excel pendant qu'on écrivait une cellule → RPC en attente d'une
+        /// réponse qui ne viendra jamais → timeout système ~60 s).
+        /// <para/>
+        /// Effets :
+        ///   • Tous les appels COM en cours sur ce process lèvent immédiatement
+        ///     <c>COMException 0x800706BA</c> (RPC server unavailable), les locks
+        ///     <c>_sync</c> se libèrent, la mesure peut se terminer proprement.
+        ///   • L'instance Excel partagée doit être recréée avant la prochaine mesure
+        ///     (cf. <see cref="EstInstanceVivante"/> + <see cref="RedemarrerInstanceInterne"/>).
+        /// <para/>
+        /// Non bloquant : exécuté en Task.Run, ne nécessite pas de réponse.
+        /// </summary>
+        public Task TuerProcessExcelAsync() => Task.Run(() =>
+        {
+            // VOLONTAIREMENT pas de lock(_sync) ici — l'objectif est précisément de
+            // débloquer les threads qui tiennent ce lock via COM hang. Si on prenait
+            // le lock, on serait nous-même bloqué et on n'aiderait personne.
+            int pid = _excelPid;
+            if (pid <= 0)
+            {
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_KILL_PID_INCONNU",
+                    "Tentative de tuer Excel mais PID inconnu — process probablement déjà mort.");
+                return;
+            }
+            try
+            {
+                var proc = Process.GetProcessById(pid);
+                proc.Kill(entireProcessTree: true);
+                proc.WaitForExit(2000);
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_KILL_OK",
+                    $"Process Excel (PID={pid}) tué en urgence pour libérer les COM calls bloqués.");
+            }
+            catch (ArgumentException)
+            {
+                // Process déjà mort → c'est OK, c'est ce qu'on voulait.
+                JournalLog.Info(CategorieLog.Excel, "EXCEL_KILL_DEJA_MORT",
+                    $"Process Excel (PID={pid}) déjà terminé.");
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_KILL_ERREUR",
+                    $"Kill du process Excel (PID={pid}) échoué : {ex.Message}");
+            }
+            finally
+            {
+                // Marque l'instance comme morte. Les locks tenus par les threads bloqués
+                // vont se libérer dès que leur appel COM lève (immédiat après le kill).
+                _excelPid = 0;
+                _excel = null;
+                _classeurActif = null;
+                _feuilleMesure = null;
+                _cheminClasseurActif = string.Empty;
+            }
+        });
+
+        /// <summary>
         /// Ping l'instance Excel pour vérifier qu'elle répond encore au COM. Utilisé avant
         /// chaque ouverture de classeur pour éviter le RPC disconnect (0x800706BA) si
         /// l'utilisateur a fermé la fenêtre Excel manuellement ou si le process a crashé.
@@ -324,12 +429,26 @@ namespace Metrologo.Services
                 _excel.DisplayAlerts = false;
                 _excel.ScreenUpdating = false;
                 _excel.AskToUpdateLinks = false;
+
+                // Recapture le PID du NOUVEAU process Excel — sinon TuerProcessExcelAsync
+                // taperait sur un PID obsolète et ne servirait à rien.
+                try
+                {
+                    IntPtr hwnd = new IntPtr((int)_excel.Hwnd);
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        GetWindowThreadProcessId(hwnd, out uint pid);
+                        _excelPid = (int)pid;
+                    }
+                }
+                catch { _excelPid = 0; }
             }
             catch (Exception ex)
             {
                 JournalLog.Warn(CategorieLog.Excel, "EXCEL_HOTE_REDEMARRAGE_KO",
                     $"Redémarrage Excel échoué : {ex.Message}");
                 _excel = null;
+                _excelPid = 0;
             }
         }
 

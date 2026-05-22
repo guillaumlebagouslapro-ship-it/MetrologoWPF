@@ -6,7 +6,8 @@
         Height="720" Width="1040"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
 
     <ui:FluentWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
@@ -21,7 +22,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Gérer les appareils du catalogue"/>
+        <ui:TitleBar Grid.Row="0" Title="Gérer les appareils du catalogue">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <!-- Bandeau intro -->
         <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="20,16,20,12">

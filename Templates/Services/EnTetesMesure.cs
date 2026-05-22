@@ -116,6 +116,18 @@ namespace Metrologo.Services
         public static bool EstTachymetre(TypeMesure t) =>
             t == TypeMesure.TachyContact || t == TypeMesure.TachyOptique;
 
+        /// <summary>
+        /// Vrai pour les types de mesure dont l'unité opérateur est le tr/min (RPM).
+        /// Concerne les tachymètres contact/optique et le stroboscope. Pour ces types,
+        /// les bornes BorneBasse/BorneHaute saisies dans les CSV de modules d'incertitude
+        /// sont exprimées en tr/min — il faut donc multiplier la fréquence moyenne (Hz)
+        /// par 60 avant le lookup pour matcher la bonne ligne.
+        /// </summary>
+        public static bool EstUniteRpm(TypeMesure t) =>
+            t == TypeMesure.TachyContact
+            || t == TypeMesure.TachyOptique
+            || t == TypeMesure.Stroboscope;
+
         // Gate time helpers (index → libellé et secondes). L'échelle doit rester alignée avec la
         // combo GateTimes de ConfigurationViewModel/SelectionGateViewModel et avec CatalogueAdapter.
         private static readonly string[] _libellesGate =

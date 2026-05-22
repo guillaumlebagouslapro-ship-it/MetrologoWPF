@@ -236,9 +236,6 @@
                     </Border>
                     <TextBlock Text="Utilisateurs" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Comptes, rôles, permissions"
-                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </Button>
 
@@ -256,9 +253,6 @@
                     </Border>
                     <TextBlock Text="Incertitudes" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Coefficients A/B par module, plage, temps de mesure"
-                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </Button>
 
@@ -276,9 +270,6 @@
                     </Border>
                     <TextBlock Text="Journal &amp; maintenance" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Logs, audit, sauvegarde"
-                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </Button>
 
@@ -296,9 +287,6 @@
                     </Border>
                     <TextBlock Text="Gérer les appareils" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Catalogue des modèles enregistrés"
-                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </Button>
 
@@ -316,9 +304,6 @@
                     </Border>
                     <TextBlock Text="Chemins de stockage" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Configurer où sont stockés les fichiers (local / réseau)"
-                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </Button>
         </Grid>

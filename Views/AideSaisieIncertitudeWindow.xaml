@@ -6,7 +6,8 @@
         Height="780" Width="900"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
 
     <ui:FluentWindow.Resources>
         <Style x:Key="ParaStyle" TargetType="TextBlock">
@@ -48,7 +49,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Aide : saisie des coefficients d'incertitude"/>
+        <ui:TitleBar Grid.Row="0" Title="Aide : saisie des coefficients d'incertitude">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="20,16,20,8">
             <Border.Background>

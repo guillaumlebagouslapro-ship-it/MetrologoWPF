@@ -27,6 +27,14 @@ namespace Metrologo.ViewModels
 
         private CancellationTokenSource? _cts;
 
+        /// <summary>
+        /// Token séparé pour signaler un ABANDON forcé de la tâche de mesure : utilisé
+        /// quand l'utilisateur appuie sur STOP mais que la tâche est bloquée par un
+        /// COM Excel mort (RPC qui prend ~60 s à se réveiller). Permet de rendre la main
+        /// à l'UI immédiatement même si la tâche orchestration ne réagit pas.
+        /// </summary>
+        private CancellationTokenSource? _abandonCts;
+
         [ObservableProperty] private bool _estSurBaie = true;
         [ObservableProperty] private string _informationsGenerales = "Prêt. En attente d'exécution...";
         [ObservableProperty] private string _rubidiumActifTexte = EtatApplication.RubidiumActifTexte;
@@ -305,6 +313,46 @@ namespace Metrologo.ViewModels
                 return;
             }
 
+            // 2bis) Module d'incertitude obligatoire — sans module sélectionné, les
+            // coefficients A/B (et C/D pour tachy) restent à des valeurs par défaut
+            // hardcoded, ce qui invalide le calcul d'incertitude global du rapport.
+            // On refuse le lancement et on rouvre la fenêtre Configuration pour que
+            // l'utilisateur fasse son choix.
+            if (string.IsNullOrWhiteSpace(MesureConfig.NumModuleIncertitude))
+            {
+                Log("✖ Mesure impossible : aucun module d'incertitude sélectionné.");
+                Journal.Warn(CategorieLog.Mesure, "MESURE_BLOQUEE_MODULE",
+                    "Tentative de mesure sans module d'incertitude sélectionné.");
+                MessageBox.Show(
+                    "Aucun module d'incertitude n'est sélectionné dans la configuration.\n\n"
+                    + "Choisis-en un dans le menu déroulant « MODULE D'INCERTITUDE » avant de relancer.\n\n"
+                    + "Si la liste est vide, va dans Admin → Modules d'incertitude pour en créer un "
+                    + "pour ce type de mesure.",
+                    "Module requis", MessageBoxButton.OK, MessageBoxImage.Warning);
+                await OuvrirConfigurationAsync();
+                return;
+            }
+
+            // 2ter) En tachymétrie, le module Fréquence auxiliaire (pour ZNCoeffA/B en Hz)
+            // est également obligatoire — il caractérise le fréquencemètre support, donc
+            // sans lui le rapport est incomplet côté Hz.
+            if (EnTetesMesureHelper.EstTachymetre(MesureConfig.TypeMesure)
+                && string.IsNullOrWhiteSpace(MesureConfig.NumModuleIncertitudeFreq))
+            {
+                Log("✖ Mesure tachy impossible : module Fréquence auxiliaire non sélectionné.");
+                Journal.Warn(CategorieLog.Mesure, "MESURE_BLOQUEE_MODULE_FREQ",
+                    "Tentative de mesure tachy sans module Fréquence auxiliaire.");
+                MessageBox.Show(
+                    "Pour une mesure tachymétrique, il faut sélectionner DEUX modules :\n"
+                    + "  • Module d'incertitude (tachy) — pour les Coeff C/D côté RPM\n"
+                    + "  • Module Fréquence (Hz) — pour les Coeff A/B côté Hz (fréquencemètre)\n\n"
+                    + "Le second est manquant. Va dans la fenêtre Configuration et choisis "
+                    + "le module Fréquence correspondant au compteur utilisé.",
+                    "Module Fréquence requis", MessageBoxButton.OK, MessageBoxImage.Warning);
+                await OuvrirConfigurationAsync();
+                return;
+            }
+
             // 3) Gate — déjà sélectionné dans la fenêtre Configuration (MesureConfig.GateIndex).
             //    Pour les mesures de Stabilité, on ouvre la fenêtre dédiée pour que l'utilisateur
             //    choisisse les gates à balayer (1 ou plusieurs, via cases à cocher + presets).
@@ -409,7 +457,100 @@ namespace Metrologo.ViewModels
         private async Task LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
         {
             _cts = new CancellationTokenSource();
+            _abandonCts = new CancellationTokenSource();
             MesureEnCours = true;
+
+            // Affiche la fenêtre flottante « ARRÊTER LA MESURE » sur un THREAD UI
+            // SÉPARÉ (STA + Dispatcher.Run). Garantit que le clic/raccourci est traité
+            // instantanément même quand le thread principal est saturé par les Interop
+            // Excel COM. Le callback onStop marshale vers le Dispatcher principal pour
+            // exécuter la séquence d'arrêt (annulation CTS, abort GPIB, fermeture Excel).
+            StopMesureFloatingWindow? winStop = null;
+            Thread? threadStop = null;
+            var winReady = new System.Threading.ManualResetEventSlim(false);
+
+            try
+            {
+                threadStop = new Thread(() =>
+                {
+                    try
+                    {
+                        winStop = new StopMesureFloatingWindow();
+                        winStop.Configurer(() =>
+                        {
+                            // === ACTIONS VITALES EXÉCUTÉES DIRECTEMENT SUR CE THREAD ===
+                            // CRUCIAL : ne PAS marshaler ces appels vers le main dispatcher
+                            // car celui-ci est probablement bloqué par les COM Interop Excel
+                            // en cours (Workbooks.Open, Cell.Value2 = ..., etc.) — le
+                            // BeginInvoke ne s'exécuterait jamais.
+                            //   • CancellationTokenSource.Cancel() = thread-safe par design.
+                            //   • Orchestrator.AborterMesureEnCours() envoie un Device Clear
+                            //     GPIB qui utilise son propre driver IEEE indépendant.
+                            //   • TuerProcessExcelAsync() = nucléaire : kill EXCEL.EXE par PID
+                            //     SANS prendre le lock _sync → libère instantanément tous les
+                            //     COM calls bloqués (cas typique : utilisateur a fermé Excel
+                            //     manuellement pendant l'écriture d'une cellule, le RPC reste
+                            //     bloqué ~60 s sinon).
+                            try { _cts?.Cancel(); } catch { /* swallow */ }
+                            try { _orchestrator.AborterMesureEnCours(); }
+                            catch (Exception ex)
+                            {
+                                Journal.Warn(CategorieLog.Mesure, "MESURE_STOP_SDC_ERR",
+                                    $"Device Clear d'arrêt échoué : {ex.Message} — annulation continue malgré tout.");
+                            }
+                            // Tue Excel directement — pas de FermerClasseurActifAsync qui prendrait
+                            // le lock potentiellement bloqué. Le kill libère les COM hangs.
+                            try { _ = ExcelInteropHost.Instance.TuerProcessExcelAsync(); }
+                            catch { /* swallow */ }
+
+                            // SIGNAL D'ABANDON : déclenche Task.WhenAny dans LancerMesureAsync
+                            // pour que l'UI reprenne la main IMMÉDIATEMENT, sans attendre que
+                            // la tâche orchestration finisse (qui peut être bloquée 60 s par
+                            // un COM Excel mort). Critique pour ne pas avoir à relancer l'app.
+                            try { _abandonCts?.Cancel(); } catch { /* swallow */ }
+
+                            Journal.Warn(CategorieLog.Mesure, "MESURE_STOP_FLOATING",
+                                "Arrêt demandé via le bouton flottant (thread flottant indépendant).");
+
+                            // === Side-effects UI best-effort (peuvent rater si main thread bloqué) ===
+                            // BeginInvoke ne bloque pas — si le main dispatcher répond plus tard,
+                            // ces mises à jour s'afficheront ; sinon tant pis, l'essentiel est fait.
+                            try
+                            {
+                                Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                                {
+                                    ArretEnCours = true;
+                                    Log("⏹ Arrêt demandé via bouton flottant — annulation propagée.");
+                                }), System.Windows.Threading.DispatcherPriority.Send);
+                            }
+                            catch { /* swallow */ }
+                        });
+                        winStop.Closed += (_, _) =>
+                            System.Windows.Threading.Dispatcher.CurrentDispatcher
+                                .BeginInvokeShutdown(System.Windows.Threading.DispatcherPriority.Background);
+                        winStop.Show();
+                        winReady.Set();
+                        System.Windows.Threading.Dispatcher.Run();
+                    }
+                    catch (Exception ex)
+                    {
+                        Journal.Warn(CategorieLog.Systeme, "STOP_FLOATING_OPEN_ERR",
+                            $"Affichage bouton STOP flottant échoué : {ex.Message}");
+                        winReady.Set();
+                    }
+                });
+                threadStop.SetApartmentState(System.Threading.ApartmentState.STA);
+                threadStop.IsBackground = true;
+                threadStop.Start();
+                // Bloque max 1 s pour la création de la fenêtre — si plus, on continue,
+                // la mesure ne doit pas être pénalisée.
+                winReady.Wait(TimeSpan.FromSeconds(1));
+            }
+            catch (Exception ex)
+            {
+                Journal.Warn(CategorieLog.Systeme, "STOP_FLOATING_OPEN_ERR",
+                    $"Thread STOP flottant non démarré : {ex.Message}");
+            }
 
             // Ferme explicitement le classeur Excel ouvert par la mesure précédente
             // (relance mêmes paramètres). Sans ça, ClosedXML échoue à sauver dans le
@@ -456,8 +597,86 @@ namespace Metrologo.ViewModels
 
             try
             {
-                var result = await _orchestrator.ExecuterAsync(
+                // On lance la mesure mais on ne l'attend pas directement — on l'attend
+                // dans un Task.WhenAny avec :
+                //   - taskAbandon : signal manuel via le bouton STOP flottant
+                //   - taskWatchdog : surveillance auto qui détecte si Excel meurt
+                // Ainsi, si Excel est fermé brutalement (ou si l'utilisateur force STOP),
+                // l'UI reprend la main IMMÉDIATEMENT sans attendre que les COM hangs
+                // se résolvent (~60 s sinon).
+                var taskMesure = _orchestrator.ExecuterAsync(
                     config, rubi, fNominale, progress, _cts.Token);
+
+                var taskAbandon = Task.Run(async () =>
+                {
+                    try { await Task.Delay(Timeout.Infinite, _abandonCts!.Token); }
+                    catch (OperationCanceledException) { /* abandonné, c'est normal */ }
+                });
+
+                // Watchdog : poll Excel toutes les secondes. Si Excel meurt pendant la
+                // mesure (utilisateur a fermé la fenêtre Excel, crash, etc.), on annule
+                // tout automatiquement + on affiche un message d'erreur.
+                bool excelMortDetecte = false;
+                var taskWatchdogExcel = Task.Run(async () =>
+                {
+                    // Petit délai initial pour laisser le temps à Excel d'être démarré
+                    // par la première écriture (cas où _excelPid n'est pas encore connu).
+                    await Task.Delay(2000, _abandonCts!.Token).ContinueWith(_ => { });
+
+                    while (!_abandonCts.IsCancellationRequested
+                        && !_cts!.IsCancellationRequested)
+                    {
+                        try { await Task.Delay(1000, _abandonCts.Token); }
+                        catch (OperationCanceledException) { break; }
+
+                        // Ne surveille que si Excel a été démarré (PID connu).
+                        if (!ExcelInteropHost.Instance.EstDemarre) continue;
+
+                        if (!ExcelInteropHost.Instance.EstProcessExcelEnVie())
+                        {
+                            excelMortDetecte = true;
+                            Journal.Erreur(CategorieLog.Excel, "EXCEL_FERME_BRUTAL",
+                                "Process Excel détecté mort pendant la mesure — abandon auto déclenché.");
+
+                            // Cascade d'annulation : token + GPIB + signal abandon.
+                            try { _cts?.Cancel(); } catch { }
+                            try { _orchestrator.AborterMesureEnCours(); } catch { }
+                            try { _abandonCts?.Cancel(); } catch { }
+                            break;
+                        }
+                    }
+                });
+
+                var premiere = await Task.WhenAny(taskMesure, taskAbandon);
+
+                if (premiere == taskAbandon)
+                {
+                    if (excelMortDetecte)
+                    {
+                        // Excel fermé brutalement : on log dans le panneau + journal.
+                        // Pas de MessageBox bloquante — l'utilisateur voit juste l'UI
+                        // revenir en état "prêt" (boutons réactivés) avec un message
+                        // d'info dans le panneau, exactement comme une fin de mesure
+                        // normale mais avec un texte différent.
+                        Log("═══════════════════════════════════════════");
+                        Log("⚠ Excel a été fermé pendant la mesure.");
+                        Log("✖ Mesure interrompue — rapport non valide.");
+                        Log("ℹ Tu peux relancer une nouvelle configuration.");
+                        Journal.Warn(CategorieLog.Mesure, "MESURE_ABANDON_EXCEL_MORT",
+                            "Mesure interrompue automatiquement (Excel fermé brutalement).");
+                    }
+                    else
+                    {
+                        Log("═══════════════════════════════════════════");
+                        Log("⏹ Mesure arrêtée par l'utilisateur (bouton STOP).");
+                        Log("ℹ Tu peux relancer une nouvelle configuration.");
+                        Journal.Warn(CategorieLog.Mesure, "MESURE_ABANDON",
+                            "Mesure abandonnée par l'utilisateur (taskMesure orpheline en arrière-plan).");
+                    }
+                    return;
+                }
+
+                var result = await taskMesure;
 
                 if (result.Succes)
                 {
@@ -507,6 +726,22 @@ namespace Metrologo.ViewModels
                 ArretEnCours = false;
                 _cts?.Dispose();
                 _cts = null;
+                _abandonCts?.Dispose();
+                _abandonCts = null;
+
+                // Ferme la fenêtre flottante STOP via SON Dispatcher (elle vit sur un thread
+                // séparé, donc on doit lui demander gentiment de se fermer depuis là-bas).
+                try
+                {
+                    if (winStop != null)
+                    {
+                        winStop.Dispatcher.Invoke(() =>
+                        {
+                            try { winStop.Close(); } catch { /* swallow */ }
+                        });
+                    }
+                }
+                catch { /* swallow — pas critique si la fermeture rate */ }
             }
         }
 

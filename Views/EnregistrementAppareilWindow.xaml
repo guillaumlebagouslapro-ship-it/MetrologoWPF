@@ -7,7 +7,8 @@
         Height="820" Width="760"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -17,7 +18,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Enregistrer un appareil au catalogue"/>
+        <ui:TitleBar Grid.Row="0" Title="Enregistrer un appareil au catalogue">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <!-- Bandeau intro avec bouton d'aide -->
         <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="20,16,20,12">
@@ -208,6 +213,33 @@
                             <Run Text="Pour le Trigger, le template doit contenir {0} à l'emplacement de la valeur en volts."/>
                         </TextBlock>
 
+                        <!-- ============ Sélecteur : nombre de voies de l'appareil ============ -->
+                        <Border Background="#FFEFF6FF" BorderBrush="#FFBFDBFE" BorderThickness="1"
+                                CornerRadius="6" Padding="14,10" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="NOMBRE DE VOIES DE L'APPAREIL"
+                                           FontSize="11" FontWeight="Bold"
+                                           Foreground="{StaticResource AsertiNavyBrush}"
+                                           Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton GroupName="NbVoies"
+                                                 Content="1 voie"
+                                                 IsChecked="{Binding IsUneVoie, Mode=TwoWay}"
+                                                 Margin="0,0,18,0"
+                                                 ToolTip="Appareil mono-voie. Seule la VOIE A sera affichée."/>
+                                    <RadioButton GroupName="NbVoies"
+                                                 Content="2 voies (A + B)"
+                                                 IsChecked="{Binding IsDeuxVoies, Mode=TwoWay}"
+                                                 Margin="0,0,18,0"
+                                                 ToolTip="Cas standard (53131A, 53230A). VOIE A et VOIE B affichées."/>
+                                    <RadioButton GroupName="NbVoies"
+                                                 Content="3 voies (A + B + C HF)"
+                                                 IsChecked="{Binding IsTroisVoies, Mode=TwoWay}"
+                                                 ToolTip="Appareil avec une voie C haute fréquence supplémentaire."/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <!-- ============ Voie A ============ -->
                         <Border BorderBrush="{StaticResource AsertiNavyLightBrush}"
                                 BorderThickness="0,0,0,2"
@@ -282,7 +314,8 @@
                                     FontFamily="Cascadia Mono, Consolas"
                                     Padding="8,4" Margin="0,0,0,16"/>
 
-                        <!-- ============ Voie B ============ -->
+                        <!-- ============ Voie B (visible si NbVoies >= 2) ============ -->
+                        <StackPanel Visibility="{Binding ShowVoieB, Converter={StaticResource BoolToVis}}">
                         <Border BorderBrush="{StaticResource AsertiNavyLightBrush}"
                                 BorderThickness="0,0,0,2"
                                 Margin="0,0,0,8">
@@ -355,8 +388,11 @@
                                     PlaceholderText=":SENS:EVEN2:LEV {0}"
                                     FontFamily="Cascadia Mono, Consolas"
                                     Padding="8,4" Margin="0,0,0,16"/>
+                        </StackPanel>
+                        <!-- ============ Fin Voie B ============ -->
 
-                        <!-- ============ Voie C (optionnelle, pour appareils avec 3e voie HF) ============ -->
+                        <!-- ============ Voie C (visible si NbVoies >= 3) ============ -->
+                        <StackPanel Visibility="{Binding ShowVoieC, Converter={StaticResource BoolToVis}}">
                         <Border BorderBrush="{StaticResource AsertiNavyLightBrush}"
                                 BorderThickness="0,0,0,2"
                                 Margin="0,0,0,8">
@@ -365,7 +401,7 @@
                                            FontSize="12" FontWeight="Bold"
                                            Foreground="{StaticResource AsertiNavyBrush}"
                                            Margin="0,0,0,6"/>
-                                <TextBlock Text="(optionnelle — pour appareils équipés d'une voie HF)"
+                                <TextBlock Text="(voie HF haute fréquence)"
                                            FontSize="10" FontStyle="Italic"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                            Margin="8,0,0,6"
@@ -436,6 +472,8 @@
                                     PlaceholderText=":SENS:EVEN3:LEV {0}"
                                     FontFamily="Cascadia Mono, Consolas"
                                     Padding="8,4" Margin="0,0,0,16"/>
+                        </StackPanel>
+                        <!-- ============ Fin Voie C ============ -->
 
                         <!-- ============ Modes de mesure ============ -->
                         <Border BorderBrush="{StaticResource AsertiNavyLightBrush}"
@@ -470,21 +508,25 @@
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="Mode FREQ Voie B"
                                        VerticalAlignment="Center" FontWeight="SemiBold"
-                                       Margin="0,0,12,6"/>
+                                       Margin="0,0,12,6"
+                                       Visibility="{Binding ShowVoieB, Converter={StaticResource BoolToVis}}"/>
                             <ui:TextBox Grid.Row="1" Grid.Column="1"
                                         Text="{Binding ModeFreqB, UpdateSourceTrigger=PropertyChanged}"
                                         PlaceholderText=":FUNC &quot;FREQ 2&quot;"
                                         FontFamily="Cascadia Mono, Consolas"
-                                        Padding="8,4" Margin="0,0,0,6"/>
+                                        Padding="8,4" Margin="0,0,0,6"
+                                        Visibility="{Binding ShowVoieB, Converter={StaticResource BoolToVis}}"/>
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="Mode FREQ Voie C"
                                        VerticalAlignment="Center" FontWeight="SemiBold"
-                                       Margin="0,0,12,6"/>
+                                       Margin="0,0,12,6"
+                                       Visibility="{Binding ShowVoieC, Converter={StaticResource BoolToVis}}"/>
                             <ui:TextBox Grid.Row="2" Grid.Column="1"
                                         Text="{Binding ModeFreqC, UpdateSourceTrigger=PropertyChanged}"
                                         PlaceholderText=":FUNC &quot;FREQ 3&quot; (optionnel)"
                                         FontFamily="Cascadia Mono, Consolas"
-                                        Padding="8,4" Margin="0,0,0,6"/>
+                                        Padding="8,4" Margin="0,0,0,6"
+                                        Visibility="{Binding ShowVoieC, Converter={StaticResource BoolToVis}}"/>
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="Mode TIAB"
                                        VerticalAlignment="Center" FontWeight="SemiBold"

@@ -43,6 +43,15 @@ namespace Metrologo.Models
         public DateTime DateCreation { get; set; } = DateTime.UtcNow;
         public string CreePar { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Nombre de voies (canaux d'entrée) physiquement présentes sur cet appareil :
+        /// 1 (appareil mono-voie), 2 (Voie A + B), ou 3 (Voie A + B + C avec souvent
+        /// une 3e voie HF). Pilote l'affichage des sections de réglages dans l'UI
+        /// Enregistrement appareil. Défaut 2 pour rétrocompat avec les modèles
+        /// historiques (53131A, 53230A) qui ont systématiquement A + B.
+        /// </summary>
+        public int NbVoies { get; set; } = 2;
+
         /// <summary>Vérifie si cet IDN correspond à ce modèle (contains insensible à la casse).</summary>
         public bool Correspond(string? fabricant, string? modele)
         {

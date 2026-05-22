@@ -27,6 +27,20 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _cheminArchivesLogs = string.Empty;
         [ObservableProperty] private string _cheminMesuresLocal = string.Empty;
 
+        /// <summary>
+        /// URL vers le fichier maître paths.config.json sur le serveur. Quand non vide,
+        /// l'app lit ce fichier au démarrage et écrase les valeurs locales — permet la
+        /// propagation auto des changements de chemins à tous les postes.
+        /// </summary>
+        [ObservableProperty] private string _masterPathsUrl = string.Empty;
+
+        /// <summary>
+        /// Coché par défaut quand un MasterPathsUrl est renseigné. Quand l'admin enregistre,
+        /// les nouvelles valeurs sont propagées dans le fichier maître sur le serveur, donc
+        /// tous les autres postes prendront ces valeurs à leur prochain démarrage.
+        /// </summary>
+        [ObservableProperty] private bool _appliquerATousLesPostes;
+
         [ObservableProperty] private string _statut = "Prêt — laisse un champ vide pour utiliser le chemin local par défaut.";
 
         // ---------- Infos non-éditables (toujours locales) ----------
@@ -51,6 +65,16 @@ namespace Metrologo.ViewModels
             _cheminArchivesLogs = CheminsMetrologo.EstSurcharge(nameof(CheminsMetrologo.ArchivesLogs))
                 ? CheminsMetrologo.ArchivesLogs : string.Empty;
             _cheminMesuresLocal = CheminsMetrologo.MesuresLocal;
+
+            // URL du fichier maître : si déjà configurée, on l'affiche, sinon on pré-remplit
+            // avec le chemin réseau standard pour faciliter le déploiement initial.
+            _masterPathsUrl = string.IsNullOrWhiteSpace(CheminsMetrologo.MasterPathsUrl)
+                ? CheminsMetrologo.MasterPathsUrlDefaut
+                : CheminsMetrologo.MasterPathsUrl;
+
+            // Pré-coche "Appliquer à tous les postes" quand un master est configuré —
+            // l'admin qui ouvre cette fenêtre veut typiquement modifier pour tous.
+            _appliquerATousLesPostes = !string.IsNullOrWhiteSpace(CheminsMetrologo.MasterPathsUrl);
         }
 
         public Action<bool>? CloseAction { get; set; }
@@ -97,15 +121,25 @@ namespace Metrologo.ViewModels
                     [nameof(CheminsMetrologo.Presets)]      = CheminPresets ?? string.Empty,
                     [nameof(CheminsMetrologo.Catalogues)]   = CheminCatalogues ?? string.Empty,
                     [nameof(CheminsMetrologo.ArchivesLogs)] = CheminArchivesLogs ?? string.Empty,
-                    [nameof(CheminsMetrologo.MesuresLocal)] = CheminMesuresLocal ?? string.Empty
+                    [nameof(CheminsMetrologo.MesuresLocal)] = CheminMesuresLocal ?? string.Empty,
+                    [CheminsMetrologo.CleMasterPathsUrl]    = MasterPathsUrl ?? string.Empty
                 };
-                CheminsMetrologo.EnregistrerConfigChemins(overrides);
+                CheminsMetrologo.EnregistrerConfigChemins(overrides, AppliquerATousLesPostes);
+
+                string msgBase = "Configuration enregistrée localement.";
+                string msgMaster = AppliquerATousLesPostes
+                                && !string.IsNullOrWhiteSpace(MasterPathsUrl)
+                    ? "\n\n✓ Fichier maître mis à jour sur le serveur — "
+                    + "tous les autres postes prendront ces nouveaux chemins à leur "
+                    + "prochain démarrage de Metrologo (aucune intervention nécessaire)."
+                    : "";
 
                 JournalLog.Info(CategorieLog.Administration, "CHEMINS_SAUVE",
-                    "Configuration des chemins de stockage mise à jour.");
+                    $"Configuration des chemins de stockage mise à jour "
+                  + $"(propagation serveur : {(AppliquerATousLesPostes ? "OUI" : "non")}).");
 
                 MessageBox.Show(
-                    "Configuration enregistrée.\n\n"
+                    msgBase + msgMaster + "\n\n"
                   + "⚠ Redémarre l'application pour que les nouveaux chemins soient pris en "
                   + "compte par TOUS les services (certains caches sont initialisés au démarrage).",
                     "Sauvegarde OK", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -136,6 +170,8 @@ namespace Metrologo.ViewModels
             CheminCatalogues = string.Empty;
             CheminArchivesLogs = string.Empty;
             CheminMesuresLocal = string.Empty;
+            // MasterPathsUrl et AppliquerATousLesPostes NON réinitialisés — vider
+            // le master casserait la sync multi-postes, c'est rarement le but.
             Statut = "Champs vidés. Clique « Enregistrer » pour appliquer.";
         }
 

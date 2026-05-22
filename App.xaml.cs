@@ -38,22 +38,52 @@ namespace Metrologo
             // migré ou si l'ancien dossier n'existe pas.
             Services.Incertitude.ModulesIncertitudeService.MigrerAnciensNomsDossiers();
 
-            // Premier démarrage : si le chemin local de sauvegarde des rapports n'est pas
-            // configuré, on propose à l'utilisateur de le saisir maintenant. Skip = bandeau
-            // d'alerte permanent dans MainWindow jusqu'à configuration. Ne bloque pas le
-            // démarrage — si l'utilisateur abandonne, on continue normalement.
-            if (!CheminsMetrologo.MesuresLocalConfigure)
+            // Chemin local de sauvegarde des rapports : automatique, identique sur tous
+            // les postes (C:\Users\Public\Documents\Metrologo_Backup par défaut). On crée
+            // le dossier au démarrage s'il n'existe pas — aucune action utilisateur requise.
+            // Un admin peut toujours surcharger ce chemin via Admin → Chemins de stockage.
+            bool dossierOk = CheminsMetrologo.AssurerDossierMesuresLocal();
+            bool premierDemarrage = CheminsMetrologo.EstPremierDemarrage();
+
+            if (dossierOk)
             {
-                try
+                Journal.Info(CategorieLog.Systeme, "DOSSIER_MESURES_LOCAL_PRET",
+                    $"Dossier local de sauvegarde prêt : {CheminsMetrologo.MesuresLocal}");
+            }
+            else
+            {
+                Journal.Warn(CategorieLog.Systeme, "DOSSIER_MESURES_LOCAL_KO",
+                    $"Impossible de créer le dossier local de sauvegarde « {CheminsMetrologo.MesuresLocal} ». "
+                  + "La duplication des rapports échouera silencieusement — un admin doit corriger via "
+                  + "Admin → Chemins de stockage.");
+            }
+
+            // Message d'accueil au tout premier démarrage : informe l'utilisateur de
+            // l'emplacement créé + ajoute un raccourci sur son Bureau pour y accéder en
+            // un clic. Affiché une seule fois (flag persistant dans Configuration\).
+            if (premierDemarrage && dossierOk)
+            {
+                string? raccourci = CheminsMetrologo.CreerRaccourciBureauMesuresLocal();
+                string msg =
+                    "Bienvenue sur Metrologo.\n\n"
+                  + "Un dossier local de sauvegarde des rapports a été créé automatiquement :\n\n"
+                  + $"   {CheminsMetrologo.MesuresLocal}\n\n"
+                  + "Chaque mesure y sera dupliquée automatiquement après son rapport principal — "
+                  + "tu retrouveras donc tous tes Excel à cet endroit même en cas de coupure réseau.";
+                if (!string.IsNullOrEmpty(raccourci))
                 {
-                    var dlg = new Views.PremierDemarrageCheminLocalWindow();
-                    dlg.ShowDialog();
+                    msg += "\n\nUn raccourci « Mesures Metrologo (local) » a également été ajouté "
+                         + "sur ton Bureau pour y accéder rapidement.";
                 }
-                catch (Exception ex)
-                {
-                    Journal.Warn(CategorieLog.Systeme, "PREMIER_DEMARRAGE_DIALOG_ERR",
-                        $"Affichage popup chemin local échoué : {ex.Message}");
-                }
+
+                Journal.Info(CategorieLog.Systeme, "PREMIER_DEMARRAGE",
+                    $"Premier démarrage Metrologo sur ce poste — dossier local : {CheminsMetrologo.MesuresLocal} "
+                  + (raccourci != null ? $"; raccourci : {raccourci}" : "; raccourci : non créé"));
+
+                MessageBox.Show(msg, "Metrologo — premier démarrage",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+
+                CheminsMetrologo.MarquerPremierDemarrageEffectue();
             }
 
             await DatabaseInitializer.InitialiserAsync();
@@ -137,45 +167,43 @@ namespace Metrologo
                 }
             });
 
-            // ===== BYPASS DEV =====
-            // Si le fichier Configuration\dev_bypass.flag existe, on saute l'écran de
-            // login et la sélection Baie/Paillasse. Pratique pendant le dev pour ne pas
-            // re-saisir à chaque démarrage. Le contenu du fichier (1ère ligne) peut être
-            // "Baie" ou "Paillasse" pour forcer un poste précis (défaut : Baie).
-            // Pour désactiver le bypass : supprimer le fichier.
-            string flagBypass = Path.Combine(CheminsMetrologo.Configuration, "dev_bypass.flag");
-            if (File.Exists(flagBypass))
+            // ===== MODE DEV (publication) =====
+            // L'app saute l'écran de login : auto-connexion en tant qu'utilisateur "dev"
+            // avec le rôle Administrateur. L'utilisateur arrive directement sur l'écran
+            // de sélection Baie/Paillasse, qu'il garde (= choix conscient du poste).
+            //
+            // Pour réactiver l'écran de login en mode production : remettre l'ancien flux
+            // (LoginWindow + AuthService) à la place de ce bloc — ou conditionner par un
+            // flag #DEFINE / un paramètre de release au moment du build.
+            var fakeUser = new Utilisateur
             {
-                string contenu = string.Empty;
-                try { contenu = File.ReadAllText(flagBypass).Trim(); } catch { }
-                bool baie = !contenu.Equals("Paillasse", StringComparison.OrdinalIgnoreCase);
+                Login = "dev",
+                Nom = "Mode Dev",
+                Prenom = "Test",
+                Role = RoleUtilisateur.Administrateur,
+                Actif = true,
+                DateCreation = DateTime.UtcNow
+            };
 
-                var fakeUser = new Utilisateur
-                {
-                    Login = "dev",
-                    Nom = "Bypass",
-                    Prenom = "Dev",
-                    Role = RoleUtilisateur.Administrateur,
-                    Actif = true,
-                    DateCreation = DateTime.UtcNow
-                };
+            Journal.Warn(CategorieLog.Systeme, "DEV_BYPASS",
+                "Mode dev : login bypassé, auto-connexion utilisateur=dev (admin). "
+              + "Sélection Baie/Paillasse conservée pour choix conscient.");
 
-                Journal.Warn(CategorieLog.Systeme, "DEV_BYPASS",
-                    $"Bypass login activé via dev_bypass.flag — utilisateur=dev (admin), poste={(baie ? "Baie" : "Paillasse")}.");
+            await Journal.DemarrerSessionAsync(fakeUser.Login);
 
-                await Journal.DemarrerSessionAsync(fakeUser.Login);
+            var mainVMDev = new MainViewModel { UtilisateurConnecte = fakeUser };
+            // PAS de BypassSelectionPoste → l'écran de sélection s'affiche normalement.
 
-                var mainVMBypass = new MainViewModel { UtilisateurConnecte = fakeUser };
-                mainVMBypass.BypassSelectionPoste(baie);
+            var mainWinDev = new MainWindow { DataContext = mainVMDev };
+            mainWinDev.Closed += async (_, _) => await Journal.TerminerSessionAsync();
+            Application.Current.MainWindow = mainWinDev;
+            Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
+            mainWinDev.Show();
+            return;
 
-                var mainWinBypass = new MainWindow { DataContext = mainVMBypass };
-                mainWinBypass.Closed += async (_, _) => await Journal.TerminerSessionAsync();
-                Application.Current.MainWindow = mainWinBypass;
-                Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
-                mainWinBypass.Show();
-                return;
-            }
-
+            // ===== FLUX LOGIN PRODUCTION (désactivé en mode dev) =====
+            // Code conservé en mort pour réactivation rapide en passage prod.
+#pragma warning disable CS0162   // Unreachable code
             var authService = new AuthService();
             var loginVM = new LoginViewModel(authService);
             var loginWin = new Metrologo.Views.LoginWindow(loginVM);

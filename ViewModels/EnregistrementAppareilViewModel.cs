@@ -99,6 +99,32 @@ namespace Metrologo.ViewModels
 
         // ---------------- Formulaire Réglages : champs fixes du tableau ----------------
 
+        /// <summary>
+        /// Nombre de voies du fréquencemètre (1, 2 ou 3). Pilote la visibilité des
+        /// sections VOIE A/B/C dans l'UI : seules les voies correspondantes au choix
+        /// sont affichées. Persisté sur le modèle pour rétrocompat avec les modules
+        /// existants (défaut 2).
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ShowVoieB))]
+        [NotifyPropertyChangedFor(nameof(ShowVoieC))]
+        [NotifyPropertyChangedFor(nameof(IsUneVoie))]
+        [NotifyPropertyChangedFor(nameof(IsDeuxVoies))]
+        [NotifyPropertyChangedFor(nameof(IsTroisVoies))]
+        private int _nbVoies = 2;
+
+        /// <summary>Vrai pour piloter la visibilité de la section VOIE B.</summary>
+        public bool ShowVoieB => NbVoies >= 2;
+
+        /// <summary>Vrai pour piloter la visibilité de la section VOIE C.</summary>
+        public bool ShowVoieC => NbVoies >= 3;
+
+        // Bindings TwoWay pour les RadioButtons (XAML ne sait pas comparer un int dans
+        // un trigger sans converter, donc on expose 3 booléens couplés).
+        public bool IsUneVoie    { get => NbVoies == 1; set { if (value) NbVoies = 1; } }
+        public bool IsDeuxVoies  { get => NbVoies == 2; set { if (value) NbVoies = 2; } }
+        public bool IsTroisVoies { get => NbVoies == 3; set { if (value) NbVoies = 3; } }
+
         // Impédance Voie A/B/C
         [ObservableProperty] private string _impedanceA50 = string.Empty;
         [ObservableProperty] private string _impedanceA1M = string.Empty;
@@ -169,6 +195,8 @@ namespace Metrologo.ViewModels
             FabricantIdn = modeleExistant.FabricantIdn;
             ModeleIdn = modeleExistant.ModeleIdn;
             IdnDetecte = $"(enregistré le {modeleExistant.DateCreation:dd/MM/yyyy} par {modeleExistant.CreePar})";
+            // Rétrocompat : modèles sauvegardés avant la fonctionnalité NbVoies → 2 par défaut.
+            NbVoies = modeleExistant.NbVoies > 0 ? modeleExistant.NbVoies : 2;
 
             ChaineInit = modeleExistant.Parametres.ChaineInit;
             ConfEntree = modeleExistant.Parametres.ConfEntree;
@@ -211,6 +239,7 @@ namespace Metrologo.ViewModels
                     m.Nom = Nom.Trim();
                     m.FabricantIdn = FabricantIdn.Trim();
                     m.ModeleIdn = ModeleIdn.Trim();
+                    m.NbVoies = NbVoies;
                     m.Parametres = ConstruireParametres();
                     m.Gates = GatesCochees();
                     m.Entrees = SplitCSV(EntreesTexte);
@@ -231,6 +260,7 @@ namespace Metrologo.ViewModels
                     Nom = Nom.Trim(),
                     FabricantIdn = FabricantIdn.Trim(),
                     ModeleIdn = ModeleIdn.Trim(),
+                    NbVoies = NbVoies,
                     Parametres = ConstruireParametres(),
                     Gates = GatesCochees(),
                     Entrees = SplitCSV(EntreesTexte),
@@ -266,24 +296,38 @@ namespace Metrologo.ViewModels
         {
             var liste = new List<ReglageAppareil>();
 
+            // Voie A : toujours présente (au moins 1 voie sur tout appareil).
             AjouterChoix(liste, NomImpedanceA, (Opt50Ohm, ImpedanceA50), (Opt1MOhm, ImpedanceA1M));
-            AjouterChoix(liste, NomImpedanceB, (Opt50Ohm, ImpedanceB50), (Opt1MOhm, ImpedanceB1M));
-            AjouterChoix(liste, NomImpedanceC, (Opt50Ohm, ImpedanceC50), (Opt1MOhm, ImpedanceC1M));
-            AjouterChoix(liste, NomCouplageA,  (OptAC, CouplageAAc),   (OptDC, CouplageADc));
-            AjouterChoix(liste, NomCouplageB,  (OptAC, CouplageBAc),   (OptDC, CouplageBDc));
-            AjouterChoix(liste, NomCouplageC,  (OptAC, CouplageCAc),   (OptDC, CouplageCDc));
-            AjouterChoix(liste, NomFiltreA,    (OptON, FiltreAOn),     (OptOFF, FiltreAOff));
-            AjouterChoix(liste, NomFiltreB,    (OptON, FiltreBOn),     (OptOFF, FiltreBOff));
-            AjouterChoix(liste, NomFiltreC,    (OptON, FiltreCOn),     (OptOFF, FiltreCOff));
-
+            AjouterChoix(liste, NomCouplageA,  (OptAC, CouplageAAc),     (OptDC, CouplageADc));
+            AjouterChoix(liste, NomFiltreA,    (OptON, FiltreAOn),       (OptOFF, FiltreAOff));
             AjouterNumerique(liste, NomTriggerA, TriggerA, unite: "V");
-            AjouterNumerique(liste, NomTriggerB, TriggerB, unite: "V");
-            AjouterNumerique(liste, NomTriggerC, TriggerC, unite: "V");
 
+            // Voie B : seulement si l'appareil a au moins 2 voies.
+            if (NbVoies >= 2)
+            {
+                AjouterChoix(liste, NomImpedanceB, (Opt50Ohm, ImpedanceB50), (Opt1MOhm, ImpedanceB1M));
+                AjouterChoix(liste, NomCouplageB,  (OptAC, CouplageBAc),     (OptDC, CouplageBDc));
+                AjouterChoix(liste, NomFiltreB,    (OptON, FiltreBOn),       (OptOFF, FiltreBOff));
+                AjouterNumerique(liste, NomTriggerB, TriggerB, unite: "V");
+            }
+
+            // Voie C : seulement si l'appareil a 3 voies (typiquement la voie HF).
+            if (NbVoies >= 3)
+            {
+                AjouterChoix(liste, NomImpedanceC, (Opt50Ohm, ImpedanceC50), (Opt1MOhm, ImpedanceC1M));
+                AjouterChoix(liste, NomCouplageC,  (OptAC, CouplageCAc),     (OptDC, CouplageCDc));
+                AjouterChoix(liste, NomFiltreC,    (OptON, FiltreCOn),       (OptOFF, FiltreCOff));
+                AjouterNumerique(liste, NomTriggerC, TriggerC, unite: "V");
+            }
+
+            // Le mode de mesure n'affiche que les options de voies disponibles. AjouterChoix
+            // filtre déjà les options vides, mais on aurait pu hardcoder un OptFreqB="" si
+            // NbVoies < 2. Les champs B/C ne devraient pas être renseignés si voies masquées,
+            // donc AjouterChoix suffit.
             AjouterChoix(liste, NomMode,
                 (OptFreqA, ModeFreqA),
-                (OptFreqB, ModeFreqB),
-                (OptFreqC, ModeFreqC),
+                (OptFreqB, NbVoies >= 2 ? ModeFreqB : string.Empty),
+                (OptFreqC, NbVoies >= 3 ? ModeFreqC : string.Empty),
                 (OptTiab,  ModeTiab));
 
             return liste;

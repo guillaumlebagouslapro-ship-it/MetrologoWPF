@@ -7,7 +7,8 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -17,7 +18,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Saisie de fréquence" ShowMaximize="False"/>
+        <ui:TitleBar Grid.Row="0" Title="Saisie de fréquence" ShowMaximize="False">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <Border Grid.Row="1" Padding="24,12,24,16">
             <StackPanel Orientation="Horizontal">

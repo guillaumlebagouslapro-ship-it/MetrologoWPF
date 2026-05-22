@@ -10,8 +10,10 @@
         Title="{Binding TitreApplication}"
         Height="720" Width="1080"
         WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
 
     <ui:FluentWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
@@ -30,47 +32,20 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <ui:TitleBar Grid.Row="0"
                      Title="{Binding TitreApplication}"
-                     ShowMaximize="True"/>
-
-        <!-- Bandeau d'alerte : chemin local de sauvegarde manquant. Visible en
-             permanence tant que l'utilisateur n'a pas configuré son chemin. -->
-        <Border Grid.Row="1" Padding="16,8"
-                Background="#FFFEF3C7"
-                BorderBrush="#FFFCD34D"
-                BorderThickness="0,0,0,1"
-                Visibility="{Binding CheminLocalManquant, Converter={StaticResource BoolToVisibilityConverter}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <ui:SymbolIcon Grid.Column="0" Symbol="Warning24" FontSize="18"
-                               Foreground="#FF92400E"
-                               Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                           TextWrapping="Wrap"
-                           Foreground="#FF7C2D12" FontSize="12">
-                    <Run FontWeight="Bold" Text="Sauvegarde locale non configurée."/>
-                    <Run Text=" Les rapports Excel ne sont pas dupliqués sur le disque local. En cas de coupure réseau avec le serveur, la mesure pourrait être inaccessible."/>
-                </TextBlock>
-                <Button Grid.Column="2" Content="Configurer..."
-                        Command="{Binding ConfigurerCheminLocalCommand}"
-                        Background="#FF92400E" Foreground="White"
-                        BorderThickness="0" Padding="14,6" Margin="14,0,0,0"
-                        FontWeight="SemiBold" Cursor="Hand"/>
-            </Grid>
-        </Border>
+                     ShowMaximize="True">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <!-- Barre de navigation avec logo -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="1"
                 Padding="20,12"
                 Background="{StaticResource AsertiNavyBrush}"
                 Visibility="{Binding NavigationActive, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -137,12 +112,12 @@
             </Grid>
         </Border>
 
-        <ContentControl Grid.Row="3"
+        <ContentControl Grid.Row="2"
                         Content="{Binding VueActuelle}"
                         Margin="16,16,16,8"/>
 
         <!-- Barre de statut -->
-        <Border Grid.Row="4"
+        <Border Grid.Row="3"
                 Padding="20,10"
                 Background="{DynamicResource LayerFillColorDefaultBrush}"
                 BorderThickness="0,1,0,0"

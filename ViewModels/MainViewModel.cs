@@ -1,31 +1,12 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
-using Metrologo.Services;
 using System.Windows;
 
 namespace Metrologo.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-        /// <summary>
-        /// Vrai si le chemin local de sauvegarde des rapports n'est pas configuré dans
-        /// paths.config.json. Pilote la visibilité du bandeau d'alerte en haut de la
-        /// fenêtre principale — disparaît dès qu'un chemin est saisi.
-        /// </summary>
-        public bool CheminLocalManquant => !CheminsMetrologo.MesuresLocalConfigure;
-
-        /// <summary>
-        /// Ouvre la fenêtre de configuration du chemin local (modalité = première saisie).
-        /// Rafraîchit l'alerte une fois fermée pour faire disparaître le bandeau si OK.
-        /// </summary>
-        [RelayCommand]
-        private void ConfigurerCheminLocal()
-        {
-            var dlg = new Views.PremierDemarrageCheminLocalWindow();
-            dlg.ShowDialog();
-            OnPropertyChanged(nameof(CheminLocalManquant));
-        }
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(EstAdmin))]

@@ -6,7 +6,8 @@
         Height="720" Width="900"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True">
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -15,7 +16,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Chemins de stockage"/>
+        <ui:TitleBar Grid.Row="0" Title="Chemins de stockage">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="20,16,20,12">
             <Border.Background>
@@ -152,6 +157,39 @@
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     Margin="8,0,0,0" Padding="14,6"/>
                         </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Synchronisation multi-postes (fichier maître serveur) -->
+                <Border Style="{StaticResource FormSectionStyle}"
+                        Background="#FFEFF6FF" BorderBrush="#FFBFDBFE" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="Synchronisation multi-postes (avancé)" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,0,0,10"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <Run Text="Pour qu'un changement de chemins faits ici se propage AUTOMATIQUEMENT à tous les autres postes Metrologo, renseigne le chemin du fichier maître sur le serveur. Tous les postes liront ce fichier au démarrage et s'aligneront dessus."/>
+                            <LineBreak/>
+                            <Run FontWeight="Bold" Text="Cas type :"/><Run Text=" si tu déplaces un jour ton dossier "/>
+                            <Run FontFamily="Cascadia Mono, Consolas" Text="\\serveur1\..."/>
+                            <Run Text=" vers "/>
+                            <Run FontFamily="Cascadia Mono, Consolas" Text="\\serveur2\..."/>
+                            <Run Text=", tu modifies ici une seule fois (coche « Appliquer à tous »), tous les postes suivent."/>
+                        </TextBlock>
+                        <TextBlock Text="FICHIER MAÎTRE (sur le serveur)" FontSize="10" FontWeight="Bold"
+                                   Foreground="{StaticResource AsertiNavyBrush}" Margin="0,0,0,4"/>
+                        <ui:TextBox Text="{Binding MasterPathsUrl, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="M:\exe_spe\Data_Metrologo\paths.config.json"
+                                    FontFamily="Cascadia Mono, Consolas" Padding="10,6"
+                                    Margin="0,0,0,10"/>
+                        <CheckBox IsChecked="{Binding AppliquerATousLesPostes, Mode=TwoWay}"
+                                  Content="Appliquer à tous les postes (écrit le fichier maître ci-dessus en plus du cache local)"
+                                  FontWeight="SemiBold"/>
+                        <TextBlock FontSize="10" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <Run Text="• Décoché ➜ modification valable uniquement sur CE poste."/>
+                            <LineBreak/>
+                            <Run Text="• Coché ➜ modification propagée à tous les postes au prochain démarrage de Metrologo (l'admin doit avoir les droits d'écriture sur le fichier maître)."/>
+                        </TextBlock>
                     </StackPanel>
                 </Border>
 

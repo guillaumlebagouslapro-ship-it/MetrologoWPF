@@ -1,0 +1,53 @@
+<Window x:Class="Metrologo.Views.StopMesureFloatingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Arrêter la mesure"
+        Width="420" Height="220"
+        WindowStartupLocation="Manual"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="True"
+        WindowStyle="ToolWindow"
+        Background="#FFDC2626"
+        Cursor="Arrow"
+        Focusable="True">
+
+    <!-- Tout clic n'importe où sur la fenêtre déclenche l'arrêt — peu importe
+         que tu vises le bouton ou pas. -->
+    <Grid x:Name="GridRoot" Background="#FFDC2626" Cursor="Hand">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="MESURE EN COURS"
+                   Foreground="White"
+                   FontSize="11"
+                   FontWeight="Bold"
+                   Opacity="0.9"
+                   HorizontalAlignment="Center"
+                   Margin="0,14,0,4"/>
+
+        <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="TxtBouton"
+                       Text="⏹ CLIQUE ICI POUR ARRÊTER"
+                       Foreground="White"
+                       FontSize="20"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       Margin="14,8,14,8"/>
+        </StackPanel>
+
+        <Border Grid.Row="2" Background="#FF7F1D1D" Padding="14,10">
+            <TextBlock Text="Raccourci global : Ctrl + Shift + S (marche toujours, même si l'écran est figé)"
+                       Foreground="White"
+                       FontSize="11"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"/>
+        </Border>
+    </Grid>
+</Window>
