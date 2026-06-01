@@ -2,8 +2,12 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -20,13 +24,97 @@
                        Margin="0,4,0,0"/>
         </StackPanel>
 
+        <!-- Bandeau "Fiche en cours" — visible dès qu'une configuration a été validée.
+             Affiche en gros le N° FI sur lequel on travaille + type de mesure + appareil. -->
+        <Border Grid.Row="1"
+                Visibility="{Binding EstConfigure, Converter={StaticResource BoolToVis}}"
+                Background="{StaticResource AsertiNavyBrush}"
+                CornerRadius="10"
+                Padding="22,16"
+                Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Width="56" Height="56" CornerRadius="12"
+                        Margin="0,0,18,0" VerticalAlignment="Center">
+                    <Border.Background>
+                        <SolidColorBrush Color="White" Opacity="0.18"/>
+                    </Border.Background>
+                    <ui:SymbolIcon Symbol="DocumentText24" FontSize="28"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="FICHE EN COURS"
+                               FontSize="11" FontWeight="Bold"
+                               Foreground="White" Opacity="0.7"/>
+                    <TextBlock Text="{Binding MesureConfig.NumFI}"
+                               FontSize="34" FontWeight="Bold"
+                               Foreground="White"
+                               FontFamily="Cascadia Mono, Consolas"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="TYPE DE MESURE"
+                                   FontSize="11" FontWeight="Bold"
+                                   Foreground="White" Opacity="0.7"
+                                   HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding MesureConfig.TypeMesure}"
+                                   FontSize="16" FontWeight="SemiBold"
+                                   Foreground="White"
+                                   HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding LibelleAppareilConfigure}"
+                                   FontSize="12"
+                                   Foreground="White" Opacity="0.8"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <!-- Bouton crayon : ouvre la configuration sans relancer une mesure
+                         (pour modifier un paramètre entre deux exécutions). Remplace
+                         l'ancien bouton « Configuration » de la grille de cartes. -->
+                    <Button Command="{Binding OuvrirConfigurationCommand}"
+                            ToolTip="Modifier la configuration"
+                            Cursor="Hand"
+                            Margin="16,0,0,0"
+                            Padding="10"
+                            BorderThickness="0"
+                            VerticalAlignment="Center">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background">
+                                    <Setter.Value>
+                                        <SolidColorBrush Color="White" Opacity="0.18"/>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background">
+                                            <Setter.Value>
+                                                <SolidColorBrush Color="White" Opacity="0.32"/>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <ui:SymbolIcon Symbol="Edit24" FontSize="20" Foreground="White"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- Cartes d'actions -->
-        <Grid Grid.Row="1" Margin="0,0,0,20">
+        <Grid Grid.Row="2" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="10"/>
                 <ColumnDefinition Width="*"/>
@@ -191,86 +279,10 @@
                 </StackPanel>
             </Button>
 
-            <!-- Configuration -->
-            <Button Grid.Column="6"
-                    Command="{Binding OuvrirConfigurationCommand}"
-                    Style="{StaticResource ActionCardStyle}">
-                <StackPanel>
-                    <Border Width="44" Height="44" CornerRadius="10"
-                            HorizontalAlignment="Left" Margin="0,0,0,14"
-                            Background="#FFDEEAFE">
-                        <ui:SymbolIcon Symbol="Settings24" FontSize="22"
-                                       Foreground="#FF2563EB"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="PARAMÈTRES" FontSize="11" FontWeight="Bold"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
-                    <TextBlock Text="Configuration"
-                               FontSize="16" FontWeight="SemiBold"
-                               Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="N° FI, instrument, type de mesure"
-                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
-            </Button>
-
-            <!-- Diagnostic GPIB -->
-            <Grid Grid.Column="8">
-                <Button Command="{Binding OuvrirDiagnosticGpibCommand}"
-                        Style="{StaticResource ActionCardStyle}">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,14">
-                            <Border Width="44" Height="44" CornerRadius="10"
-                                    HorizontalAlignment="Left"
-                                    Background="#FFDCFCE7">
-                                <ui:SymbolIcon Symbol="PlugConnected24" FontSize="22"
-                                               Foreground="#FF16A34A"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
-                            </Border>
-                            <!-- Badge compteur : nombre d'appareils détectés sur le bus -->
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Top"
-                                    MinWidth="26" Height="22" CornerRadius="11"
-                                    Padding="8,0"
-                                    Background="{StaticResource AsertiOrangeBrush}">
-                                <TextBlock Text="{Binding NbAppareilsDetectes}"
-                                           Foreground="White"
-                                           FontWeight="Bold" FontSize="12"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                        </Grid>
-                        <TextBlock Text="APPAREILS" FontSize="11" FontWeight="Bold"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
-                        <TextBlock Text="Diagnostic GPIB"
-                                   FontSize="16" FontWeight="SemiBold"
-                                   Foreground="{StaticResource AsertiNavyBrush}"/>
-                        <TextBlock Text="{Binding ResumeScanGpib}"
-                                   FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                    </StackPanel>
-                </Button>
-
-                <!-- Bouton Rescanner en bas à droite de la carte : relance un scan sans ouvrir Diagnostic -->
-                <Button Command="{Binding RescannerCommand}"
-                        ToolTip="Relancer un scan GPIB maintenant"
-                        Cursor="Hand"
-                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                        Margin="0,0,8,8"
-                        Padding="6"
-                        Background="White"
-                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                        BorderThickness="1">
-                    <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="14"
-                                   Foreground="#FF16A34A"/>
-                </Button>
-            </Grid>
-
         </Grid>
 
         <!-- Panneau Informations Générales -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Background="{DynamicResource ApplicationBackgroundBrush}"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                 BorderThickness="1"

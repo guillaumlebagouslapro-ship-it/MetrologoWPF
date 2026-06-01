@@ -540,6 +540,95 @@
                     </StackPanel>
                 </Border>
 
+                <!-- =================== RÉSOLUTION (auto, caché user) =================== -->
+                <Border Background="White"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="6"
+                        Padding="16" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Résolution"
+                                   FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Text="Mode de calcul interne du compteur. Sélectionné automatiquement selon le type de mesure (CONT pour Stabilité, AUTO sinon) — invisible côté utilisateur."
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="AUTO"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="1"
+                                        Text="{Binding ResolutionAuto, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":SENS:FREQ:MODE AUTO"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="RECIPROCAL"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="1"
+                                        Text="{Binding ResolutionRecip, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":SENS:FREQ:MODE RECIPROCAL (optionnel)"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="CONT"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="1"
+                                        Text="{Binding ResolutionCont, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":SENS:FREQ:MODE CONT (pour Stabilité / Allan deviation)"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- =================== RÉFÉRENCE (choix user) =================== -->
+                <Border Background="White"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="6"
+                        Padding="16" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Référence (base de temps)"
+                                   FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Text="Source de la base de temps : oscillateur interne (TCXO/OCXO) ou référence externe 10 MHz (rubidium, GPS…). L'utilisateur peut le choisir dans la fenêtre Configuration."
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="INT (interne)"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="1"
+                                        Text="{Binding RefInt, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":ROSC:SOUR INT"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="EXT 10 MHz"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="1"
+                                        Text="{Binding RefExt, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText=":ROSC:SOUR EXT"
+                                        FontFamily="Cascadia Mono, Consolas"
+                                        Padding="8,4" Margin="0,0,0,6"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </ScrollViewer>
 

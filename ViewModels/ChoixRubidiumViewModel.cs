@@ -1,9 +1,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
+using Metrologo.Views;
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
+using System.Windows;
 
 namespace Metrologo.ViewModels
 {
@@ -11,8 +14,6 @@ namespace Metrologo.ViewModels
     {
         [ObservableProperty] private ObservableCollection<Rubidium> _rubidiums = new();
         [ObservableProperty] private Rubidium? _rubidiumSelectionne;
-        [ObservableProperty] private bool _avecGPS;
-        [ObservableProperty] private bool _sansGPS = true;
 
         // ---------- Mode Réglage manuel ----------
 
@@ -40,7 +41,6 @@ namespace Metrologo.ViewModels
         public bool HasError => !string.IsNullOrEmpty(MessageErreur);
 
         public Rubidium? Resultat { get; private set; }
-        public bool AvecGpsResultat { get; private set; }
         public Action<bool>? CloseAction { get; set; }
 
         public bool ListeVide => Rubidiums.Count == 0;
@@ -48,25 +48,78 @@ namespace Metrologo.ViewModels
         public ChoixRubidiumViewModel()
         {
             ChargerRubidiums();
+            RestaurerEtatCourant();
         }
 
+        /// <summary>
+        /// Charge le catalogue depuis <see cref="Preferences"/> (avec seed par défaut
+        /// si le fichier settings.json n'a pas encore de catalogue persisté).
+        /// </summary>
         private void ChargerRubidiums()
         {
-            // TODO : remplacer par une requête SQL : Select RUB_ID, RUB_ACTIF, RUB_DESIGNATION from TR_METROLOGO_RUBIDIUMS
-            Rubidiums.Add(new Rubidium { Id = 1, Designation = "Syref",       FrequenceMoyenne = 10000000.0 });
-            Rubidiums.Add(new Rubidium { Id = 2, Designation = "Redondances", FrequenceMoyenne = 10000000.0 });
-            RubidiumSelectionne = Rubidiums[0];
+            Rubidiums.Clear();
+            foreach (var r in Preferences.CatalogueRubidiums)
+            {
+                Rubidiums.Add(new Rubidium
+                {
+                    Id = r.Id,
+                    Designation = r.Designation,
+                    FrequenceMoyenne = r.FrequenceMoyenne,
+                });
+            }
             OnPropertyChanged(nameof(ListeVide));
         }
 
-        partial void OnAvecGPSChanged(bool value)
+        /// <summary>
+        /// Au moment d'ouvrir la fenêtre, on coche le bon mode et on pré-sélectionne
+        /// le rubidium actuellement utilisé (sinon le 1er du catalogue). Sans ça,
+        /// la fenêtre s'ouvre toujours en mode Catalogue alors que la mesure tourne
+        /// peut-être en Réglage manuel.
+        /// </summary>
+        private void RestaurerEtatCourant()
         {
-            if (value) SansGPS = false;
+            var actif = EtatApplication.RubidiumActif;
+            if (actif != null && actif.EstReglageManuel)
+            {
+                ModeManuel = true;
+                FrequenceManuelleTexte = actif.FrequenceMoyenne.ToString(
+                    "0.##", CultureInfo.InvariantCulture);
+                RubidiumSelectionne = Rubidiums.FirstOrDefault();
+                return;
+            }
+
+            ModeManuel = false;
+            if (actif != null)
+            {
+                RubidiumSelectionne = Rubidiums.FirstOrDefault(r => r.Id == actif.Id)
+                                      ?? Rubidiums.FirstOrDefault();
+            }
+            else
+            {
+                RubidiumSelectionne = Rubidiums.FirstOrDefault();
+            }
         }
 
-        partial void OnSansGPSChanged(bool value)
+        /// <summary>
+        /// Ouvre la fenêtre de gestion du catalogue (CRUD) puis recharge la liste
+        /// en préservant si possible la sélection courante.
+        /// </summary>
+        [RelayCommand]
+        private void GererCatalogue()
         {
-            if (value) AvecGPS = false;
+            var win = new GestionCatalogueRubidiumsWindow
+            {
+                Owner = Application.Current.Windows
+                    .OfType<Window>().FirstOrDefault(w => w.IsActive)
+            };
+            if (win.ShowDialog() == true)
+            {
+                int? idCourant = RubidiumSelectionne?.Id;
+                ChargerRubidiums();
+                RubidiumSelectionne = idCourant.HasValue
+                    ? Rubidiums.FirstOrDefault(r => r.Id == idCourant.Value) ?? Rubidiums.FirstOrDefault()
+                    : Rubidiums.FirstOrDefault();
+            }
         }
 
         [RelayCommand]
@@ -86,17 +139,13 @@ namespace Metrologo.ViewModels
                     return;
                 }
 
-                // Le mode de raccordement reste optionnel — l'admin peut rester sur Allouis
-                // (par défaut) sans incidence si la fréquence est saisie à la main.
                 Resultat = new Rubidium
                 {
                     Id = 0,
                     Designation = "Réglage manuel",
                     FrequenceMoyenne = freq,
                     EstReglageManuel = true,
-                    AvecGPS = AvecGPS
                 };
-                AvecGpsResultat = AvecGPS;
                 CloseAction?.Invoke(true);
                 return;
             }
@@ -107,15 +156,7 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            if (!AvecGPS && !SansGPS)
-            {
-                MessageErreur = "Veuillez spécifier le mode de raccordement.";
-                return;
-            }
-
             Resultat = RubidiumSelectionne;
-            AvecGpsResultat = AvecGPS;
-            Resultat.AvecGPS = AvecGPS;
             Resultat.EstReglageManuel = false;
             CloseAction?.Invoke(true);
         }

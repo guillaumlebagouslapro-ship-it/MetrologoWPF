@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Sélection du rubidium"
-        Height="620" Width="520"
+        Height="560" Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowBackdropType="Mica"
@@ -52,12 +52,31 @@
                 <!-- Section Rubidium -->
                 <Border Style="{StaticResource FormSectionStyle}">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                            <ui:SymbolIcon Symbol="Timer24" FontSize="18"
-                                           Foreground="{StaticResource AsertiOrangeBrush}"
-                                           Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Rubidium actif" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
-                        </StackPanel>
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Timer24" FontSize="18"
+                                               Foreground="{StaticResource AsertiOrangeBrush}"
+                                               Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Rubidium actif" Style="{StaticResource SectionTitleStyle}" Margin="0"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Command="{Binding GererCatalogueCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Padding="10,6"
+                                    ToolTip="Ajouter, renommer ou supprimer des références du catalogue">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Edit24" FontSize="13"
+                                                   Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Gérer le catalogue" FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
 
                         <!-- Sélecteur Mode : choisir un rubidium du catalogue OU saisir
                              une fréquence à la main (cas où aucun rubidium n'est raccordé
@@ -171,10 +190,10 @@
                                                    Foreground="{StaticResource AsertiOrangeBrush}"
                                                    Margin="0,0,10,0" VerticalAlignment="Center"/>
                                     <StackPanel>
-                                        <TextBlock Text="Aucun rubidium configuré"
+                                        <TextBlock Text="Aucun rubidium dans le catalogue"
                                                    FontWeight="SemiBold" FontSize="13"
                                                    Foreground="#FF7C2D12"/>
-                                        <TextBlock Text="La liste sera chargée depuis la base de données des rubidiums."
+                                        <TextBlock Text="Clique sur « Gérer le catalogue » pour ajouter une référence."
                                                    FontSize="11"
                                                    Foreground="#FF9A3412"
                                                    TextWrapping="Wrap"/>
@@ -264,112 +283,6 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Section Raccordement -->
-                <Border Style="{StaticResource FormSectionStyle}">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                            <ui:SymbolIcon Symbol="Pulse24" FontSize="18"
-                                           Foreground="{StaticResource AsertiOrangeBrush}"
-                                           Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Mode de raccordement" Style="{StaticResource SectionTitleStyle}" Margin="0"/>
-                        </StackPanel>
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="10"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <Border Grid.Column="0"
-                                    CornerRadius="6"
-                                    BorderThickness="1"
-                                    Padding="14,12">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="White"/>
-                                        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding SansGPS}" Value="True">
-                                                <Setter Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
-                                                <Setter Property="BorderThickness" Value="2"/>
-                                                <Setter Property="Background">
-                                                    <Setter.Value>
-                                                        <SolidColorBrush Color="{StaticResource AsertiOrangeColor}" Opacity="0.08"/>
-                                                    </Setter.Value>
-                                                </Setter>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="28" Height="28" CornerRadius="6"
-                                            Background="#FFFEE2E2"
-                                            Margin="0,0,10,0">
-                                        <TextBlock Text="📡"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </Border>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <RadioButton Content="Allouis"
-                                                     IsChecked="{Binding SansGPS, Mode=TwoWay}"
-                                                     FontWeight="SemiBold"
-                                                     GroupName="Raccord"/>
-                                        <TextBlock Text="162 kHz ondes longues"
-                                                   FontSize="10"
-                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                   Margin="24,0,0,0"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Grid.Column="2"
-                                    CornerRadius="6"
-                                    BorderThickness="1"
-                                    Padding="14,12">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="White"/>
-                                        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding AvecGPS}" Value="True">
-                                                <Setter Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
-                                                <Setter Property="BorderThickness" Value="2"/>
-                                                <Setter Property="Background">
-                                                    <Setter.Value>
-                                                        <SolidColorBrush Color="{StaticResource AsertiOrangeColor}" Opacity="0.08"/>
-                                                    </Setter.Value>
-                                                </Setter>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="28" Height="28" CornerRadius="6"
-                                            Background="#FFDCFCE7"
-                                            Margin="0,0,10,0">
-                                        <TextBlock Text="🛰"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </Border>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <RadioButton Content="GPS"
-                                                     IsChecked="{Binding AvecGPS, Mode=TwoWay}"
-                                                     FontWeight="SemiBold"
-                                                     GroupName="Raccord"/>
-                                        <TextBlock Text="Raccordement satellitaire"
-                                                   FontSize="10"
-                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                   Margin="24,0,0,0"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-                        </Grid>
                     </StackPanel>
                 </Border>
 

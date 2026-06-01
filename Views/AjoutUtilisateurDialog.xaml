@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Nouvel utilisateur"
-        Height="400" Width="460"
+        Height="340" Width="460"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
         ResizeMode="NoResize"
@@ -16,14 +16,15 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Nouvel utilisateur">
+        <ui:TitleBar Grid.Row="0" Title="{Binding Title, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}}">
             <ui:TitleBar.Icon>
                 <ui:ImageIcon Source="/Resources/logo.ico"/>
             </ui:TitleBar.Icon>
         </ui:TitleBar>
 
         <StackPanel Grid.Row="1" Margin="24,16,24,0">
-            <TextBlock Text="Saisir le nom et le prénom du nouvel utilisateur. Le login et un mot de passe initial seront générés automatiquement."
+            <TextBlock x:Name="TbDescription"
+                       Text="Saisir le nom et le prénom du nouvel utilisateur. Le login (prenom.nom) est généré automatiquement."
                        TextWrapping="Wrap" Margin="0,0,0,16" FontSize="12" Opacity="0.85"/>
 
             <TextBlock Text="Prénom" FontWeight="SemiBold" Margin="0,0,0,4"/>
@@ -31,18 +32,12 @@
 
             <TextBlock Text="Nom" FontWeight="SemiBold" Margin="0,0,0,4"/>
             <ui:TextBox x:Name="TbNom" Margin="0,0,0,12" PlaceholderText="ex. Dupont"/>
-
-            <TextBlock Text="Rôle" FontWeight="SemiBold" Margin="0,0,0,4"/>
-            <ComboBox x:Name="CbRole" SelectedIndex="0">
-                <ComboBoxItem Content="Utilisateur"/>
-                <ComboBoxItem Content="Administrateur"/>
-            </ComboBox>
         </StackPanel>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
                     Margin="0,16,24,16">
             <ui:Button Appearance="Secondary" Content="Annuler" Click="OnAnnuler" Margin="0,0,8,0"/>
-            <ui:Button Appearance="Primary" Content="Créer le compte" Click="OnValider"/>
+            <ui:Button x:Name="BtnValider" Appearance="Primary" Content="Créer le compte" Click="OnValider"/>
         </StackPanel>
     </Grid>
 </ui:FluentWindow>

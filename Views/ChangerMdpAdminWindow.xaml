@@ -1,0 +1,81 @@
+<ui:FluentWindow x:Class="Metrologo.Views.ChangerMdpAdminWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Changer mon mot de passe"
+        Height="460" Width="480"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Changer mon mot de passe" ShowMaximize="False">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <StackPanel Grid.Row="1" Margin="28,16,28,8">
+            <TextBlock Text="Modifier le mot de passe de ton compte administrateur."
+                       FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Margin="0,0,0,18"/>
+
+            <TextBlock Text="MOT DE PASSE ACTUEL" FontSize="10" FontWeight="Bold"
+                       Foreground="{StaticResource AsertiOrangeBrush}"
+                       Margin="0,0,0,4"/>
+            <PasswordBox x:Name="PbActuel" FontSize="13" Padding="10,8" Margin="0,0,0,12"/>
+
+            <TextBlock Text="NOUVEAU MOT DE PASSE" FontSize="10" FontWeight="Bold"
+                       Foreground="{StaticResource AsertiOrangeBrush}"
+                       Margin="0,0,0,4"/>
+            <PasswordBox x:Name="PbNouveau" FontSize="13" Padding="10,8" Margin="0,0,0,12"/>
+
+            <TextBlock Text="CONFIRMER LE NOUVEAU MOT DE PASSE" FontSize="10" FontWeight="Bold"
+                       Foreground="{StaticResource AsertiOrangeBrush}"
+                       Margin="0,0,0,4"/>
+            <PasswordBox x:Name="PbConfirmer" FontSize="13" Padding="10,8"/>
+
+            <Border x:Name="BdErreur" Visibility="Collapsed"
+                    CornerRadius="6" Padding="10,8" Margin="0,12,0,0"
+                    Background="#FFFEE2E2"
+                    BorderBrush="#FFFCA5A5"
+                    BorderThickness="1">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="Warning24" FontSize="14"
+                                   Foreground="#FFDC2626"
+                                   Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TbErreur" Foreground="#FF7F1D1D" FontSize="12"
+                               VerticalAlignment="Center" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <Border Grid.Row="2" Padding="20,12"
+                Background="{DynamicResource LayerFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Content="Annuler" Click="OnAnnuler"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Column="2" Content="Enregistrer" Click="OnValider"
+                        IsDefault="True"
+                        Style="{StaticResource PrimaryButtonStyle}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

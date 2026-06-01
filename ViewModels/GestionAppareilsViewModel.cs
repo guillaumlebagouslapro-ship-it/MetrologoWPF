@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
+using Metrologo.Services;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
@@ -40,9 +41,9 @@ namespace Metrologo.ViewModels
         {
             _utilisateurActuel = utilisateur;
             EstAdmin = estAdmin;
-            // Catalogue migré sur SQL Server (table dbo.T_CATALOGUE_APPAREILS).
-            // L'ancien JSON local n'est plus utilisé — on affiche la source effective.
-            CheminCatalogue = "SQL Server : Metrologo.dbo.T_CATALOGUE_APPAREILS";
+            // Catalogue stocké en fichier JSON sur le partage réseau — visible par tous
+            // les postes. On affiche le chemin effectif (résolu via paths.config.json).
+            CheminCatalogue = CheminsMetrologo.FichierCatalogueAppareils;
 
             Modeles.CollectionChanged += (_, _) =>
             {
@@ -137,11 +138,26 @@ namespace Metrologo.ViewModels
         [RelayCommand]
         private void OuvrirDossierCatalogue()
         {
-            // Le catalogue est désormais en base SQL Server (T_CATALOGUE_APPAREILS) — il
-            // n'y a plus de "dossier" à ouvrir. La commande est conservée pour ne pas
-            // casser le binding XAML existant ; elle ne fait plus rien volontairement.
-            try { /* no-op : SQL Server */ }
-            catch { /* silencieux */ }
+            // Ouvre dans l'Explorateur le dossier qui contient appareils.json — pratique
+            // pour vérifier que le fichier réseau est bien là, faire un backup manuel, etc.
+            try
+            {
+                string dossier = CheminsMetrologo.Catalogues;
+                if (!System.IO.Directory.Exists(dossier))
+                {
+                    System.IO.Directory.CreateDirectory(dossier);
+                }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = dossier,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Impossible d'ouvrir le dossier du catalogue : {ex.Message}",
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         [RelayCommand]

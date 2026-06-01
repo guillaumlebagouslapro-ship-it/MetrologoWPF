@@ -1,6 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
-using System.Threading.Tasks;
+using System.Linq;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -12,66 +12,68 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.ViewModels
 {
+    /// <summary>
+    /// CRUD local des utilisateurs (lecture / création / renommage / suppression / rôle)
+    /// + gestion des mots de passe d'admin. Stockage 100 % local via
+    /// <see cref="ComptesLocauxService"/>.
+    ///
+    /// Restrictions :
+    ///   • Tout admin peut ajouter, renommer, supprimer un utilisateur lambda.
+    ///   • Seul un super-administrateur peut modifier les rôles et réinitialiser
+    ///     les mots de passe d'autres admins.
+    ///   • Tout admin connecté peut changer son propre mot de passe.
+    /// </summary>
     public partial class GestionUtilisateursViewModel : ObservableObject
     {
-        private readonly IUtilisateursService _service;
-
         public ObservableCollection<Utilisateur> Utilisateurs { get; } = new();
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SupprimerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RenommerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ChangerRoleCommand))]
         [NotifyCanExecuteChangedFor(nameof(ReinitialiserMotDePasseCommand))]
         private Utilisateur? _selection;
 
         [ObservableProperty] private string _statut = string.Empty;
-        [ObservableProperty] private bool _enChargement;
 
-        public GestionUtilisateursViewModel(IUtilisateursService service)
+        /// <summary>Vrai si l'admin authentifié dans la session courante est SuperAdmin.</summary>
+        public bool EstSuperAdmin => EtatApplication.EstSuperAdmin;
+
+        public GestionUtilisateursViewModel()
         {
-            _service = service;
-            _ = ChargerAsync();
+            Charger();
         }
 
         [RelayCommand]
-        private async Task RafraichirAsync() => await ChargerAsync();
+        private void Rafraichir() => Charger();
 
-        private async Task ChargerAsync()
+        private void Charger()
         {
             try
             {
-                EnChargement = true;
-                Statut = "Chargement…";
                 Utilisateurs.Clear();
-                var liste = await _service.ListerAsync();
-                foreach (var u in liste) Utilisateurs.Add(u);
+                foreach (var u in ComptesLocauxService.Lister()) Utilisateurs.Add(u);
                 Statut = $"{Utilisateurs.Count} utilisateur(s).";
+                OnPropertyChanged(nameof(EstSuperAdmin));
             }
             catch (Exception ex)
             {
                 Statut = $"Erreur : {ex.Message}";
                 JournalLog.Warn(CategorieLog.Administration, "GESTION_USERS_LOAD_ERR", ex.Message);
             }
-            finally { EnChargement = false; }
         }
 
         [RelayCommand]
-        private async Task AjouterAsync()
+        private void Ajouter()
         {
             var dlg = new AjoutUtilisateurDialog { Owner = Application.Current.MainWindow };
             if (dlg.ShowDialog() != true) return;
 
             try
             {
-                var (utilisateur, mdpClair) = await _service.CreerAsync(
-                    dlg.NomSaisi, dlg.PrenomSaisi, dlg.RoleSelectionne);
-
-                Utilisateurs.Add(utilisateur);
-                Selection = utilisateur;
-
-                // Affichage du mot de passe une seule fois (à communiquer à l'utilisateur).
-                var info = new InfoCompteCreeDialog(utilisateur.Login, mdpClair) { Owner = Application.Current.MainWindow };
-                info.ShowDialog();
-
+                var utilisateur = ComptesLocauxService.Ajouter(dlg.NomSaisi, dlg.PrenomSaisi);
+                Charger();
+                Selection = Utilisateurs.FirstOrDefault(u => u.Id == utilisateur.Id);
                 Statut = $"Compte {utilisateur.Login} créé.";
             }
             catch (Exception ex)
@@ -81,8 +83,34 @@ namespace Metrologo.ViewModels
             }
         }
 
-        [RelayCommand(CanExecute = nameof(PeutSupprimer))]
-        private async Task SupprimerAsync()
+        [RelayCommand(CanExecute = nameof(PeutModifier))]
+        private void Renommer()
+        {
+            if (Selection == null) return;
+
+            var dlg = new AjoutUtilisateurDialog { Owner = Application.Current.MainWindow };
+            dlg.ConfigurerPourRenommage(Selection.Nom, Selection.Prenom);
+            if (dlg.ShowDialog() != true) return;
+
+            try
+            {
+                if (ComptesLocauxService.Renommer(Selection.Id, dlg.NomSaisi, dlg.PrenomSaisi))
+                {
+                    int idCourant = Selection.Id;
+                    Charger();
+                    Selection = Utilisateurs.FirstOrDefault(u => u.Id == idCourant);
+                    Statut = "Utilisateur modifié.";
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Modification échouée : {ex.Message}", "Erreur",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        [RelayCommand(CanExecute = nameof(PeutModifier))]
+        private void Supprimer()
         {
             if (Selection == null) return;
 
@@ -95,10 +123,10 @@ namespace Metrologo.ViewModels
 
             try
             {
-                bool ok = await _service.SupprimerAsync(Selection.Id);
-                if (ok)
+                if (ComptesLocauxService.Supprimer(Selection.Id))
                 {
                     Utilisateurs.Remove(Selection);
+                    Selection = null;
                     Statut = "Utilisateur supprimé.";
                 }
             }
@@ -114,30 +142,79 @@ namespace Metrologo.ViewModels
             }
         }
 
-        private bool PeutSupprimer() => Selection != null;
+        /// <summary>
+        /// Change le rôle. Si la transition crée un nouvel admin (promotion depuis
+        /// Utilisateur), le service génère un mot de passe et on l'affiche une seule
+        /// fois pour qu'on puisse le communiquer.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(PeutChangerRole))]
+        private void ChangerRole()
+        {
+            if (Selection == null) return;
 
-        [RelayCommand(CanExecute = nameof(PeutReinitialiser))]
-        private async Task ReinitialiserMotDePasseAsync()
+            var dlg = new ChangerRoleDialog(Selection) { Owner = Application.Current.MainWindow };
+            if (dlg.ShowDialog() != true) return;
+            if (dlg.RoleChoisi == Selection.Role) return;
+
+            try
+            {
+                string? mdpGenere = ComptesLocauxService.ChangerRole(Selection.Id, dlg.RoleChoisi);
+
+                int idCourant = Selection.Id;
+                Charger();
+                Selection = Utilisateurs.FirstOrDefault(u => u.Id == idCourant);
+
+                if (mdpGenere != null && Selection != null)
+                {
+                    var info = new InfoMdpGenereDialog(Selection.Login, mdpGenere,
+                        titre: "Compte promu administrateur")
+                    { Owner = Application.Current.MainWindow };
+                    info.ShowDialog();
+                }
+
+                Statut = $"Rôle de {Selection?.Login ?? "?"} : {dlg.RoleChoisi}.";
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Action refusée",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Modification échouée : {ex.Message}", "Erreur",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Réinitialise le mot de passe du compte admin sélectionné. Réservé au
+        /// SuperAdministrateur. Le nouveau mot de passe est affiché une seule fois.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(PeutReinitialiserMotDePasse))]
+        private void ReinitialiserMotDePasse()
         {
             if (Selection == null) return;
 
             var conf = MessageBox.Show(
                 $"Réinitialiser le mot de passe de {Selection.NomComplet} ({Selection.Login}) ?\n\n" +
-                "L'ancien mot de passe sera immédiatement invalidé. Le nouveau mot de passe sera affiché " +
-                "une seule fois — à communiquer à l'utilisateur.",
+                "L'ancien mot de passe sera immédiatement invalidé. Le nouveau sera affiché une seule fois.",
                 "Confirmer la réinitialisation",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (conf != MessageBoxResult.Yes) return;
 
             try
             {
-                string nouveauMdp = await _service.ReinitialiserMotDePasseAsync(Selection.Id);
-
-                var info = new InfoCompteCreeDialog(Selection.Login, nouveauMdp,
-                    titre: "Mot de passe réinitialisé") { Owner = Application.Current.MainWindow };
+                string nouveauMdp = ComptesLocauxService.ReinitialiserMotDePasse(Selection.Id);
+                var info = new InfoMdpGenereDialog(Selection.Login, nouveauMdp,
+                    titre: "Mot de passe réinitialisé")
+                { Owner = Application.Current.MainWindow };
                 info.ShowDialog();
-
                 Statut = $"Mot de passe réinitialisé pour {Selection.Login}.";
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Action refusée",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -146,6 +223,25 @@ namespace Metrologo.ViewModels
             }
         }
 
-        private bool PeutReinitialiser() => Selection != null;
+        /// <summary>
+        /// Permet à l'admin connecté de changer son propre mot de passe. Accessible
+        /// quel que soit le rôle (Admin ou SuperAdmin).
+        /// </summary>
+        [RelayCommand]
+        private void ChangerMonMotDePasse()
+        {
+            var dlg = new ChangerMdpAdminWindow { Owner = Application.Current.MainWindow };
+            if (dlg.ShowDialog() == true)
+            {
+                Statut = "Mot de passe modifié.";
+            }
+        }
+
+        private bool PeutModifier() => Selection != null;
+        private bool PeutChangerRole() => Selection != null && EstSuperAdmin;
+        private bool PeutReinitialiserMotDePasse() =>
+            Selection != null
+            && Selection.Role != RoleUtilisateur.Utilisateur
+            && EstSuperAdmin;
     }
 }

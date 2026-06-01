@@ -193,17 +193,17 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Mesures - copie locale -->
+                <!-- Mesures - chemin réseau (partagé entre postes) -->
                 <Border Style="{StaticResource FormSectionStyle}">
                     <StackPanel>
-                        <TextBlock Text="Mesures — copie locale (sauvegarde)" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Mesures — chemin réseau (partagé)" Style="{StaticResource SectionTitleStyle}"/>
                         <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,0,0,10"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}">
-                            <Run Text="Chemin LOCAL où chaque rapport Excel produit est dupliqué automatiquement après la mesure. Garantit la disponibilité des rapports même si le partage réseau du serveur principal est indisponible (coupure connexion, maintenance…)."/>
+                            <Run Text="Chemin RÉSEAU où chaque rapport Excel est dupliqué automatiquement après la mesure. Permet à tous les postes du laboratoire de retrouver les rapports au même endroit."/>
                             <LineBreak/>
-                            <Run Text="Recommandé : un dossier sur le disque local du poste (ex. "/>
-                            <Run FontFamily="Cascadia Mono, Consolas" Text="C:\Metrologo_Backup"/>
-                            <Run Text="). Vide = pas de duplication (à éviter)."/>
+                            <Run Text="Par défaut : "/>
+                            <Run FontFamily="Cascadia Mono, Consolas" Text="M:\exe_spe\Data_Metrologo\Mesures"/>
+                            <Run Text=". Le fichier principal est toujours conservé localement sur le poste (Documents\Metrologo) en plus de cette copie réseau. Vide = pas de duplication réseau."/>
                         </TextBlock>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -212,7 +212,7 @@
                             </Grid.ColumnDefinitions>
                             <ui:TextBox Grid.Column="0"
                                         Text="{Binding CheminMesuresLocal, UpdateSourceTrigger=PropertyChanged}"
-                                        PlaceholderText="C:\Metrologo_Backup  (vide = pas de sauvegarde)"
+                                        PlaceholderText="M:\exe_spe\Data_Metrologo\Mesures  (vide = pas de duplication réseau)"
                                         FontFamily="Cascadia Mono, Consolas" Padding="10,6"/>
                             <Button Grid.Column="1" Content="Parcourir..."
                                     Command="{Binding ParcourirMesuresLocalCommand}"

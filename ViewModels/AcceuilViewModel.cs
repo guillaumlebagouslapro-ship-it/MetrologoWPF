@@ -38,7 +38,32 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private bool _estSurBaie = true;
         [ObservableProperty] private string _informationsGenerales = "Prêt. En attente d'exécution...";
         [ObservableProperty] private string _rubidiumActifTexte = EtatApplication.RubidiumActifTexte;
-        [ObservableProperty] private Mesure _mesureConfig = new Mesure();
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(EstConfigure))]
+        [NotifyPropertyChangedFor(nameof(LibelleAppareilConfigure))]
+        private Mesure _mesureConfig = new Mesure();
+
+        /// <summary>
+        /// Vrai dès qu'une configuration a été validée (N° FI renseigné). Pilote l'affichage
+        /// du bandeau « Fiche en cours » sur l'écran d'accueil.
+        /// </summary>
+        public bool EstConfigure => !string.IsNullOrWhiteSpace(MesureConfig?.NumFI);
+
+        /// <summary>
+        /// Libellé court de l'appareil sélectionné dans la config (vide si aucun) — affiché
+        /// dans le bandeau « Fiche en cours ».
+        /// </summary>
+        public string LibelleAppareilConfigure
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(MesureConfig?.IdModeleCatalogue)) return string.Empty;
+                var modele = CatalogueAppareilsService.Instance.Modeles
+                    .FirstOrDefault(m => m.Id == MesureConfig.IdModeleCatalogue);
+                return modele?.Nom ?? string.Empty;
+            }
+        }
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(RelancerMesureCommand))]
@@ -212,20 +237,34 @@ namespace Metrologo.ViewModels
         [RelayCommand]
         private void OuvrirDossierMesures()
         {
-            string dossier = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            // Priorité au chemin réseau configuré (Admin > Chemins d'accès > Mesures —
+            // chemin réseau partagé). Fallback sur le dossier local Bureau\Metrologo
+            // si le réseau est vide ou inaccessible (coupure connexion, partage down).
+            string dossierLocal = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
                 "Metrologo");
+            string dossierReseau = Services.CheminsMetrologo.MesuresLocal;
+
+            string dossierCible = dossierLocal;
+            if (!string.IsNullOrWhiteSpace(dossierReseau))
+            {
+                try
+                {
+                    if (System.IO.Directory.Exists(dossierReseau)) dossierCible = dossierReseau;
+                }
+                catch { /* réseau down, fallback local */ }
+            }
 
             try
             {
-                System.IO.Directory.CreateDirectory(dossier);
+                System.IO.Directory.CreateDirectory(dossierCible);
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = dossier,
+                    FileName = dossierCible,
                     UseShellExecute = true
                 });
                 Journal.Info(CategorieLog.Systeme, "OUVERTURE_DOSSIER_MESURES",
-                    $"Ouverture du dossier des mesures : {dossier}");
+                    $"Ouverture du dossier des mesures : {dossierCible}");
             }
             catch (Exception ex)
             {
@@ -256,6 +295,12 @@ namespace Metrologo.ViewModels
             if (win.ShowDialog() == true)
             {
                 MesureConfig = vm.MesureConfig;
+                // L'assignation ci-dessus garde souvent la même référence (vm avait reçu
+                // notre instance par référence) — CommunityToolkit ne notifie pas dans ce
+                // cas et le bandeau « Fiche en cours » ne s'affiche jamais. On force.
+                OnPropertyChanged(nameof(MesureConfig));
+                OnPropertyChanged(nameof(EstConfigure));
+                OnPropertyChanged(nameof(LibelleAppareilConfigure));
                 string nomAppareil = vm.AppareilSelectionne?.Detecte?.Libelle ?? "(aucun)";
                 Log($"⚙ Configuration : FI {MesureConfig.NumFI} · {MesureConfig.TypeMesure} · "
                   + $"{nomAppareil} · {MesureConfig.NbMesures} mesures · "
@@ -276,16 +321,30 @@ namespace Metrologo.ViewModels
                         fNominale = MesureConfig.FNominale
                     });
 
+                // Journal utilisateur FI : entrée détaillée avec les paramètres clés.
+                string gateLib = Metrologo.Services.EnTetesMesureHelper.LibelleGate(MesureConfig.GateIndex);
+                JournalFIService.Ecrire("CONFIG_VALIDEE",
+                    $"{MesureConfig.TypeMesure} · {MesureConfig.NbMesures} mesures · "
+                    + $"{nomAppareil} · gate {gateLib} · {MesureConfig.ModeMesure} · {MesureConfig.SourceMesure}");
+
                 // Enchaînement automatique : après validation de la config, on déclenche
-                // directement le lancement de mesure — pour la Stabilité ça ouvre la
-                // fenêtre de sélection des gates ; pour les autres types ça démarre la
-                // boucle de mesures sans étape supplémentaire à cliquer.
-                await ExecuterMesureAsync();
+                // directement le lancement de mesure (ouvrirConfigAvant=false pour éviter
+                // une boucle de réouverture de la fenêtre de config).
+                await ExecuterMesureInterneAsync(ouvrirConfigAvant: false);
             }
         }
 
+        /// <summary>
+        /// Commande déclenchée par le bouton « Lancer la mesure ». L'utilisateur veut
+        /// systématiquement passer par la fenêtre de configuration avant chaque mesure
+        /// (même si une config précédente existe) — on délègue donc à OuvrirConfigurationAsync
+        /// qui rappellera <see cref="ExecuterMesureInterneAsync"/>(false) après validation.
+        /// Pour relancer SANS reconfigurer, utiliser le bouton « Relancer ».
+        /// </summary>
         [RelayCommand]
-        private async Task ExecuterMesureAsync()
+        private Task ExecuterMesureAsync() => ExecuterMesureInterneAsync(ouvrirConfigAvant: true);
+
+        private async Task ExecuterMesureInterneAsync(bool ouvrirConfigAvant)
         {
             if (MesureEnCours) return;
 
@@ -303,12 +362,14 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // 2) Configuration (FI obligatoire) — si manquant, on délègue à
-            // OuvrirConfigurationAsync qui ré-appellera ExecuterMesureAsync à sa fin sur
-            // validation. On RETURN ici pour ne pas continuer le workflow en double.
-            if (string.IsNullOrWhiteSpace(MesureConfig?.NumFI))
+            // 2) Cycle 1 — clic sur « Lancer la mesure » : on ouvre la config avant la mesure,
+            //    même si une config valide existait déjà (l'utilisateur reconfigure à chaque
+            //    mesure : N° FI différent, paramètres modifiés…). À la validation,
+            //    OuvrirConfigurationAsync rappelle ExecuterMesureInterneAsync(false) pour
+            //    enchaîner sur le lancement réel. On RETURN ici pour éviter le double-call.
+            if (ouvrirConfigAvant || string.IsNullOrWhiteSpace(MesureConfig?.NumFI))
             {
-                Log("ℹ Configuration requise avant de lancer une mesure.");
+                Log("ℹ Ouverture de la configuration avant lancement.");
                 await OuvrirConfigurationAsync();
                 return;
             }
@@ -411,32 +472,63 @@ namespace Metrologo.ViewModels
 
             if (choix == MessageBoxResult.Yes)
             {
-                // Ferme d'abord le classeur Interop pour libérer le fichier sur disque,
-                // sinon File.Delete plante avec IOException.
-                try { await ExcelInteropHost.Instance.FermerClasseurActifAsync(); }
-                catch { /* best-effort */ }
-
-                string cible = _excelService.CheminFichierGenere;
-                if (!string.IsNullOrEmpty(cible) && System.IO.File.Exists(cible))
+                // OPTION A v2 : si un classeur est ouvert dans Excel COM, on le réinitialise IN PLACE
+                // (suppression des feuilles freq*/stab*/etc. + nettoyage Récap.) SANS jamais fermer
+                // le Workbook. Évite la fenêtre grise SDI qui apparaissait avec l'ancien flux
+                // FermerClasseurActif + File.Delete (~1-3s à 0 Workbook = shell garantie).
+                //
+                // Si aucun classeur n'est ouvert (cas rare : l'utilisateur a fermé Excel manuellement
+                // après la mesure précédente), on retombe sur le flux historique fermer + delete.
+                if (ExcelInteropHost.Instance.AClasseurActif)
                 {
                     try
                     {
-                        System.IO.File.Delete(cible);
-                        Log($"🗑 Fichier précédent supprimé : {System.IO.Path.GetFileName(cible)}");
+                        await ExcelInteropHost.Instance.ReinitialiserClasseurActifAsync();
+                        Log("🗑 Classeur réinitialisé in-place (anciennes feuilles supprimées, fichier conservé).");
                         Journal.Info(CategorieLog.Mesure, "MESURE_RELANCE_ECRASE",
-                            $"Fichier supprimé avant relance : {cible}");
+                            "Classeur réinitialisé via COM (pas de fermeture, pas de shell).");
                     }
                     catch (Exception ex)
                     {
-                        Log($"⚠ Impossible de supprimer le fichier précédent : {ex.Message}");
-                        MessageBox.Show(
-                            $"Impossible de supprimer le fichier précédent :\n{ex.Message}\n\n"
-                          + "Ferme-le dans Excel et relance.",
-                            "Fichier verrouillé", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
+                        Log($"⚠ Réinitialisation in-place échouée : {ex.Message} — fallback fermer + delete.");
+                        try { await ExcelInteropHost.Instance.FermerClasseurActifAsync(); } catch { }
+                        string cibleF = _excelService.CheminFichierGenere;
+                        if (!string.IsNullOrEmpty(cibleF) && System.IO.File.Exists(cibleF))
+                        {
+                            try { System.IO.File.Delete(cibleF); } catch { }
+                        }
+                    }
+                }
+                else
+                {
+                    // Pas de classeur ouvert — flux historique (rien à éviter, pas de shell ici).
+                    string cible = _excelService.CheminFichierGenere;
+                    if (!string.IsNullOrEmpty(cible) && System.IO.File.Exists(cible))
+                    {
+                        try
+                        {
+                            System.IO.File.Delete(cible);
+                            Log($"🗑 Fichier précédent supprimé : {System.IO.Path.GetFileName(cible)}");
+                            Journal.Info(CategorieLog.Mesure, "MESURE_RELANCE_ECRASE",
+                                $"Fichier supprimé avant relance : {cible}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"⚠ Impossible de supprimer le fichier précédent : {ex.Message}");
+                            MessageBox.Show(
+                                $"Impossible de supprimer le fichier précédent :\n{ex.Message}\n\n"
+                              + "Ferme-le dans Excel et relance.",
+                                "Fichier verrouillé", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
                     }
                 }
             }
+
+            JournalFIService.Ecrire("RELANCE",
+                choix == MessageBoxResult.Yes
+                    ? "fichier neuf (ancien supprimé)"
+                    : "conserve historique");
 
             await LancerMesureAsync(MesureConfig, rubi, _derniereFNominale,
                 preambule: choix == MessageBoxResult.Yes
@@ -456,6 +548,34 @@ namespace Metrologo.ViewModels
 
         private async Task LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
         {
+            // Vérifie d'abord si un Excel externe (autre que notre instance COM cachée) est
+            // ouvert : il peut tenir verrouillé le fichier .xlsx de la mesure et faire échouer
+            // ClosedXML. On propose à l'utilisateur de fermer ces instances avant de lancer.
+            var excelsExternes = ExcelInteropHost.Instance.ListerExcelsExternes();
+            if (excelsExternes.Count > 0)
+            {
+                int nbExternes = excelsExternes.Count;
+                var choix = MessageBox.Show(
+                    $"{nbExternes} instance{(nbExternes > 1 ? "s" : "")} Excel détectée"
+                  + $"{(nbExternes > 1 ? "s" : "")} en plus de Metrologo.\n\n"
+                  + "Si l'une d'elles a ouvert le rapport de cette FI, la mesure risque "
+                  + "d'échouer (fichier verrouillé).\n\n"
+                  + $"Voulez-vous fermer ces instance{(nbExternes > 1 ? "s" : "")} Excel maintenant ?",
+                    "Excel ouvert détecté",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (choix == MessageBoxResult.Yes)
+                {
+                    int nbFermes = ExcelInteropHost.Instance.FermerExcelsExternes();
+                    Log($"🗑 {nbFermes} instance(s) Excel externe(s) fermée(s) avant lancement.");
+                    Journal.Info(CategorieLog.Excel, "EXCELS_EXTERNES_FERMES",
+                        $"{nbFermes} instance(s) Excel externe(s) fermée(s) avant lancement de la mesure.");
+                }
+                // Si Non, on continue sans rien faire (l'utilisateur a vu l'avertissement
+                // et accepte le risque que la mesure échoue si le fichier est verrouillé).
+            }
+
             _cts = new CancellationTokenSource();
             _abandonCts = new CancellationTokenSource();
             MesureEnCours = true;
@@ -552,17 +672,17 @@ namespace Metrologo.ViewModels
                     $"Thread STOP flottant non démarré : {ex.Message}");
             }
 
-            // Ferme explicitement le classeur Excel ouvert par la mesure précédente
-            // (relance mêmes paramètres). Sans ça, ClosedXML échoue à sauver dans le
-            // .xlsm encore tenu ouvert par Interop, OU la finalisation Interop tente
-            // d'ouvrir un classeur déjà ouvert dans la même instance Excel — ce qui
-            // stoppe la mesure à la dernière gate.
-            try { await ExcelInteropHost.Instance.FermerClasseurActifAsync(); }
-            catch (Exception ex)
-            {
-                Journal.Warn(CategorieLog.Excel, "FERMETURE_INTEROP_RELANCE_ERR",
-                    $"Fermeture classeur Interop avant relance échouée : {ex.Message}");
-            }
+            // OPTION A v2 : on NE FERME PLUS systématiquement le classeur Excel ici.
+            //
+            // C'était la cause profonde du bug "fenêtre grise" : à chaque clic sur Relancer
+            // (ou Lancer la mesure), on faisait FermerClasseurActifAsync, ce qui mettait
+            // _classeurActif à null → MesureOrchestrator évaluait AClasseurActif=False
+            // → la voie COM v2 (qui ajoute une feuille sans fermer le classeur) n'était
+            // JAMAIS empruntée → fallback ClosedXML → moment 0-Workbook = shell SDI grise.
+            //
+            // MesureOrchestrator.ExecuterAsync ferme déjà le classeur lui-même si la voie
+            // ClosedXML est sélectionnée (cas mesure 1, ou changement de FI). En voie COM
+            // (mesure 2+ même FI), on garde le classeur ouvert.
 
             string nomAppareilLog = ResolvedNomAppareil(config);
             Log("═══════════════════════════════════════════");
@@ -586,6 +706,10 @@ namespace Metrologo.ViewModels
                     rubidium = rubi.Designation,
                     gps = rubi.AvecGPS
                 });
+
+            // Journal utilisateur FI : ligne MESURE_DEBUT avec préambule (Lancement / Relance).
+            JournalFIService.Ecrire("MESURE_DEBUT",
+                $"{preambule} · {config.NbMesures} mesures · {nomAppareilLog}");
 
             var progress = new Progress<ProgressionMesure>(p =>
             {
@@ -619,14 +743,21 @@ namespace Metrologo.ViewModels
                 bool excelMortDetecte = false;
                 var taskWatchdogExcel = Task.Run(async () =>
                 {
+                    // Capture des Token (struct value-type) en local : ils restent valides
+                    // même si le finally a mis _abandonCts/_cts à null après Dispose pendant
+                    // qu'on était dans l'await Task.Delay ci-dessous. Sans cette copie, on
+                    // crashait en NullReferenceException sur _abandonCts.IsCancellationRequested.
+                    var abandonToken = _abandonCts!.Token;
+                    var mesureToken = _cts!.Token;
+
                     // Petit délai initial pour laisser le temps à Excel d'être démarré
                     // par la première écriture (cas où _excelPid n'est pas encore connu).
-                    await Task.Delay(2000, _abandonCts!.Token).ContinueWith(_ => { });
+                    await Task.Delay(2000, abandonToken).ContinueWith(_ => { });
 
-                    while (!_abandonCts.IsCancellationRequested
-                        && !_cts!.IsCancellationRequested)
+                    while (!abandonToken.IsCancellationRequested
+                        && !mesureToken.IsCancellationRequested)
                     {
-                        try { await Task.Delay(1000, _abandonCts.Token); }
+                        try { await Task.Delay(1000, abandonToken); }
                         catch (OperationCanceledException) { break; }
 
                         // Ne surveille que si Excel a été démarré (PID connu).
@@ -701,6 +832,29 @@ namespace Metrologo.ViewModels
                         $"Mesure terminée : moyenne {result.Moyenne:F6} Hz, σ {result.EcartType:E3} Hz",
                         new { result.Moyenne, result.EcartType, nbValeurs = result.Valeurs.Count });
 
+                    // Journal utilisateur FI : ligne MESURE_FIN avec stats clés.
+                    JournalFIService.Ecrire("MESURE_FIN",
+                        $"{result.Valeurs.Count} valeurs · moy {result.Moyenne:F6} Hz · σ {result.EcartType:E3} Hz");
+
+                    // Si le transfert du dossier FI vers le réseau a échoué : prévenir l'utilisateur.
+                    // Le dossier reste en local et sera retransféré automatiquement au prochain
+                    // démarrage de Metrologo (cf. TransfertReseauService).
+                    if (result.TransfertReseauOk == false)
+                    {
+                        Log("⚠ Transfert réseau échoué — le dossier FI reste en local.");
+                        MessageBox.Show(
+                            $"Le dossier de la FI {config.NumFI} n'a pas pu être copié sur "
+                          + $"le partage réseau ({CheminsMetrologo.MesuresLocal}).\n\n"
+                          + "Causes possibles :\n"
+                          + "  • Le lecteur réseau est temporairement indisponible\n"
+                          + "  • Latence ou perte de connexion\n"
+                          + "  • Droits insuffisants sur le dossier cible\n\n"
+                          + "Toutes les données restent en local sur ton Bureau. Au prochain "
+                          + "démarrage de Metrologo, le transfert sera retenté automatiquement.",
+                            "Transfert réseau différé",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+
                     // Saisie post-mesure : fréquence lue + incertitudes — uniquement pour
                     // Fréquence + Source=Fréquencemètre (conforme Delphi : skip si Générateur).
                     await SaisiePostMesureAsync(config);
@@ -709,6 +863,7 @@ namespace Metrologo.ViewModels
                 {
                     Log($"✖ Échec : {result.Erreur}");
                     Journal.Erreur(CategorieLog.Mesure, "MESURE_ECHEC", result.Erreur ?? "Échec inconnu.");
+                    JournalFIService.Ecrire("MESURE_ECHEC", result.Erreur ?? "Échec inconnu");
                     MessageBox.Show(result.Erreur ?? "Erreur inconnue.",
                         "Mesure interrompue", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
@@ -717,6 +872,7 @@ namespace Metrologo.ViewModels
             {
                 Log($"✖ Erreur inattendue : {ex.Message}");
                 Journal.Erreur(CategorieLog.Mesure, "MESURE_EXCEPTION", ex.Message, new { ex.StackTrace });
+                JournalFIService.Ecrire("MESURE_ECHEC", $"Exception : {ex.Message}");
                 MessageBox.Show(ex.Message, "Erreur inattendue",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -847,6 +1003,7 @@ namespace Metrologo.ViewModels
                 }
                 Log("⏹ Arrêt demandé — en cours…");
                 Journal.Warn(CategorieLog.Mesure, "MESURE_STOP", "Arrêt demandé par l'utilisateur.");
+                JournalFIService.Ecrire("STOP_UTILISATEUR", "Arrêt manuel via bouton flottant");
             }
         }
 

@@ -88,6 +88,64 @@ namespace Metrologo.ViewModels
             RebuildModulesIncertitude();
         }
 
+        // ------- Masquage progressif des sections du formulaire -------
+        // Le formulaire s'ouvre vide : seule la section Identification (N° FI) est visible.
+        // Une fois un FI valide saisi, on dévoile Type/Nb/Module ; une fois le module choisi
+        // (ou aucun module dispo pour ce type), on dévoile Source/Instrument/Mode.
+
+        /// <summary>
+        /// Étape 1 — N° FI au format <c>XX_NNNNN</c> (8 caractères, _ en position 3).
+        /// Tant que false, toutes les sections suivantes restent masquées.
+        /// </summary>
+        public bool EtapeFIValide
+        {
+            get
+            {
+                var fi = MesureConfig.NumFI?.Trim() ?? string.Empty;
+                return fi.Length == 8 && fi[2] == '_';
+            }
+        }
+
+        /// <summary>
+        /// Étape 2 — FI valide + module d'incertitude sélectionné (ou aucun dispo pour
+        /// ce type de mesure, auquel cas le message d'aide remplace la sélection).
+        /// Tant que false, les sections Source/Instrument/Mode restent masquées.
+        /// </summary>
+        public bool EtapeTypeValide =>
+            EtapeFIValide && (ModuleSelectionne != null || !AModulesIncertitude);
+
+        /// <summary>
+        /// Visibilité de la section « Source du signal » : combinée avec
+        /// <see cref="ShowSourceMesure"/> (Fréquence uniquement) ET l'étape 2.
+        /// </summary>
+        public bool AfficherSourceMesure => ShowSourceMesure && EtapeTypeValide;
+
+        /// <summary>
+        /// Notifie le XAML que les conditions de visibilité des sections ont changé.
+        /// À appeler après toute modification de NumFI, TypeMesure, NbMesures ou Module.
+        /// </summary>
+        public void NotifierEtapes()
+        {
+            OnPropertyChanged(nameof(EtapeFIValide));
+            OnPropertyChanged(nameof(EtapeTypeValide));
+            OnPropertyChanged(nameof(AfficherSourceMesure));
+
+            // Démarre le journal utilisateur de la FI dès que le numéro est complet/valide.
+            // JournalFIService.DemarrerSession est idempotent : appels répétés avec la même
+            // FI = no-op, donc on peut l'invoquer sans risque à chaque notification.
+            if (EtapeFIValide)
+            {
+                string utilisateur = EtatApplication.UtilisateurConnecte?.NomComplet
+                    ?? EtatApplication.UtilisateurConnecte?.Login
+                    ?? "(inconnu)";
+                string poste = EstSurBaie ? "Baie" : "Paillasse";
+                JournalFIService.DemarrerSession(
+                    MesureConfig.NumFI?.Trim() ?? string.Empty,
+                    utilisateur,
+                    poste);
+            }
+        }
+
         // ------- Modules d'incertitude (filtrés par TypeMesure) -------
 
         /// <summary>
@@ -118,6 +176,7 @@ namespace Metrologo.ViewModels
                 _moduleSelectionne = value;
                 MesureConfig.NumModuleIncertitude = value?.NumModule ?? string.Empty;
                 OnPropertyChanged();
+                NotifierEtapes();   // module sélectionné = passage à l'étape 3
             }
         }
 
@@ -269,6 +328,23 @@ namespace Metrologo.ViewModels
                     o.Detecte?.ModeleReconnu?.Id == MesureConfig.IdModeleCatalogue);
             }
 
+            // Si rien n'a été restauré ET qu'il y a au moins un appareil détecté, on
+            // sélectionne le premier — via la propriété pour que le setter renseigne
+            // MesureConfig.IdModeleCatalogue. Sans ça, l'UI affichait bien le 1er appareil
+            // (via le getter qui fait FirstOrDefault) mais l'orchestrator ne le voyait pas
+            // côté config → erreur « Aucun appareil sélectionné » au lancement de la mesure.
+            if (_appareilSelectionne == null && Appareils.Count > 0)
+            {
+                AppareilSelectionne = Appareils[0];
+            }
+            else if (_appareilSelectionne != null && MesureConfig != null)
+            {
+                // Restauré par IDN ou par IdModeleCatalogue : on resync la config au cas où
+                // un changement de catalogue aurait modifié l'Id du modèle reconnu.
+                var modele = _appareilSelectionne.Detecte?.ModeleReconnu;
+                MesureConfig.IdModeleCatalogue = modele?.Id ?? string.Empty;
+            }
+
             OnPropertyChanged(nameof(AppareilSelectionne));
             RebuildReglagesDynamiques();
             RefreshAll();
@@ -328,6 +404,11 @@ namespace Metrologo.ViewModels
 
                 foreach (var reglage in modele.Reglages)
                 {
+                    // Réglages "Auto" : ne s'affichent JAMAIS dans la fenêtre Configuration.
+                    // L'option est sélectionnée automatiquement à la validation selon le contexte
+                    // (TypeMesure + VoieActive), cf. CalculerCommandesAutomatiques.
+                    if (reglage.Auto) continue;
+
                     var vm = new ReglageDynamiqueViewModel(reglage);
 
                     // Si une des commandes persistées correspond à une des options de ce réglage,
@@ -538,6 +619,7 @@ namespace Metrologo.ViewModels
 
             OnPropertyChanged(nameof(MesureConfig));
             RefreshAll();
+            NotifierEtapes();   // changement type peut redéclencher AModulesIncertitude
         }
 
         public Action<bool>? CloseAction { get; set; }
@@ -565,11 +647,157 @@ namespace Metrologo.ViewModels
                 return;
             }
 
+            // ===== Portage exact de la validation Delphi (F_Configuration.pas:104-127) =====
+
+            // 1. Trim + longueur exacte = 8 caractères
+            string slNoFI = MesureConfig.NumFI.Trim();
+            if (slNoFI.Length != 8)
+            {
+                MessageBox.Show(
+                    $"N° de FI incorrect : {slNoFI} !",
+                    "Erreur",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return;
+            }
+            MesureConfig.NumFI = slNoFI;   // normalise au cas où l'utilisateur avait laissé des espaces
+
+            // 2. Vérification d'existence dans la base ASERi (SVR-OR / SIA / tAffaire)
+            bool? existe = await AseriService.FiExisteAsync(slNoFI);
+            string sFI = slNoFI.Replace('_', '/');
+
+            if (existe == null)
+            {
+                // Erreur de connexion ASERi (réseau down, serveur en maintenance).
+                // On laisse le choix à l'utilisateur : continuer sans vérif ou annuler.
+                var resu = MessageBox.Show(
+                    $"Impossible de joindre la base ASERi pour vérifier la FI n° {sFI}.\n\n"
+                  + "Veux-tu continuer quand même (sans vérification d'existence) ?\n\n"
+                  + "• Oui = lancer la mesure malgré tout (la FI sera marquée comme non vérifiée dans le journal).\n"
+                  + "• Non = annuler et réessayer plus tard.",
+                    "ASERi inaccessible",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                if (resu != MessageBoxResult.Yes) return;
+                JournalLog.Warn(CategorieLog.Configuration, "ASERI_BYPASS_USER",
+                    $"Validation FI {sFI} acceptée par l'utilisateur malgré l'indisponibilité d'ASERi.");
+            }
+            else if (existe == false)
+            {
+                // Fi inconnue de la base ASERi → refus identique au Delphi
+                MessageBox.Show(
+                    $"La FI n° {sFI} n'existe pas dans ASERi !",
+                    "Erreur",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return;
+            }
+
             await EnvoyerCommandesScpiAsync();
             CloseAction?.Invoke(true);
         }
 
         [RelayCommand] private void Annuler() => CloseAction?.Invoke(false);
+
+        /// <summary>
+        /// Calcule les commandes SCPI à envoyer automatiquement à l'appareil selon le
+        /// contexte (TypeMesure + VoieActive). Lit les <see cref="ReglageAppareil"/> du
+        /// catalogue qui ont le flag <c>Auto: true</c> et sélectionne pour chacun l'option
+        /// dont le libellé matche le contexte.
+        ///
+        /// Convention de libellés reconnus (l'admin doit les respecter à l'enregistrement) :
+        /// <list type="bullet">
+        ///   <item>Mode de mesure :
+        ///         "TIAB…" → Interval ;
+        ///         "FREQ Voie A/B/C" → fréquence sur la voie correspondante</item>
+        ///   <item>Résolution :
+        ///         "CONT…" → Stabilité (Allan deviation gap-free) ;
+        ///         "AUTO" → tout le reste (fallback par défaut)</item>
+        /// </list>
+        ///
+        /// Si un libellé attendu n'est pas trouvé pour le contexte courant, on fallback sur
+        /// la 1ère option du réglage (= valeur par défaut catalogue) — comportement permissif.
+        /// </summary>
+        private List<string> CalculerCommandesAutomatiques(string idModele)
+        {
+            _ = idModele; // gardé pour signature future, mais on lit le catalogue directement
+            var commandes = new List<string>();
+            var modele = ModeleCatalogueSelectionne();
+            if (modele == null) return commandes;
+
+            foreach (var reglage in modele.Reglages.Where(r => r.Auto))
+            {
+                var option = SelectionnerOptionAuto(reglage);
+                if (option != null && !string.IsNullOrWhiteSpace(option.CommandeScpi))
+                {
+                    commandes.Add(option.CommandeScpi);
+                }
+            }
+
+            return commandes;
+        }
+
+        /// <summary>
+        /// Choisit l'option d'un réglage <c>Auto</c> selon le contexte courant (TypeMesure +
+        /// VoieActive), par matching des libellés d'options.
+        ///
+        /// Conventions de libellés reconnus côté code :
+        /// <list type="bullet">
+        ///   <item>Mode de mesure : <c>"Voie A"</c> / <c>"Voie B"</c> / <c>"Voie C"</c> selon
+        ///         <see cref="VoieActive"/> ; <c>"TIAB"</c> en priorité si
+        ///         <see cref="TypeMesure.Interval"/>.</item>
+        ///   <item>Résolution : <c>"CONT"</c> pour <see cref="TypeMesure.Stabilite"/>,
+        ///         <c>"AUTO"</c> sinon (fallback).</item>
+        /// </list>
+        /// Si l'option attendue n'est pas trouvée, on prend la 1ère option du catalogue.
+        ///
+        /// Les champs <c>QuandType</c> / <c>QuandVoie</c> de <see cref="OptionReglage"/> sont
+        /// disponibles mais non utilisés ici (les libellés suffisent pour les 2 cas connus —
+        /// "Mode de mesure" et "Résolution" — qui sont les seuls réglages Auto en pratique).
+        /// </summary>
+        private OptionReglage? SelectionnerOptionAuto(ReglageAppareil reglage)
+        {
+            if (reglage.Options.Count == 0) return null;
+
+            // Mode de mesure : Interval prioritaire (TIAB), sinon par voie active
+            if (reglage.Nom.Contains("Mode", StringComparison.OrdinalIgnoreCase))
+            {
+                if (MesureConfig.TypeMesure == TypeMesure.Interval)
+                {
+                    var opt = reglage.Options.FirstOrDefault(o =>
+                        o.Libelle.Contains("TIAB", StringComparison.OrdinalIgnoreCase));
+                    if (opt != null) return opt;
+                }
+                string libelleVoie = MesureConfig.VoieActive switch
+                {
+                    VoieActive.A => "Voie A",
+                    VoieActive.B => "Voie B",
+                    VoieActive.C => "Voie C",
+                    _ => "Voie A"
+                };
+                var optVoie = reglage.Options.FirstOrDefault(o =>
+                    o.Libelle.Contains(libelleVoie, StringComparison.OrdinalIgnoreCase));
+                if (optVoie != null) return optVoie;
+            }
+
+            // Résolution : CONT pour Stabilité, AUTO sinon
+            if (reglage.Nom.Contains("Résolution", StringComparison.OrdinalIgnoreCase)
+                || reglage.Nom.Contains("Resolution", StringComparison.OrdinalIgnoreCase))
+            {
+                if (MesureConfig.TypeMesure == TypeMesure.Stabilite)
+                {
+                    var opt = reglage.Options.FirstOrDefault(o =>
+                        o.Libelle.Contains("CONT", StringComparison.OrdinalIgnoreCase));
+                    if (opt != null) return opt;
+                }
+                var optAuto = reglage.Options.FirstOrDefault(o =>
+                    o.Libelle.Contains("AUTO", StringComparison.OrdinalIgnoreCase));
+                if (optAuto != null) return optAuto;
+            }
+
+            // Fallback : 1ère option (= défaut catalogue)
+            return reglage.Options[0];
+        }
 
         private async Task EnvoyerCommandesScpiAsync()
         {
@@ -593,11 +821,50 @@ namespace Metrologo.ViewModels
             });
             reglagesApplicables.AddRange(ReglagesMode);
 
-            var commandes = reglagesApplicables
+            // Une CommandeScpi catalogue peut chaîner plusieurs commandes SCPI séparées par
+            // ";:" (ex: ":INP1:LEV:AUTO OFF;:INP1:LEV {0}" sur le 53230A). On les split ici
+            // en entrées distinctes pour que le driver émette UNE write GPIB par sous-commande.
+            // Motivation : sur le firmware Keysight 53230A, certaines chaînes concaténées sont
+            // tronquées au parsing — la seconde commande est silencieusement ignorée. Envoyer
+            // séparément garantit que chaque ordre est bien pris en compte.
+            var commandesUtilisateur = reglagesApplicables
                 .Select(r => r.CommandeSelectionnee)
                 .Where(c => !string.IsNullOrWhiteSpace(c))
-                .Select(c => c!)
+                .SelectMany(c => SplitCommandesScpi(c!))
                 .ToList();
+
+            // Commandes auto (typiquement Résolution :SENS:FREQ:MODE) selon TypeMesure + VoieActive.
+            var commandesAuto = CalculerCommandesAutomatiques(modele.Id);
+
+            // ⚠ ORDRE CRITIQUE pour le 53230A (et compteurs similaires).
+            // Sur ces appareils, la commande "Mode de mesure" (CONF:FREQ / CONF:TINT / :FUNC)
+            // réinitialise TOUS les paramètres d'entrée à leur valeur par défaut — y compris
+            // INP:LEV:AUTO qui revient à ON et INP:LEV qui revient à 0V auto-calibré. Toute
+            // commande INP:* envoyée AVANT CONF:* est donc silencieusement écrasée.
+            //
+            // Le catalogue marque "Mode de mesure" comme Auto=false (le user choisit Voie A/B/TIAB),
+            // donc cette commande arrive dans le bucket `commandesUtilisateur`. On la sort ici
+            // pour la placer en TÊTE de la séquence finale, suivie des autres commandes auto
+            // (Résolution), puis seulement après les paramètres d'entrée et le trigger level.
+            //
+            // Ordre final :
+            //   1. CONF:FREQ / CONF:TINT / :FUNC      (setup mesure — réinitialise tout)
+            //   2. :SENS:FREQ:MODE AUTO|RECIPROCAL    (résolution, dépend du type de mesure)
+            //   3. :INP1:IMP / :COUP / :FILT / :RANG  (paramètres d'entrée)
+            //   4. :INP1:LEV:AUTO OFF puis :INP1:LEV  (trigger level — en DERNIER, pour ne
+            //                                          surtout pas être écrasé par CONF:FREQ)
+            bool EstCommandeSetup(string cmd) =>
+                cmd.StartsWith("CONF:", StringComparison.OrdinalIgnoreCase) ||
+                cmd.StartsWith(":FUNC", StringComparison.OrdinalIgnoreCase) ||
+                cmd.StartsWith(":CONF", StringComparison.OrdinalIgnoreCase);
+
+            var commandesSetup = commandesUtilisateur.Where(EstCommandeSetup).ToList();
+            var commandesEntree = commandesUtilisateur.Where(c => !EstCommandeSetup(c)).ToList();
+
+            var commandes = new List<string>();
+            commandes.AddRange(commandesSetup);    // 1. CONF:FREQ (réinitialise les inputs)
+            commandes.AddRange(commandesAuto);     // 2. :SENS:FREQ:MODE
+            commandes.AddRange(commandesEntree);   // 3. INP1:IMP/COUP/FILT/RANG + LEV:AUTO OFF + LEV
 
             // On mémorise les commandes choisies dans la Mesure — l'orchestrator les rejouera
             // après le *RST pour que l'état de l'appareil soit cohérent avec la configuration
@@ -630,6 +897,34 @@ namespace Metrologo.ViewModels
                     + "est quand même conservée.",
                     "Erreur de communication GPIB",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Découpe une chaîne SCPI chaînée (séparateur ";:") en commandes individuelles bien
+        /// formées (chacune préfixée par ":"). Exemple :
+        /// <code>":INP1:LEV:AUTO OFF;:INP1:LEV 0" → [":INP1:LEV:AUTO OFF", ":INP1:LEV 0"]</code>
+        /// Si la chaîne ne contient pas ";:", elle est renvoyée telle quelle (single-element).
+        /// Utilisé pour garantir l'exécution séquentielle côté instrument sur les firmwares
+        /// qui parsent mal la concaténation (53230A notamment).
+        /// </summary>
+        private static IEnumerable<string> SplitCommandesScpi(string commande)
+        {
+            if (string.IsNullOrWhiteSpace(commande)) yield break;
+            if (!commande.Contains(";:"))
+            {
+                yield return commande;
+                yield break;
+            }
+            var parts = commande.Split(";:", StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i].Trim();
+                if (string.IsNullOrEmpty(p)) continue;
+                // La 1ʳᵉ partie garde son ":" initial déjà présent dans la chaîne d'origine.
+                // Les suivantes ont perdu le ":" qui suivait le ";", on le réajoute pour
+                // que la commande reparte de la racine SCPI.
+                yield return i == 0 ? p : ":" + p;
             }
         }
     }

@@ -4,11 +4,10 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
-using Dapper;
 using Metrologo.Models;
 using Metrologo.Services.Journal;
-using Microsoft.Data.SqlClient;
 using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.Services.Catalogue
@@ -16,21 +15,22 @@ namespace Metrologo.Services.Catalogue
     /// <summary>
     /// Catalogue centralisé des modèles d'appareils enregistrés (SCPI / IEEE).
     ///
-    /// Stockage : table <c>dbo.T_CATALOGUE_APPAREILS</c> sur SQL Server (champs
-    /// cherchables en colonnes, sous-collections complexes — Parametres, Gates,
-    /// Entrees, Couplages, Reglages — sérialisées en JSON dans une colonne
-    /// <c>Configuration</c>).
+    /// Stockage : fichier JSON unique sur le partage réseau —
+    /// <see cref="CheminsMetrologo.FichierCatalogueAppareils"/>
+    /// (par défaut <c>M:\exe_spe\Data_Metrologo\Catalogues\appareils.json</c>). Lecture
+    /// au démarrage de l'app + à chaque <see cref="ChargerAsync"/> ; ré-écriture
+    /// atomique (fichier temp + Move) après chaque modification, partage entre postes
+    /// transparent.
     ///
-    /// Au premier démarrage avec une base vide, l'éventuel fichier JSON local
-    /// hérité (<c>%LocalAppData%\Metrologo\AppareilsCatalogue.json</c>) est importé
-    /// puis renommé en <c>.imported</c> pour ne pas être ré-importé. Migration
-    /// transparente : l'utilisateur ne perd pas ses modèles existants en passant
-    /// du mode JSON local au mode centralisé.
+    /// Migration depuis l'ancien stockage SQL Server : si le fichier réseau n'existe
+    /// pas encore mais qu'un JSON local hérité est présent
+    /// (<c>%LocalAppData%\Metrologo\Catalogues\AppareilsCatalogue.json</c>), il est
+    /// importé automatiquement au premier chargement.
     ///
-    /// Singleton accessible via <see cref="Instance"/>. <see cref="Modeles"/>
-    /// est rechargée en mémoire à chaque <see cref="ChargerAsync"/> et bindable
-    /// directement depuis l'UI ; <see cref="CatalogueChange"/> notifie l'UI à
-    /// chaque ajout / modification / suppression / rechargement.
+    /// Concurrence multi-postes : verrou applicatif via SemaphoreSlim + écriture
+    /// atomique. Deux postes qui modifient simultanément ne corrompront pas le
+    /// fichier (le dernier qui écrit gagne). Pour des scénarios plus complexes
+    /// (merge), il faudra introduire un fichier .lock dédié.
     /// </summary>
     public class CatalogueAppareilsService
     {
@@ -40,9 +40,11 @@ namespace Metrologo.Services.Catalogue
         public ObservableCollection<ModeleAppareil> Modeles { get; } = new();
         public event EventHandler? CatalogueChange;
 
+        private readonly SemaphoreSlim _ecritureSema = new(1, 1);
+
         private static readonly JsonSerializerOptions _jsonOpts = new()
         {
-            WriteIndented = false,
+            WriteIndented = true,
             PropertyNamingPolicy = null  // garde la casse C#, plus simple à debugger
         };
 
@@ -54,31 +56,26 @@ namespace Metrologo.Services.Catalogue
 
         public async Task ChargerAsync()
         {
+            await _ecritureSema.WaitAsync();
             try
             {
-                using var c = new SqlConnection(MetrologoDbConnection.ConnectionString);
-                await c.OpenAsync();
+                string fichier = CheminsMetrologo.FichierCatalogueAppareils;
 
-                // Migration one-shot : si la table est vide ET qu'un JSON hérité existe,
-                // on importe avant de charger. Idempotent : le JSON est renommé après.
-                int nbModeles = await c.ExecuteScalarAsync<int>(
-                    "SELECT COUNT(*) FROM dbo.T_CATALOGUE_APPAREILS");
-                if (nbModeles == 0)
+                // 1ʳᵉ exécution : tenter une migration depuis le JSON hérité local
+                // (idempotente : no-op si le fichier réseau existe déjà ou si pas de
+                // legacy local trouvé). 100 % fichier — pas de dépendance SQL.
+                if (!File.Exists(fichier))
                 {
-                    await ImporterJsonHeriteSiPresentAsync(c);
+                    await ImporterJsonHeriteSiPresentAsync(fichier);
                 }
 
-                var rows = await c.QueryAsync<RowAppareil>(
-                    @"SELECT Id, Nom, FabricantIdn, ModeleIdn, Configuration, DateCreation, CreePar
-                      FROM dbo.T_CATALOGUE_APPAREILS
-                      ORDER BY Nom");
+                // Lecture du fichier réseau (peut rester absent si la migration n'a
+                // rien trouvé ou si le fichier vient d'être supprimé — dans ce cas
+                // on démarre sur un catalogue vide).
+                List<ModeleAppareil> charges = await LireFichierAsync(fichier);
 
                 Modeles.Clear();
-                foreach (var r in rows)
-                {
-                    var m = HydraterDepuisRow(r);
-                    if (m != null) Modeles.Add(m);
-                }
+                foreach (var m in charges) Modeles.Add(m);
                 NotifierChange();
             }
             catch (Exception ex)
@@ -87,6 +84,10 @@ namespace Metrologo.Services.Catalogue
                     $"Chargement catalogue échoué : {ex.Message}");
                 Modeles.Clear();
                 NotifierChange();
+            }
+            finally
+            {
+                _ecritureSema.Release();
             }
         }
 
@@ -97,34 +98,25 @@ namespace Metrologo.Services.Catalogue
         public async Task AjouterAsync(ModeleAppareil modele)
         {
             if (string.IsNullOrEmpty(modele.Id)) modele.Id = GenererId(modele.Nom);
+            if (modele.DateCreation == default) modele.DateCreation = DateTime.Now;
 
-            using var c = new SqlConnection(MetrologoDbConnection.ConnectionString);
-            await c.OpenAsync();
-            await c.ExecuteAsync(
-                @"INSERT INTO dbo.T_CATALOGUE_APPAREILS
-                  (Id, Nom, FabricantIdn, ModeleIdn, Configuration, DateCreation, CreePar)
-                  VALUES (@Id, @Nom, @FabricantIdn, @ModeleIdn, @Configuration, @DateCreation, @CreePar)",
-                new
-                {
-                    modele.Id,
-                    modele.Nom,
-                    modele.FabricantIdn,
-                    modele.ModeleIdn,
-                    Configuration = SerialiserConfiguration(modele),
-                    DateCreation = DateTime.UtcNow,
-                    modele.CreePar
-                });
-
-            Modeles.Add(modele);
+            await _ecritureSema.WaitAsync();
+            try
+            {
+                Modeles.Add(modele);
+                await EcrireFichierAsync(CheminsMetrologo.FichierCatalogueAppareils, Modeles);
+            }
+            finally
+            {
+                _ecritureSema.Release();
+            }
             NotifierChange();
         }
 
         /// <summary>
-        /// Importe un modèle d'appareil depuis une chaîne JSON (format hérité du fichier
-        /// <c>AppareilsCatalogue.json</c>). Accepte un objet seul ou un tableau d'objets.
-        /// Si un modèle existant a le même Id, il est mis à jour ; sinon ajouté.
-        /// Permet de partager des configurations d'appareils entre postes en quelques
-        /// secondes via copier-coller, sans ressaisir tous les réglages dans la UI.
+        /// Importe un ou plusieurs modèles depuis une chaîne JSON (objet seul ou tableau).
+        /// Les Id existants sont mis à jour, les nouveaux sont ajoutés. Une seule
+        /// ré-écriture du fichier à la fin de la batch.
         /// </summary>
         public async Task<int> ImporterDepuisJsonAsync(string json)
         {
@@ -147,77 +139,78 @@ namespace Metrologo.Services.Catalogue
                 throw new InvalidOperationException("JSON parsé en collection vide.");
 
             int n = 0;
-            foreach (var m in modeles)
+            await _ecritureSema.WaitAsync();
+            try
             {
-                if (string.IsNullOrEmpty(m.Id)) m.Id = GenererId(m.Nom);
-                if (string.IsNullOrEmpty(m.CreePar)) m.CreePar = "import";
+                foreach (var m in modeles)
+                {
+                    if (string.IsNullOrEmpty(m.Id)) m.Id = GenererId(m.Nom);
+                    if (string.IsNullOrEmpty(m.CreePar)) m.CreePar = "import";
+                    if (m.DateCreation == default) m.DateCreation = DateTime.Now;
 
-                bool dejaPresent = Modeles.Any(x => x.Id == m.Id);
-                if (dejaPresent)
-                {
-                    await ModifierAsync(m.Id, cible =>
+                    var existant = Modeles.FirstOrDefault(x => x.Id == m.Id);
+                    if (existant != null)
                     {
-                        cible.Nom = m.Nom;
-                        cible.FabricantIdn = m.FabricantIdn;
-                        cible.ModeleIdn = m.ModeleIdn;
-                        cible.Parametres = m.Parametres;
-                        cible.Gates = m.Gates;
-                        cible.Entrees = m.Entrees;
-                        cible.Couplages = m.Couplages;
-                        cible.Reglages = m.Reglages;
-                    });
+                        existant.Nom = m.Nom;
+                        existant.FabricantIdn = m.FabricantIdn;
+                        existant.ModeleIdn = m.ModeleIdn;
+                        existant.Parametres = m.Parametres;
+                        existant.Gates = m.Gates;
+                        existant.Entrees = m.Entrees;
+                        existant.Couplages = m.Couplages;
+                        existant.Reglages = m.Reglages;
+                    }
+                    else
+                    {
+                        Modeles.Add(m);
+                    }
+                    n++;
                 }
-                else
-                {
-                    await AjouterAsync(m);
-                }
-                n++;
+                await EcrireFichierAsync(CheminsMetrologo.FichierCatalogueAppareils, Modeles);
+            }
+            finally
+            {
+                _ecritureSema.Release();
             }
 
             JournalLog.Info(CategorieLog.Administration, "CATALOGUE_IMPORT",
                 $"{n} modèle(s) d'appareil importé(s) depuis JSON.");
+            NotifierChange();
             return n;
         }
 
         public async Task ModifierAsync(string id, Action<ModeleAppareil> modification)
         {
-            var cible = Modeles.FirstOrDefault(m => m.Id == id);
-            if (cible == null) return;
-
-            modification(cible);
-
-            using var c = new SqlConnection(MetrologoDbConnection.ConnectionString);
-            await c.OpenAsync();
-            await c.ExecuteAsync(
-                @"UPDATE dbo.T_CATALOGUE_APPAREILS
-                  SET Nom = @Nom,
-                      FabricantIdn = @FabricantIdn,
-                      ModeleIdn = @ModeleIdn,
-                      Configuration = @Configuration,
-                      DateModif = SYSUTCDATETIME()
-                  WHERE Id = @Id",
-                new
-                {
-                    cible.Id,
-                    cible.Nom,
-                    cible.FabricantIdn,
-                    cible.ModeleIdn,
-                    Configuration = SerialiserConfiguration(cible)
-                });
-
+            ModeleAppareil? cible;
+            await _ecritureSema.WaitAsync();
+            try
+            {
+                cible = Modeles.FirstOrDefault(m => m.Id == id);
+                if (cible == null) return;
+                modification(cible);
+                await EcrireFichierAsync(CheminsMetrologo.FichierCatalogueAppareils, Modeles);
+            }
+            finally
+            {
+                _ecritureSema.Release();
+            }
             NotifierChange();
         }
 
         public async Task SupprimerAsync(string id)
         {
-            var cible = Modeles.FirstOrDefault(m => m.Id == id);
-            if (cible == null) return;
-
-            using var c = new SqlConnection(MetrologoDbConnection.ConnectionString);
-            await c.OpenAsync();
-            await c.ExecuteAsync("DELETE FROM dbo.T_CATALOGUE_APPAREILS WHERE Id = @Id", new { Id = id });
-
-            Modeles.Remove(cible);
+            await _ecritureSema.WaitAsync();
+            try
+            {
+                var cible = Modeles.FirstOrDefault(m => m.Id == id);
+                if (cible == null) return;
+                Modeles.Remove(cible);
+                await EcrireFichierAsync(CheminsMetrologo.FichierCatalogueAppareils, Modeles);
+            }
+            finally
+            {
+                _ecritureSema.Release();
+            }
             NotifierChange();
         }
 
@@ -232,116 +225,151 @@ namespace Metrologo.Services.Catalogue
             => TrouverParIdn(fabricant, modele) != null;
 
         // -------------------------------------------------------------------------
-        // Migration JSON hérité
-        // -------------------------------------------------------------------------
-
-        private async Task ImporterJsonHeriteSiPresentAsync(SqlConnection c)
-        {
-            // Cherche d'abord dans le nouvel emplacement (Catalogues\), puis fallback sur
-            // l'ancien chemin à plat dans Metrologo\ (compat avant migration auto).
-            string cheminJson = CheminsMetrologo.ResoudreCheminAvecFallback(
-                CheminsMetrologo.FichierAppareilsCatalogueLegacy, "AppareilsCatalogue.json");
-            if (!File.Exists(cheminJson)) return;
-
-            try
-            {
-                string contenu = await File.ReadAllTextAsync(cheminJson);
-                var liste = JsonSerializer.Deserialize<List<ModeleAppareil>>(contenu);
-                if (liste == null || liste.Count == 0) return;
-
-                int nbImportes = 0;
-                foreach (var m in liste)
-                {
-                    if (string.IsNullOrEmpty(m.Id)) m.Id = GenererId(m.Nom);
-                    try
-                    {
-                        await c.ExecuteAsync(
-                            @"INSERT INTO dbo.T_CATALOGUE_APPAREILS
-                              (Id, Nom, FabricantIdn, ModeleIdn, Configuration, DateCreation, CreePar)
-                              VALUES (@Id, @Nom, @FabricantIdn, @ModeleIdn, @Configuration, @DateCreation, @CreePar)",
-                            new
-                            {
-                                m.Id,
-                                m.Nom,
-                                m.FabricantIdn,
-                                m.ModeleIdn,
-                                Configuration = SerialiserConfiguration(m),
-                                DateCreation = m.DateCreation == default ? DateTime.UtcNow : m.DateCreation,
-                                m.CreePar
-                            });
-                        nbImportes++;
-                    }
-                    catch (Exception ex)
-                    {
-                        JournalLog.Warn(CategorieLog.Configuration, "CATALOGUE_IMPORT_SKIP",
-                            $"Import du modèle {m.Nom} échoué : {ex.Message}");
-                    }
-                }
-
-                // Renomme le JSON pour qu'il ne soit pas ré-importé au prochain lancement.
-                string cible = cheminJson + ".imported." + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
-                File.Move(cheminJson, cible);
-
-                JournalLog.Info(CategorieLog.Configuration, "CATALOGUE_MIGRE_VERS_SQL",
-                    $"{nbImportes} modèle(s) importé(s) depuis le JSON local. Backup : {Path.GetFileName(cible)}.");
-            }
-            catch (Exception ex)
-            {
-                JournalLog.Warn(CategorieLog.Configuration, "CATALOGUE_IMPORT_ERR",
-                    $"Migration JSON → SQL échouée : {ex.Message}. Le JSON reste en place pour analyse manuelle.");
-            }
-        }
-
-        // -------------------------------------------------------------------------
-        // (Dé)sérialisation Configuration
+        // I/O fichier
         // -------------------------------------------------------------------------
 
         /// <summary>
-        /// Sérialise la partie « configuration » d'un modèle (tout sauf les colonnes
-        /// plates Id/Nom/IDN/dates) en JSON. Format compact, pas indenté — pour
-        /// stockage SQL.
+        /// Lit le fichier JSON et désérialise la liste de modèles. Retourne une
+        /// liste vide si le fichier n'existe pas ou est corrompu (la corruption
+        /// est loggée mais ne lève pas — l'app reste utilisable).
         /// </summary>
-        private static string SerialiserConfiguration(ModeleAppareil m)
+        private static async Task<List<ModeleAppareil>> LireFichierAsync(string chemin)
         {
-            var payload = new ConfigurationPayload
-            {
-                Parametres = m.Parametres,
-                Gates = m.Gates,
-                Entrees = m.Entrees,
-                Couplages = m.Couplages,
-                Reglages = m.Reglages
-            };
-            return JsonSerializer.Serialize(payload, _jsonOpts);
-        }
+            if (!File.Exists(chemin)) return new List<ModeleAppareil>();
 
-        private static ModeleAppareil? HydraterDepuisRow(RowAppareil r)
-        {
             try
             {
-                var payload = JsonSerializer.Deserialize<ConfigurationPayload>(
-                    r.Configuration ?? "{}", _jsonOpts) ?? new ConfigurationPayload();
-
-                return new ModeleAppareil
-                {
-                    Id = r.Id,
-                    Nom = r.Nom,
-                    FabricantIdn = r.FabricantIdn ?? "",
-                    ModeleIdn = r.ModeleIdn ?? "",
-                    DateCreation = DateTime.SpecifyKind(r.DateCreation, DateTimeKind.Utc).ToLocalTime(),
-                    CreePar = r.CreePar ?? "",
-                    Parametres = payload.Parametres ?? new ParametresIeee(),
-                    Gates = payload.Gates ?? new List<string>(),
-                    Entrees = payload.Entrees ?? new List<string>(),
-                    Couplages = payload.Couplages ?? new List<string>(),
-                    Reglages = payload.Reglages ?? new List<ReglageAppareil>()
-                };
+                string json = await File.ReadAllTextAsync(chemin);
+                if (string.IsNullOrWhiteSpace(json)) return new List<ModeleAppareil>();
+                var liste = JsonSerializer.Deserialize<List<ModeleAppareil>>(json, _jsonOpts);
+                return liste ?? new List<ModeleAppareil>();
             }
             catch (Exception ex)
             {
-                JournalLog.Warn(CategorieLog.Configuration, "CATALOGUE_HYDRATE_ERR",
-                    $"Modèle {r.Id} : Configuration JSON corrompue ({ex.Message}) — modèle ignoré.");
-                return null;
+                JournalLog.Warn(CategorieLog.Configuration, "CATALOGUE_JSON_CORROMPU",
+                    $"Fichier catalogue corrompu ({Path.GetFileName(chemin)}) : {ex.Message}. "
+                  + "L'app démarre sur un catalogue vide — restaure une sauvegarde manuellement.");
+                return new List<ModeleAppareil>();
             }
+        }
+
+        /// <summary>
+        /// Écriture atomique : on écrit d'abord dans un fichier .tmp puis on remplace
+        /// l'original par <see cref="File.Replace"/>. Garantit qu'un crash en cours
+        /// d'écriture ne laisse pas un fichier corrompu sur le partage réseau.
+        /// </summary>
+        private static async Task EcrireFichierAsync(string chemin, IEnumerable<ModeleAppareil> modeles)
+        {
+            string? dossier = Path.GetDirectoryName(chemin);
+            if (!string.IsNullOrEmpty(dossier)) Directory.CreateDirectory(dossier);
+
+            string tmp = chemin + ".tmp";
+            string json = JsonSerializer.Serialize(modeles.ToList(), _jsonOpts);
+            await File.WriteAllTextAsync(tmp, json);
+
+            if (File.Exists(chemin))
+            {
+                // Replace est atomique sur NTFS — si le partage M:\ est sur autre chose,
+                // on retombe sur Delete+Move qui est nettement moins sûr mais marche.
+                try { File.Replace(tmp, chemin, destinationBackupFileName: null); }
+                catch (PlatformNotSupportedException)
+                {
+                    File.Delete(chemin);
+                    File.Move(tmp, chemin);
+                }
+            }
+            else
+            {
+                File.Move(tmp, chemin);
+            }
+        }
+
+        // -------------------------------------------------------------------------
+        // Migration JSON hérité local → fichier réseau
+        // -------------------------------------------------------------------------
+
+        /// <summary>
+        /// Au tout premier démarrage avec le nouveau stockage fichier, si le fichier
+        /// réseau n'existe pas, on cherche un JSON hérité dans les dossiers Catalogues
+        /// (local + réseau) sous plusieurs formes possibles :
+        ///   • <c>AppareilsCatalogue.json</c>           — format actif
+        ///   • <c>AppareilsCatalogue.json.imported.*</c> — backup d'une migration
+        ///     précédente (typique : la migration SQL d'avril a renommé l'original
+        ///     en .imported.YYYYMMDD-HHMMSS sans préserver l'actif)
+        /// On charge le plus récent qui contient des données valides, l'écrit dans le
+        /// fichier réseau cible, puis on laisse les backups en place pour analyse.
+        /// </summary>
+        private async Task ImporterJsonHeriteSiPresentAsync(string fichierCible)
+        {
+            string? cheminSource = TrouverFichierLegacy();
+            if (cheminSource == null) return;
+
+            try
+            {
+                string contenu = await File.ReadAllTextAsync(cheminSource);
+                var liste = JsonSerializer.Deserialize<List<ModeleAppareil>>(contenu, _jsonOpts);
+                if (liste == null || liste.Count == 0) return;
+
+                // Normalise les Id manquants
+                foreach (var m in liste)
+                {
+                    if (string.IsNullOrEmpty(m.Id)) m.Id = GenererId(m.Nom);
+                    if (m.DateCreation == default) m.DateCreation = DateTime.Now;
+                }
+
+                await EcrireFichierAsync(fichierCible, liste);
+
+                JournalLog.Info(CategorieLog.Configuration, "CATALOGUE_MIGRE_VERS_RESEAU",
+                    $"{liste.Count} modèle(s) récupéré(s) depuis {Path.GetFileName(cheminSource)} "
+                  + $"et écrit(s) dans {fichierCible}.");
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Configuration, "CATALOGUE_MIGRATION_ERR",
+                    $"Récupération depuis {Path.GetFileName(cheminSource)} échouée : {ex.Message}. "
+                  + "Le fichier source reste en place pour analyse manuelle.");
+            }
+        }
+
+        /// <summary>
+        /// Cherche un JSON hérité utilisable, dans cet ordre :
+        ///   1. <c>AppareilsCatalogue.json</c> (format actif) dans le dossier Catalogues
+        ///   2. Le plus récent <c>AppareilsCatalogue.json.imported.*</c> dans le dossier
+        ///      Catalogues (backup d'une migration précédente — typique : avril 2026)
+        ///   3. Fallback ancien chemin à plat dans <c>%LocalAppData%\Metrologo\</c>
+        /// Retourne null si aucun candidat trouvé.
+        /// </summary>
+        private static string? TrouverFichierLegacy()
+        {
+            // 1. Format actif (sans suffixe .imported)
+            string actif = CheminsMetrologo.ResoudreCheminAvecFallback(
+                CheminsMetrologo.FichierAppareilsCatalogueLegacy, "AppareilsCatalogue.json");
+            if (File.Exists(actif)) return actif;
+
+            // 2. Backups .imported.* (dans le dossier Catalogues actuel = M:\ par défaut)
+            string dossierCatalogues = CheminsMetrologo.Catalogues;
+            if (Directory.Exists(dossierCatalogues))
+            {
+                var backups = Directory.EnumerateFiles(dossierCatalogues,
+                                                       "AppareilsCatalogue.json.imported.*")
+                                       .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+                                       .ToList();
+                if (backups.Count > 0) return backups[0];
+            }
+
+            // 3. Idem dans le dossier local (cas où Catalogues pointe sur le réseau mais
+            // qu'il reste un backup historique sur la machine locale)
+            string dossierLocal = Path.Combine(CheminsMetrologo.Racine, "Catalogues");
+            if (Directory.Exists(dossierLocal))
+            {
+                var backupsLocaux = Directory.EnumerateFiles(dossierLocal,
+                                                              "AppareilsCatalogue.json.imported.*")
+                                              .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+                                              .ToList();
+                if (backupsLocaux.Count > 0) return backupsLocaux[0];
+            }
+
+            return null;
         }
 
         // -------------------------------------------------------------------------
@@ -359,28 +387,6 @@ namespace Metrologo.Services.Catalogue
                 .Trim('-');
             string suffixe = Guid.NewGuid().ToString("N").Substring(0, 6);
             return string.IsNullOrEmpty(slug) ? $"modele-{suffixe}" : $"{slug}-{suffixe}";
-        }
-
-        // DTO interne Dapper
-        private sealed class RowAppareil
-        {
-            public string Id { get; set; } = "";
-            public string Nom { get; set; } = "";
-            public string? FabricantIdn { get; set; }
-            public string? ModeleIdn { get; set; }
-            public string? Configuration { get; set; }
-            public DateTime DateCreation { get; set; }
-            public string? CreePar { get; set; }
-        }
-
-        // Sous-payload sérialisé dans la colonne Configuration
-        private sealed class ConfigurationPayload
-        {
-            public ParametresIeee? Parametres { get; set; }
-            public List<string>? Gates { get; set; }
-            public List<string>? Entrees { get; set; }
-            public List<string>? Couplages { get; set; }
-            public List<ReglageAppareil>? Reglages { get; set; }
         }
     }
 }

@@ -26,6 +26,9 @@
         <DataTemplate DataType="{x:Type vm:SelectionPosteViewModel}">
             <views:SelectionPosteView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SelectionUtilisateurViewModel}">
+            <views:SelectionUtilisateurView />
+        </DataTemplate>
     </ui:FluentWindow.Resources>
 
     <Grid>
@@ -81,12 +84,41 @@
 
                     <Button Command="{Binding OuvrirAdminCommand}"
                             Style="{StaticResource NavButtonStyle}"
-                            Margin="0,0,6,0"
-                            Visibility="{Binding EstAdmin, Converter={StaticResource BoolToVisibilityConverter}}">
+                            Margin="0,0,6,0">
                         <StackPanel Orientation="Horizontal">
                             <ui:SymbolIcon Symbol="ShieldKeyhole24" FontSize="18" Margin="0,0,8,0"/>
                             <TextBlock Text="Administration" VerticalAlignment="Center"/>
                         </StackPanel>
+                    </Button>
+
+                    <!-- Diagnostic GPIB : à côté d'Administration car concerne le matériel,
+                         pas la mesure en cours. Badge = nombre d'appareils détectés. -->
+                    <Button Command="{Binding Accueil.OuvrirDiagnosticGpibCommand}"
+                            Style="{StaticResource NavButtonStyle}"
+                            Margin="0,0,6,0"
+                            ToolTip="{Binding Accueil.ResumeScanGpib}">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="PlugConnected24" FontSize="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="Diagnostic GPIB" VerticalAlignment="Center"/>
+                            <Border MinWidth="22" Height="20" CornerRadius="10"
+                                    Padding="6,0" Margin="8,0,0,0"
+                                    Background="{StaticResource AsertiOrangeBrush}"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Accueil.NbAppareilsDetectes}"
+                                           Foreground="White"
+                                           FontWeight="Bold" FontSize="11"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding Accueil.RescannerCommand}"
+                            Style="{StaticResource NavButtonStyle}"
+                            Margin="0,0,6,0"
+                            ToolTip="Relancer un scan GPIB maintenant"
+                            Padding="8,6">
+                        <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="16"/>
                     </Button>
 
                     <Button Command="{Binding RetourAccueilCommand}"

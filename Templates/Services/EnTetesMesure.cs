@@ -110,7 +110,7 @@ namespace Metrologo.Services
 
         /// <summary>
         /// Vrai pour les types de mesure tachymétriques (contact et optique).
-        /// Ces deux types partagent le template Excel METROLOGO_Tachy.xlsm et la
+        /// Ces deux types partagent le template Excel METROLOGO_Tachy.xlsx et la
         /// conversion automatique Hz → tr/min en colonne N.
         /// </summary>
         public static bool EstTachymetre(TypeMesure t) =>

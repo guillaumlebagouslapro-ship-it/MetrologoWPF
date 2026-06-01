@@ -38,6 +38,25 @@ namespace Metrologo.Models
 
         /// <summary>Valeur numérique par défaut (ex: "0.5"). Ignorée pour Choix.</summary>
         public string ValeurDefaut { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Si <c>true</c>, ce réglage est <b>auto-sélectionné</b> selon le contexte
+        /// (TypeMesure + VoieActive) et <b>n'apparaît pas dans la fenêtre Configuration user</b>.
+        /// L'admin garde la maîtrise des commandes (saisies à l'enregistrement de l'appareil)
+        /// mais l'utilisateur final n'a pas à les choisir.
+        ///
+        /// Le code parcourt les <see cref="Options"/> et sélectionne celle dont le libellé
+        /// correspond au contexte :
+        /// <list type="bullet">
+        ///   <item>"FREQ Voie A/B/C" → match VoieActive A/B/C en mode fréquence</item>
+        ///   <item>"TIAB" → match TypeMesure.Interval</item>
+        ///   <item>"CONT" → match TypeMesure.Stabilite</item>
+        ///   <item>"AUTO" → fallback par défaut</item>
+        /// </list>
+        ///
+        /// Réglages typiques : "Mode de mesure", "Résolution" pour le 53230A.
+        /// </summary>
+        public bool Auto { get; set; } = false;
     }
 
     /// <summary>
@@ -50,6 +69,21 @@ namespace Metrologo.Models
 
         /// <summary>Commande SCPI envoyée quand cette option est sélectionnée (ex: "INP:IMP 50").</summary>
         public string CommandeScpi { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Condition d'application pour un réglage <see cref="ReglageAppareil.Auto"/> = true :
+        /// nom du TypeMesure qui doit être sélectionné pour que cette option soit prise (ex:
+        /// "Stabilite", "Frequence", "Interval"). <b>Vide = applicable à tous les types</b>
+        /// (wildcard). Si plusieurs options matchent, la plus spécifique gagne.
+        /// </summary>
+        public string QuandType { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Condition d'application pour un réglage <see cref="ReglageAppareil.Auto"/> = true :
+        /// voie active qui doit être sélectionnée pour que cette option soit prise (ex: "A",
+        /// "B", "C"). <b>Vide = applicable à toutes les voies</b> (wildcard).
+        /// </summary>
+        public string QuandVoie { get; set; } = string.Empty;
 
         public override string ToString() => Libelle;
     }

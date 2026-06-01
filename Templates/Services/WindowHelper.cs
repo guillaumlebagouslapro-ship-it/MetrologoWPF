@@ -47,7 +47,7 @@ namespace Metrologo.Services
                 GetWindowText(hWnd, sb, sb.Capacity);
                 var titre = sb.ToString();
 
-                // Excel affiche son nom dans le titre (« Xxxx.xlsm - Excel »)
+                // Excel affiche son nom dans le titre (« Xxxx.xlsx - Excel »)
                 bool contientFichier = titre.IndexOf(nomFichier, StringComparison.OrdinalIgnoreCase) >= 0;
                 bool contientExcel = titre.IndexOf("Excel", StringComparison.OrdinalIgnoreCase) >= 0;
 

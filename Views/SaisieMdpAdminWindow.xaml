@@ -1,0 +1,118 @@
+<ui:FluentWindow x:Class="Metrologo.Views.SaisieMdpAdminWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Accès administrateur"
+        Height="460" Width="460"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Accès administrateur" ShowMaximize="False">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <StackPanel Grid.Row="1" Margin="32,18,32,8" VerticalAlignment="Center">
+
+            <Border Width="60" Height="60" CornerRadius="14"
+                    HorizontalAlignment="Center"
+                    Margin="0,0,0,16">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="{StaticResource AsertiNavyDarkColor}" Offset="0"/>
+                        <GradientStop Color="{StaticResource AsertiNavyColor}" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <ui:SymbolIcon Symbol="ShieldKeyhole24" FontSize="30"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+            </Border>
+
+            <TextBlock Text="Zone administrateur"
+                       FontSize="20" FontWeight="Bold"
+                       TextAlignment="Center"
+                       Foreground="{StaticResource AsertiNavyBrush}"
+                       Margin="0,0,0,4"/>
+            <TextBlock Text="Saisis ton identifiant administrateur et ton mot de passe."
+                       FontSize="12"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Margin="0,0,0,18"/>
+
+            <TextBlock Text="IDENTIFIANT"
+                       FontSize="10" FontWeight="Bold"
+                       Foreground="{StaticResource AsertiOrangeBrush}"
+                       Margin="0,0,0,6"/>
+            <ui:TextBox x:Name="LoginBox"
+                        FontSize="14"
+                        Padding="10,8"
+                        PlaceholderText="ex. prenom.nom"
+                        Margin="0,0,0,12"/>
+
+            <TextBlock Text="MOT DE PASSE"
+                       FontSize="10" FontWeight="Bold"
+                       Foreground="{StaticResource AsertiOrangeBrush}"
+                       Margin="0,0,0,6"/>
+            <PasswordBox x:Name="MdpBox"
+                         FontSize="14"
+                         Padding="10,8"
+                         KeyDown="OnPasswordKeyDown"/>
+
+            <!-- Message d'erreur -->
+            <Border Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}"
+                    CornerRadius="6" Padding="10,8"
+                    Margin="0,12,0,0"
+                    Background="#FFFEE2E2"
+                    BorderBrush="#FFFCA5A5"
+                    BorderThickness="1">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="Warning24" FontSize="14"
+                                   Foreground="#FFDC2626"
+                                   Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding MessageErreur}"
+                               Foreground="#FF7F1D1D"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <Border Grid.Row="2" Padding="20,12"
+                Background="{DynamicResource LayerFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0"
+                        Content="Annuler"
+                        Click="OnAnnuler"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+
+                <Button Grid.Column="2"
+                        Content="Connexion"
+                        Click="OnValider"
+                        IsDefault="True"
+                        Style="{StaticResource PrimaryButtonStyle}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

@@ -6,7 +6,7 @@ using System.Linq;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Construit <c>METROLOGO_Stab.xltm</c> à partir du template Fréquence existant.
+    /// Construit <c>METROLOGO_Stab.xltx</c> à partir du template Fréquence existant.
     /// On garde la même <c>ModFeuille</c> (mêmes zones nommées de mesure : ZNFreqMoyReel,
     /// ZNVariance, ZNEcartType, ZNIncertResol, ZNIncertSup, ZNIncertAccreditee,
     /// ZNIncertGlobale, etc.) et on remplace uniquement la <c>Récap.</c> par la structure

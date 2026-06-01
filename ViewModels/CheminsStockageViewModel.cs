@@ -104,7 +104,7 @@ namespace Metrologo.ViewModels
             TesterDossier("Presets", CheminPresets, resultats);
             TesterDossier("Catalogues", CheminCatalogues, resultats);
             TesterDossier("Archives logs", CheminArchivesLogs, resultats);
-            TesterDossier("Mesures (copie locale)", CheminMesuresLocal, resultats);
+            TesterDossier("Mesures (chemin réseau)", CheminMesuresLocal, resultats);
 
             string msg = string.Join(Environment.NewLine, resultats);
             MessageBox.Show(msg, "Test des chemins", MessageBoxButton.OK, MessageBoxImage.Information);

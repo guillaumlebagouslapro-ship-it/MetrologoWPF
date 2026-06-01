@@ -30,25 +30,32 @@ namespace Metrologo.ViewModels
         private const string NomCouplageA  = "Couplage Voie A";
         private const string NomCouplageB  = "Couplage Voie B";
         private const string NomCouplageC  = "Couplage Voie C";
-        private const string NomFiltreA    = "Filtre Voie A";
-        private const string NomFiltreB    = "Filtre Voie B";
-        private const string NomFiltreC    = "Filtre Voie C";
-        private const string NomTriggerA   = "Trigger Voie A";
-        private const string NomTriggerB   = "Trigger Voie B";
-        private const string NomTriggerC   = "Trigger Voie C";
+        private const string NomFiltreA    = "Filtre HF Voie A";
+        private const string NomFiltreB    = "Filtre HF Voie B";
+        private const string NomFiltreC    = "Filtre HF Voie C";
+        private const string NomTriggerA   = "Niveau Trigger Voie A";
+        private const string NomTriggerB   = "Niveau Trigger Voie B";
+        private const string NomTriggerC   = "Niveau Trigger Voie C";
         private const string NomMode       = "Mode de mesure";
+        private const string NomResolution = "Résolution";
+        private const string NomAtomRef    = "Référence";
 
         // Libellés d'options (persistés aussi dans le JSON)
-        private const string Opt50Ohm = "50 Ω";
-        private const string Opt1MOhm = "1 MΩ";
-        private const string OptAC    = "AC";
-        private const string OptDC    = "DC";
-        private const string OptON    = "ON";
-        private const string OptOFF   = "OFF";
-        private const string OptFreqA = "FREQ Voie A";
-        private const string OptFreqB = "FREQ Voie B";
-        private const string OptFreqC = "FREQ Voie C";
-        private const string OptTiab  = "TIAB";
+        private const string Opt50Ohm   = "50 Ω";
+        private const string Opt1MOhm   = "1 MΩ";
+        private const string OptAC      = "AC";
+        private const string OptDC      = "DC";
+        private const string OptON      = "ON";
+        private const string OptOFF     = "OFF";
+        private const string OptFreqA   = "FREQ Voie A";
+        private const string OptFreqB   = "FREQ Voie B";
+        private const string OptFreqC   = "FREQ Voie C";
+        private const string OptTiab    = "TIAB";
+        private const string OptResAuto = "AUTO";
+        private const string OptResRecip = "RECIPROCAL";
+        private const string OptResCont = "CONT";
+        private const string OptRefInt  = "INT";
+        private const string OptRefExt  = "EXT 10MHz";
 
         // ---------------- Champs de la fenêtre ----------------
 
@@ -159,6 +166,17 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _modeFreqB = string.Empty;
         [ObservableProperty] private string _modeFreqC = string.Empty;
         [ObservableProperty] private string _modeTiab  = string.Empty;
+
+        // Résolution (= mode de calcul interne du compteur). Auto=true côté code : ne s'affiche
+        // pas dans la fenêtre Configuration utilisateur, le code choisit selon TypeMesure.
+        [ObservableProperty] private string _resolutionAuto = string.Empty;
+        [ObservableProperty] private string _resolutionRecip = string.Empty;
+        [ObservableProperty] private string _resolutionCont = string.Empty;
+
+        // Référence (oscillateur interne / EXT 10 MHz pour synchroniser sur rubidium externe).
+        // Auto=false : l'utilisateur peut le changer manuellement (cas métrologie).
+        [ObservableProperty] private string _refInt = string.Empty;
+        [ObservableProperty] private string _refExt = string.Empty;
 
         public Action<bool>? CloseAction { get; set; }
         public ModeleAppareil? Resultat { get; private set; }
@@ -324,16 +342,31 @@ namespace Metrologo.ViewModels
             // filtre déjà les options vides, mais on aurait pu hardcoder un OptFreqB="" si
             // NbVoies < 2. Les champs B/C ne devraient pas être renseignés si voies masquées,
             // donc AjouterChoix suffit.
-            AjouterChoix(liste, NomMode,
+            AjouterChoix(liste, NomMode, auto: true,
                 (OptFreqA, ModeFreqA),
                 (OptFreqB, NbVoies >= 2 ? ModeFreqB : string.Empty),
                 (OptFreqC, NbVoies >= 3 ? ModeFreqC : string.Empty),
                 (OptTiab,  ModeTiab));
 
+            // Résolution : auto-sélectionnée selon TypeMesure (CONT pour Stab, AUTO sinon).
+            // Auto=true → invisible côté utilisateur.
+            AjouterChoix(liste, NomResolution, auto: true,
+                (OptResAuto,  ResolutionAuto),
+                (OptResRecip, ResolutionRecip),
+                (OptResCont,  ResolutionCont));
+
+            // Référence : choix utilisateur (Auto=false).
+            AjouterChoix(liste, NomAtomRef, auto: false,
+                (OptRefInt, RefInt),
+                (OptRefExt, RefExt));
+
             return liste;
         }
 
         private static void AjouterChoix(List<ReglageAppareil> liste, string nom, params (string libelle, string cmd)[] options)
+            => AjouterChoix(liste, nom, auto: false, options);
+
+        private static void AjouterChoix(List<ReglageAppareil> liste, string nom, bool auto, params (string libelle, string cmd)[] options)
         {
             var opts = options
                 .Where(o => !string.IsNullOrWhiteSpace(o.cmd))
@@ -342,7 +375,7 @@ namespace Metrologo.ViewModels
 
             if (opts.Count == 0) return;
 
-            liste.Add(new ReglageAppareil { Nom = nom, Type = TypeReglage.Choix, Options = opts });
+            liste.Add(new ReglageAppareil { Nom = nom, Type = TypeReglage.Choix, Options = opts, Auto = auto });
         }
 
         private static void AjouterNumerique(List<ReglageAppareil> liste, string nom, string template, string unite)
@@ -415,6 +448,15 @@ namespace Metrologo.ViewModels
                         ModeFreqB = CmdPourOption(r, OptFreqB);
                         ModeFreqC = CmdPourOption(r, OptFreqC);
                         ModeTiab  = CmdPourOption(r, OptTiab);
+                        break;
+                    case NomResolution:
+                        ResolutionAuto  = CmdPourOption(r, OptResAuto);
+                        ResolutionRecip = CmdPourOption(r, OptResRecip);
+                        ResolutionCont  = CmdPourOption(r, OptResCont);
+                        break;
+                    case NomAtomRef:
+                        RefInt = CmdPourOption(r, OptRefInt);
+                        RefExt = CmdPourOption(r, OptRefExt);
                         break;
                 }
             }

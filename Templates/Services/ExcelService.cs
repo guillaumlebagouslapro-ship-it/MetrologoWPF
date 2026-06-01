@@ -42,6 +42,16 @@ namespace Metrologo.Services
         string NomFeuilleMesure { get; }
 
         /// <summary>
+        /// Calcule le chemin attendu du fichier de mesure pour une FI + un type de mesure
+        /// donnés, sans effet de bord (ne crée pas de dossier, n'ouvre rien). Utilisé par
+        /// le branchement de <see cref="ExcelInteropHost.AjouterFeuilleMesureAsync"/> pour
+        /// vérifier que le classeur Excel actuellement ouvert correspond bien à la mesure
+        /// en cours (= même FI) — sinon il faut fermer/rouvrir un autre fichier (option A
+        /// v2 ne s'applique alors pas).
+        /// </summary>
+        string CalculerCheminFichierAttendu(Mesure mesure);
+
+        /// <summary>
         /// Écrit la moyenne et la variance dans les zones nommées — à appeler après la boucle
         /// de mesures, pour que le Récap. cross-sheet fonctionne.
         /// </summary>
@@ -57,6 +67,21 @@ namespace Metrologo.Services
 
         Task MettreAJourRecapFreqAsync(Mesure mesure);
         Task MettreAJourRecapStabAsync(Mesure mesure);
+
+        /// <summary>
+        /// Duplique le fichier de mesure (chemin local <c>Documents\Metrologo\...</c>) vers le
+        /// chemin réseau configuré (<c>CheminsMetrologo.MesuresLocal</c>) sans nécessiter
+        /// que ClosedXML ait un workbook ouvert. Utilisé après la finalisation COM (mode visible)
+        /// pour garantir la duplication réseau même quand SauvegarderFinalAsync n'est pas appelée.
+        /// </summary>
+        Task DupliquerSurReseauAsync();
+
+        /// <summary>
+        /// Variante explicite de <see cref="DupliquerSurReseauAsync()"/> qui prend le chemin
+        /// source en paramètre — utilisée par le chemin COM pur (option A v2) où
+        /// <c>ExcelService._cheminFichier</c> n'est pas initialisé (pas de ClosedXML).
+        /// </summary>
+        Task DupliquerSurReseauAsync(string cheminSourceExplicite);
 
         /// <summary>
         /// Re-ouvre depuis le disque un classeur déjà initialisé, après qu'Interop l'ait rempli
@@ -136,10 +161,28 @@ namespace Metrologo.Services
 
         /// <summary>
         /// Chemin du fichier Excel réellement utilisé pour cette mesure (peut différer de
-        /// <c>Mesures_{FI}.xlsm</c> si un fallback timestampé a été appliqué — cf. Excel verrouillé).
+        /// <c>Mesures_{FI}.xlsx</c> si un fallback timestampé a été appliqué — cf. Excel verrouillé).
         /// Exposé pour que la UI puisse en informer l'utilisateur.
         /// </summary>
         public string CheminFichierGenere => _cheminFichier;
+
+        /// <summary>
+        /// Reproduit le calcul du chemin fait dans <see cref="InitialiserRapportAsync"/>
+        /// (dossier Bureau\Metrologo\&lt;FI&gt;, nom de fichier <c>Mesures{_Stab|_Tachy}_&lt;FI&gt;.xlsx</c>)
+        /// sans effet de bord. Utilisé en amont de la mesure pour décider si le classeur
+        /// Excel actuellement ouvert peut être réutilisé (= même FI) ou doit être remplacé.
+        /// </summary>
+        public string CalculerCheminFichierAttendu(Mesure mesure)
+        {
+            string numFISafe = SanitizerNomFichier(mesure.NumFI ?? string.Empty);
+            string dossier = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                "Metrologo", numFISafe);
+            bool estStab = mesure.TypeMesure == TypeMesure.Stabilite;
+            bool estTachy = EnTetesMesureHelper.EstTachymetre(mesure.TypeMesure);
+            string suffixe = estStab ? "_Stab" : (estTachy ? "_Tachy" : string.Empty);
+            return Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}.xlsx");
+        }
 
         /// <summary>Vrai si le fichier a dû être écrit sous un nom de fallback au lieu du nom principal.</summary>
         public bool FallbackTimestampUtilise { get; private set; }
@@ -159,13 +202,17 @@ namespace Metrologo.Services
                 //    pour ne pas se mélanger avec les rapports Fréquence du même FI.
                 string numFISafe = SanitizerNomFichier(numeroFI);
 
+                // Fichier principal stocké sur le Bureau de l'utilisateur (au lieu de Documents).
+                // La duplication vers le partage réseau (M:\exe_spe\Data_Metrologo\Mesures par
+                // défaut, configurable dans Admin > Chemins d'accès) reste assurée après la
+                // mesure via DupliquerSurReseauAsync.
                 string dossier = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
                     "Metrologo", numFISafe);
                 Directory.CreateDirectory(dossier);
 
                 string suffixe = estStab ? "_Stab" : (estTachy ? "_Tachy" : string.Empty);
-                _cheminFichier = Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}.xlsm");
+                _cheminFichier = Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}.xlsx");
                 FallbackTimestampUtilise = false;
 
                 // Stabilité + nouvelle session + fichier existant → suffixe _v2, _v3, etc.
@@ -178,7 +225,7 @@ namespace Metrologo.Services
                     string candidat;
                     do
                     {
-                        candidat = $"{baseSansExt}_v{v}.xlsm";
+                        candidat = $"{baseSansExt}_v{v}.xlsx";
                         v++;
                     } while (File.Exists(candidat) && v < 1000);
                     _cheminFichier = candidat;
@@ -190,9 +237,9 @@ namespace Metrologo.Services
                 //    en tr/min, zones ZNCoeffC/D et ZNIncertResolRpm spécifiques), template
                 //    Fréquence universel pour le reste.
                 string nomTemplate =
-                    estStab ? "METROLOGO_Stab.xltm" :
-                    estTachy ? "METROLOGO_Tachy.xlsm" :
-                    "METROLOGO.xltm";
+                    estStab ? "METROLOGO_Stab.xltx" :
+                    estTachy ? "METROLOGO_Tachy.xlsx" :
+                    "METROLOGO.xltx";
                 string templatePath = Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, "Templates", nomTemplate);
 
@@ -201,41 +248,26 @@ namespace Metrologo.Services
                 {
                     if (FichierEstVerrouille(_cheminFichier))
                     {
-                        // Tentative 1 : fermer Excel poliment via WM_CLOSE (marche si pas de dialogue bloquant).
-                        WindowHelper.FermerFenetresExcel(Path.GetFileName(_cheminFichier));
+                        // Le fichier mère est verrouillé — probablement notre instance Excel COM
+                        // qui n'a pas encore libéré le handle OS. On poll jusqu'à 5s. Au-delà,
+                        // on lève une erreur claire au lieu de créer un sous-fichier horodaté
+                        // (comportement demandé par l'utilisateur : tout dans le même fichier).
                         var sw = System.Diagnostics.Stopwatch.StartNew();
-                        while (FichierEstVerrouille(_cheminFichier) && sw.ElapsedMilliseconds < 3000)
+                        while (FichierEstVerrouille(_cheminFichier) && sw.ElapsedMilliseconds < 5000)
                         {
-                            System.Threading.Thread.Sleep(150);
+                            System.Threading.Thread.Sleep(200);
                         }
 
                         if (FichierEstVerrouille(_cheminFichier))
                         {
-                            // Tentative 2 : fallback sur un nom de fichier timestampé — on n'interrompt
-                            //                ni la mesure ni le travail de l'utilisateur dans Excel.
-                            string cheminAlternatif = Path.Combine(
-                                dossier,
-                                $"Mesures_{numeroFI}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsm");
-
-                            // On tente de copier le fichier existant pour garder Récap. + historique.
-                            // Si Excel bloque aussi la lecture, on repart du template vierge.
-                            try
-                            {
-                                File.Copy(_cheminFichier, cheminAlternatif, overwrite: false);
-                            }
-                            catch (IOException)
-                            {
-                                partirDuTemplate = true;
-                            }
-
-                            _cheminFichier = cheminAlternatif;
-                            FallbackTimestampUtilise = true;
+                            throw new InvalidOperationException(
+                                $"Le fichier « {Path.GetFileName(_cheminFichier)} » est verrouillé "
+                                + "(probablement ouvert dans une autre fenêtre Excel). "
+                                + "Ferme-le manuellement et relance la mesure.");
                         }
                     }
 
-                    _workbook = partirDuTemplate
-                        ? new XLWorkbook(templatePath)
-                        : new XLWorkbook(_cheminFichier);
+                    _workbook = new XLWorkbook(_cheminFichier);
                 }
                 else
                 {
@@ -244,7 +276,7 @@ namespace Metrologo.Services
                 }
 
                 // --- 2b. Nettoyage des feuilles « 1 » à « N » héritées du Stab1.xls historique ---
-                // Le template METROLOGO_Stab.xltm contient 10 feuilles vides nommées "1".."10"
+                // Le template METROLOGO_Stab.xltx contient 10 feuilles vides nommées "1".."10"
                 // (slots des 10 procédures auto figées du Delphi historique). Sans nettoyage,
                 // TrouverNomFeuilleUnique attribue 11, 12, 13… aux nouvelles gates et la
                 // Récap. affiche 10 lignes parasites pointant vers des feuilles vides.
@@ -353,7 +385,14 @@ namespace Metrologo.Services
                 SetNamed("ZNCoeffMult", config.IndexMultiplicateur);
                 SetNamed("ZNValFNominale", config.FNominale);
                 SetNamed("ZNNbMesures", config.NbMesures);
-                SetNamed("ZNIncertResol", config.Resolution);
+                // Résolution = 0 à l'init du rapport, quels que soient le type et la source.
+                // La valeur définitive est saisie par l'utilisateur via les popups post-mesure
+                // (cf. AcceuilViewModel.SaisiePostMesureFrequenceAsync / SaisiePostMesureTachyAsync)
+                // qui écrasent ZNIncertResol via EcrireZoneNommeeAsync. Pour les types qui n'ont
+                // pas de popup (FreqAvantInterv, FreqFinale, Stabilité, Generateur direct…),
+                // 0 reste — c'est le comportement attendu : ces mesures ne calculent pas
+                // d'incertitude de résolution.
+                SetNamed("ZNIncertResol", 0.0);
                 SetNamed("ZNIncertSup", config.IncertSupp);
                 SetNamed("ZNFreqRef", rubidium.FrequenceMoyenne);
 
@@ -365,6 +404,21 @@ namespace Metrologo.Services
                 SetNamed("ZNCoeffB", 5e-13);
                 SetNamed("ZNNbMesAccredite", 30);
                 SetNamed("ZNTempsMesureAccredite", 10);
+
+                // --- 7. Nettoyage anticipé des lignes "fantômes" du Récap. ---
+                // Le template METROLOGO.xltx contient des lignes pré-remplies dans la
+                // feuille Récap. qui pointent vers ModFeuille (formules =[0]!ZNxxx →
+                // évaluées à 0). Si on n'enlève ces lignes qu'au moment d'écrire le
+                // récap final (cf. EcrireLigneRecap), l'utilisateur qui ouvre le fichier
+                // PENDANT la mesure voit ~10 lignes à zéro pendant tout le déroulement,
+                // ce qui est trompeur. On purge dès l'initialisation pour ne montrer
+                // qu'une zone propre dès la première ouverture.
+                if (_workbook.Worksheets.Any(w => w.Name == NOM_RECAP))
+                {
+                    var recap = _workbook.Worksheet(NOM_RECAP);
+                    DeprotegerFeuille(recap);
+                    NettoyerLignesGhost(recap);
+                }
             });
         }
 
@@ -509,7 +563,7 @@ namespace Metrologo.Services
                 // ±0.5 décade autour des données réelles.
                 if (_typeMesureCourant == TypeMesure.Stabilite
                     && resultats.Count >= 2
-                    && int.TryParse(_nomFeuilleMesure, out int numGate))
+                    && TryExtraireNumeroGate(_nomFeuilleMesure, out int numGate))
                 {
                     double moy = resultats.Average();
                     double sumSq = 0;
@@ -737,37 +791,58 @@ namespace Metrologo.Services
 
                 // Duplication best-effort vers le chemin local de sauvegarde si configuré.
                 // Préserve l'arborescence par FI pour cohérence avec le chemin source.
-                DupliquerVersCheminLocal();
+                DupliquerVersCheminLocal(_cheminFichier);
             });
         }
 
         /// <summary>
         /// Copie le fichier sauvegardé vers <c>CheminsMetrologo.MesuresLocal</c> si configuré.
         /// Préserve la structure <c>&lt;dest&gt;\&lt;FI&gt;\&lt;nomFichier&gt;</c> pour rester aligné
-        /// sur l'organisation du chemin principal. Best-effort : un échec (réseau coupé,
-        /// permissions) est loggué mais ne lève pas — la mesure reste valide via le fichier
-        /// principal.
+        /// sur l'organisation du chemin principal.
+        ///
+        /// Anti-écrasement : si un duplicata existe déjà au chemin cible (cas d'une 2ᵉ
+        /// mesure sur le même FI avec le même nom de fichier), on conserve l'existant
+        /// et on écrit le nouveau avec un suffixe horodaté
+        /// (<c>Mesures_FI123_20260522_153012.xlsx</c>). Aucune donnée n'est jamais perdue
+        /// par overwrite involontaire.
+        ///
+        /// Best-effort : un échec (réseau coupé, permissions) est loggué mais ne lève
+        /// pas — la mesure reste valide via le fichier principal.
         /// </summary>
-        private void DupliquerVersCheminLocal()
+        /// <summary>
+        /// Wrapper public de <see cref="DupliquerVersCheminLocal"/> pour l'appeler depuis
+        /// MesureOrchestrator après la voie COM (où SauvegarderFinalAsync n'est plus invoquée).
+        /// Best-effort : ne lève jamais, échec loggué uniquement.
+        /// </summary>
+        public Task DupliquerSurReseauAsync() => Task.Run(() => DupliquerVersCheminLocal(_cheminFichier));
+
+        public Task DupliquerSurReseauAsync(string cheminSourceExplicite)
+            => Task.Run(() => DupliquerVersCheminLocal(cheminSourceExplicite));
+
+        private void DupliquerVersCheminLocal(string cheminSource)
         {
             if (!CheminsMetrologo.MesuresLocalConfigure) return;
-            if (string.IsNullOrWhiteSpace(_cheminFichier) || !File.Exists(_cheminFichier)) return;
+            if (string.IsNullOrWhiteSpace(cheminSource) || !File.Exists(cheminSource)) return;
 
             try
             {
                 string racineLocale = CheminsMetrologo.MesuresLocal;
                 // Reconstitue l'arbo <FI>\<fichier> à partir du chemin source.
-                string nomFichier = Path.GetFileName(_cheminFichier);
-                string nomFI = Path.GetFileName(Path.GetDirectoryName(_cheminFichier) ?? "");
+                string nomFichier = Path.GetFileName(cheminSource);
+                string nomFI = Path.GetFileName(Path.GetDirectoryName(cheminSource) ?? "");
                 if (string.IsNullOrWhiteSpace(nomFI)) nomFI = "Mesures";
 
                 string dossierCible = Path.Combine(racineLocale, nomFI);
                 Directory.CreateDirectory(dossierCible);
                 string cheminCible = Path.Combine(dossierCible, nomFichier);
 
-                File.Copy(_cheminFichier, cheminCible, overwrite: true);
+                // Écrasement direct : le fichier mère sur le Bureau contient déjà tout
+                // l'historique des mesures (feuilles freq1, freq2, freq3…). Le fichier
+                // réseau doit en être la copie exacte → on écrase à chaque mesure.
+                // Plus de sous-fichier horodaté.
+                File.Copy(cheminSource, cheminCible, overwrite: true);
                 JournalLog.Info(CategorieLog.Excel, "EXCEL_DUPLIQUE_LOCAL",
-                    $"Rapport dupliqué localement : {cheminCible}");
+                    $"Rapport dupliqué (écrasement) : {cheminCible}");
             }
             catch (Exception ex)
             {
@@ -797,19 +872,28 @@ namespace Metrologo.Services
                     $"='{nomFeuille}'!ZNLibGate",           // Col 2 : temps de mesure (libellé gate)
                     $"='{nomFeuille}'!ZNFreqCorr",          // Col 3 : fréquence corrigée
                     $"='{nomFeuille}'!ZNEcartType",         // Col 4 : écart-type
-                    null,                                    // Col 5 : fréquence indiquée (valeur directe)
+                    // Col 5 : fréquence indiquée — en mode Fréquencemètre on pointe vers la
+                    // valeur saisie post-mesure par l'utilisateur (ZNFreqRef de la feuille).
+                    // En mode Générateur on écrit la chaîne « Géné. » via valeurDirecte.
+                    mesure.SourceMesure == SourceMesure.Frequencemetre
+                        ? $"='{nomFeuille}'!ZNFreqRef"
+                        : null,
                     $"='{nomFeuille}'!ZNIncertResol",       // Col 6 : incertitude de résolution
                     $"='{nomFeuille}'!ZNIncertSup",         // Col 7 : incertitude supplémentaire
                     $"='{nomFeuille}'!ZNIncertAccreditee",  // Col 8 : incertitude accréditée
                     $"='{nomFeuille}'!ZNIncertGlobale",     // Col 9 : incertitude globale
-                    null,                                    // Col 10 : Fréquence finale (valeur historique, laissée vide)
+                    // Col 10 : Fréquence finale calculée pour CETTE ligne — formule historique
+                    // du Delphi : si la fréquence indiquée (col E) est saisie, on projette la
+                    // fréquence corrigée (col C) selon le ratio E/C*A ; sinon on garde C tel quel.
+                    // {N} = numéro de la ligne, substitué dynamiquement par EcrireLigneRecap.
+                    "=IF(ISNUMBER(E{N}),(E{N}/C{N})*A{N},C{N})",
                     $"='{nomFeuille}'!A9",                  // Col 11 : n°Module (depuis A9 de la feuille de mesure)
                     $"='{nomFeuille}'!B9"                   // Col 12 : Fonction (depuis B9 de la feuille de mesure)
                 },
                 colValeurDirecte: 5,
                 valeurDirecte: mesure.SourceMesure == SourceMesure.Generateur
                     ? (object)"Géné."
-                    : mesure.FNominale,
+                    : null,   // Frequencemetre : la formule ZNFreqRef ci-dessus prend le relais
                 entetesColonne: new[]
                 {
                     null, null, null, null, null, null, null, null, null, null,
@@ -891,7 +975,7 @@ namespace Metrologo.Services
             return compteur;
         }
 
-        // Ligne d'entête des colonnes dans le template Récap. (observé dans METROLOGO.xltm).
+        // Ligne d'entête des colonnes dans le template Récap. (observé dans METROLOGO.xltx).
         // Toute nouvelle mesure est insérée juste en dessous (row 6) pour avoir "newest on top".
         private const int LIGNE_ENTETE_RECAP = 5;
 
@@ -921,9 +1005,11 @@ namespace Metrologo.Services
             //    produisent une plage de zéros sans intérêt juste sous l'entête.
             NettoyerLignesGhost(recap);
 
-            // 2. Insertion de la nouvelle ligne directement sous l'entête — la plus récente en haut.
+            // 2. Insertion à la SUITE des lignes existantes (la plus récente en bas).
+            //    On part de la ligne juste sous l'entête et on descend tant qu'il y a du
+            //    contenu — la nouvelle ligne s'ajoute en dessous de la dernière non vide.
             int nouvelleLigne = LIGNE_ENTETE_RECAP + 1;
-            recap.Row(nouvelleLigne).InsertRowsAbove(1);
+            while (!recap.Row(nouvelleLigne).IsEmpty()) nouvelleLigne++;
 
             // 3. Remplissage des colonnes
             for (int i = 0; i < formulesParColonne.Length; i++)
@@ -936,7 +1022,13 @@ namespace Metrologo.Services
                 }
                 var formule = formulesParColonne[i];
                 if (!string.IsNullOrEmpty(formule))
+                {
+                    // Substitue {N} par le numéro de ligne courant pour les formules qui
+                    // doivent référencer des cellules de la même ligne (ex: col 10 fréquence
+                    // finale = IF(ISNUMBER(E{N}),(E{N}/C{N})*A{N},C{N})).
+                    formule = formule.Replace("{N}", nouvelleLigne.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     recap.Cell(nouvelleLigne, col).FormulaA1 = formule;
+                }
             }
 
             // 4. En-têtes pour les colonnes au-delà de la structure historique du template
@@ -1004,7 +1096,7 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Réécrit le Target de la relation externe dans le fichier .xlsm pour qu'il
+        /// Réécrit le Target de la relation externe dans le fichier .xlsx pour qu'il
         /// pointe vers le chemin configuré du fichier Metrologo.xla.
         /// </summary>
         /// <summary>
@@ -1030,7 +1122,7 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Patche le graphe Stabilité du fichier .xlsm pour qu'il s'adapte aux mesures :
+        /// Patche le graphe Stabilité du fichier .xlsx pour qu'il s'adapte aux mesures :
         ///   • Plages des séries ajustées au nombre réel de gates balayées (au lieu du
         ///     <c>$A$6:$A$15</c> figé du Stab1.xls historique qui forçait 10 lignes — les
         ///     lignes vides étaient lues comme 0, l'axe Y log refusait → graphe vide).
@@ -1450,27 +1542,21 @@ namespace Metrologo.Services
 
         private string TrouverNomFeuilleUnique(TypeMesure type)
         {
-            if (type == TypeMesure.FreqAvantInterv) return "F_Avant_Interv";
-            if (type == TypeMesure.FreqFinale) return "F_Finale";
+            // Feuilles uniques (1 par classeur) : pas de numérotation.
+            if (type == TypeMesure.FreqAvantInterv) return "avinter";
+            if (type == TypeMesure.FreqFinale) return "fqfinale";
 
-            // Stabilité : nommage numérique pur (1, 2, 3…) — aligné sur la convention
-            // historique du Delphi/Stab1.xls. La feuille Récap. attend ce format pour
-            // ses formules cross-sheet ='1'!ZN…, ='2'!ZN…, etc.
-            if (type == TypeMesure.Stabilite)
-            {
-                int n = 1;
-                var existantsStab = _workbook!.Worksheets.Select(w => w.Name)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                while (existantsStab.Contains(n.ToString())) n++;
-                return n.ToString();
-            }
-
+            // Préfixes courts demandés par l'utilisateur (feuilles numérotées : freq1, stab1, …).
+            // Les formules cross-sheet de la Récap sont écrites dynamiquement (cf. EcrireLigneRecap)
+            // avec le nom réel de la feuille — elles s'adaptent automatiquement.
             string prefixe = type switch
             {
-                TypeMesure.Frequence => "Freq",
-                TypeMesure.Interval => "Interv",
-                TypeMesure.TachyContact => "TachyC",
-                TypeMesure.Stroboscope => "Strobo",
+                TypeMesure.Frequence    => "freq",
+                TypeMesure.Stabilite    => "stab",
+                TypeMesure.Interval     => "inter",
+                TypeMesure.TachyOptique => "topti",
+                TypeMesure.TachyContact => "tcont",
+                TypeMesure.Stroboscope  => "strob",
                 _ => "Mesure"
             };
 
@@ -1479,6 +1565,22 @@ namespace Metrologo.Services
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             while (existants.Contains($"{prefixe}{idx}")) idx++;
             return $"{prefixe}{idx}";
+        }
+
+        /// <summary>
+        /// Extrait le numéro de gate depuis un nom de feuille Stab (« stab1 » → 1).
+        /// Tolère aussi l'ancien format numérique pur (« 1 » → 1) au cas où on rouvre
+        /// un classeur historique généré avant le renommage.
+        /// </summary>
+        private static bool TryExtraireNumeroGate(string nomFeuille, out int numGate)
+        {
+            numGate = 0;
+            if (string.IsNullOrEmpty(nomFeuille)) return false;
+            // Capture la suite de chiffres en fin de nom (peu importe le préfixe alpha).
+            int i = nomFeuille.Length;
+            while (i > 0 && char.IsDigit(nomFeuille[i - 1])) i--;
+            string chiffres = nomFeuille.Substring(i);
+            return int.TryParse(chiffres, out numGate);
         }
 
         private void ClonerZonesNommeesPourNouvelleFeuille(IXLWorksheet source, IXLWorksheet dest)

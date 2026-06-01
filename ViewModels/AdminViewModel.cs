@@ -110,7 +110,7 @@ namespace Metrologo.ViewModels
         private void OuvrirUtilisateurs()
         {
             Journal.Info(CategorieLog.Administration, "OUVERTURE_UTILISATEURS", "Accès à la gestion des utilisateurs.");
-            var vm = new GestionUtilisateursViewModel(new UtilisateursService());
+            var vm = new GestionUtilisateursViewModel();
             var win = new GestionUtilisateursWindow(vm) { Owner = Application.Current.MainWindow };
             win.ShowDialog();
         }

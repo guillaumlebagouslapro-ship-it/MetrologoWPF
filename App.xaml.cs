@@ -18,7 +18,41 @@ namespace Metrologo
         {
             base.OnStartup(e);
 
+            // ===== PROFILING DÉMARRAGE (À RETIRER UNE FOIS L'OPTIMISATION FAITE) =====
+            // Instrumente chaque grande étape pour identifier les goulots d'étranglement.
+            // Logs écrits à la fin dans le journal + un fichier startup_profiling.txt à
+            // côté de l'exe (facile à lire/copier).
+            var swStartup = System.Diagnostics.Stopwatch.StartNew();
+            var lapsStartup = new System.Collections.Generic.List<(string Etape, long MsDebut, long MsFin)>();
+            long lastLap = 0;
+            void StartupLap(string etape)
+            {
+                long now = swStartup.ElapsedMilliseconds;
+                lapsStartup.Add((etape, lastLap, now));
+                lastLap = now;
+            }
+            // ========================================================================
+
             Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            StartupLap("ShutdownMode set");
+
+            // Vérification des prérequis système (Excel, NI-VISA, ni4882.dll) AVANT de
+            // toucher au moindre service qui en dépend — sinon on plante silencieusement
+            // sur les postes mal configurés. Si quelque chose manque, on prévient
+            // l'utilisateur et on lui propose de continuer en mode dégradé ou quitter.
+            var prerequisManquants = VerificationPrerequis.VerifierTout();
+            StartupLap("VerificationPrerequis.VerifierTout");
+            if (prerequisManquants.Count > 0)
+            {
+                var dlg = new PrerequisManquantsDialog(prerequisManquants);
+                bool? choix = dlg.ShowDialog();
+                if (choix != true)
+                {
+                    // L'utilisateur a choisi de quitter — on coupe court.
+                    Application.Current.Shutdown();
+                    return;
+                }
+            }
 
             // Migration silencieuse des fichiers locaux historiques (à plat dans
             // %LocalAppData%\Metrologo\) vers la nouvelle organisation par sous-dossier
@@ -27,16 +61,26 @@ namespace Metrologo
             // services qui suivent (DatabaseInitializer, etc.) lisent depuis le nouveau
             // emplacement.
             CheminsMetrologo.MigrerAnciensFichiers();
+            StartupLap("MigrerAnciensFichiers");
 
-            // Charge les overrides de chemins (Configuration\paths.config.json) — permet à
-            // l'admin de pointer Incertitudes / Presets / Catalogues vers un partage réseau
-            // commun. Sans fichier, les services utilisent les chemins locaux par défaut.
+            // Amorce la structure sur le partage serveur (M:\exe_spe\Data_Metrologo)
+            // — crée les sous-dossiers + le fichier maître paths.config.json s'ils
+            // n'existent pas. Idempotent + best-effort : si M:\ est indispo (laptop en
+            // déplacement), retombe sur les chemins locaux par défaut.
+            bool serveurDispo = CheminsMetrologo.AssurerStructureServeur();
+            StartupLap("AssurerStructureServeur (M:\\)");
+
+            // Charge les overrides de chemins. Si le poste n'a pas encore de config locale,
+            // l'app auto-adopte le fichier maître serveur (bootstrap silencieux d'un poste
+            // vierge). Tous les services qui suivent lisent ensuite les chemins partagés.
             CheminsMetrologo.ChargerConfigChemins();
+            StartupLap("ChargerConfigChemins");
 
             // Migration des anciens noms de sous-dossier de modules d'incertitude
             // (ex. TachyContact → TachymetreContact). Idempotent — ne fait rien si déjà
             // migré ou si l'ancien dossier n'existe pas.
             Services.Incertitude.ModulesIncertitudeService.MigrerAnciensNomsDossiers();
+            StartupLap("MigrerAnciensNomsDossiers");
 
             // Chemin local de sauvegarde des rapports : automatique, identique sur tous
             // les postes (C:\Users\Public\Documents\Metrologo_Backup par défaut). On crée
@@ -44,6 +88,7 @@ namespace Metrologo
             // Un admin peut toujours surcharger ce chemin via Admin → Chemins de stockage.
             bool dossierOk = CheminsMetrologo.AssurerDossierMesuresLocal();
             bool premierDemarrage = CheminsMetrologo.EstPremierDemarrage();
+            StartupLap("AssurerDossierMesuresLocal + EstPremierDemarrage");
 
             if (dossierOk)
             {
@@ -56,6 +101,19 @@ namespace Metrologo
                     $"Impossible de créer le dossier local de sauvegarde « {CheminsMetrologo.MesuresLocal} ». "
                   + "La duplication des rapports échouera silencieusement — un admin doit corriger via "
                   + "Admin → Chemins de stockage.");
+            }
+
+            if (serveurDispo)
+            {
+                Journal.Info(CategorieLog.Systeme, "PARTAGE_SERVEUR_OK",
+                    $"Partage serveur accessible : {CheminsMetrologo.BaseServeur} "
+                  + $"(master : {CheminsMetrologo.MasterPathsUrl}).");
+            }
+            else
+            {
+                Journal.Warn(CategorieLog.Systeme, "PARTAGE_SERVEUR_KO",
+                    $"Partage serveur « {CheminsMetrologo.BaseServeur} » indisponible — "
+                  + "l'app fonctionnera sur les chemins locaux mis en cache lors du dernier démarrage réussi.");
             }
 
             // Message d'accueil au tout premier démarrage : informe l'utilisateur de
@@ -86,17 +144,16 @@ namespace Metrologo
                 CheminsMetrologo.MarquerPremierDemarrageEffectue();
             }
 
-            await DatabaseInitializer.InitialiserAsync();
-
-            // Journal centralisé sur SQL Server : les logs de tous les postes (Baie,
-            // Paillasse, dev) atterrissent dans la base Metrologo et sont consultables
-            // par l'admin depuis n'importe quelle machine.
-            Journal.Configurer(new SqlServerJournalService());
+            // Journal centralisé sur fichiers JSON-lines dans le dossier Logs partagé
+            // (M:\…\Logs) : les logs de tous les postes y sont écrits en append-only.
+            Journal.Configurer(new FichierJournalService());
+            StartupLap("Journal.Configurer");
 
             // Ferme les sessions zombies (laissées ouvertes par un crash, taskkill, ou
             // arrêt brutal lors d'un debug). Sans ça, elles s'accumulent et apparaissent
             // perpétuellement « En cours » dans la liste du journal.
             await Journal.NettoyerSessionsZombiesAsync();
+            StartupLap("NettoyerSessionsZombiesAsync (I/O M:\\)");
 
             // Archive le mois précédent s'il n'est pas déjà archivé. Idempotent et
             // multi-postes-safe (verrou applicatif SQL). Fire-and-forget : ne bloque
@@ -105,21 +162,23 @@ namespace Metrologo
 
             // Chargement du catalogue local des modèles d'appareils enregistrés par les utilisateurs
             await CatalogueAppareilsService.Instance.ChargerAsync();
+            StartupLap("CatalogueAppareilsService.ChargerAsync");
 
             // Chargement des presets de balayage de stabilité (séédés au 1er démarrage).
             await PresetsStabiliteService.Instance.ChargerAsync();
+            StartupLap("PresetsStabiliteService.ChargerAsync");
 
-            // METROLOGO_Stab.xltm est livré avec l'app (extrait de Stab1.xls historique avec
+            // METROLOGO_Stab.xltx est livré avec l'app (extrait de Stab1.xls historique avec
             // graphe pro intégré). Le builder n'est utilisé qu'en filet de sécurité si quelqu'un
             // a supprimé le template — il génère alors une version basique sans graphe pro.
             try
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string stabPath = Path.Combine(baseDir, "Templates", "METROLOGO_Stab.xltm");
+                string stabPath = Path.Combine(baseDir, "Templates", "METROLOGO_Stab.xltx");
                 if (!File.Exists(stabPath))
                 {
                     StabTemplateBuilder.EnsureExists(
-                        Path.Combine(baseDir, "Templates", "METROLOGO.xltm"),
+                        Path.Combine(baseDir, "Templates", "METROLOGO.xltx"),
                         stabPath);
                 }
             }
@@ -134,9 +193,14 @@ namespace Metrologo
             // d'une mesure soit instantanée — plus de temps COM à payer dans la boucle chaude.
             _ = ExcelInteropHost.Instance.DemarrerAsync();
 
+            // Reprise des transferts FI vers le réseau qui n'avaient pas pu se faire à la fin
+            // des sessions précédentes (M:\ down, latence, etc.). Si la liste est vide ou si
+            // M:\ est toujours indispo, no-op. Fire-and-forget : ne bloque pas le démarrage.
+            _ = TransfertReseauService.TenterTransfertsEnAttenteAsync();
+
             // Warm-up ClosedXML : ouvre les 2 templates en arrière-plan pour pré-JIT les
             // assemblies (ClosedXML.dll, DocumentFormat.OpenXml.dll) + déclencher le cache
-            // disque OS du fichier .xltm. Sans ce warm-up, la 1ère InitialiserRapportAsync
+            // disque OS du fichier .xltx. Sans ce warm-up, la 1ère InitialiserRapportAsync
             // d'une mesure prend ~1 s ; après warm-up, ~25 ms (gain mesuré dans le profiler).
             // Fire-and-forget : ne bloque pas le démarrage de l'app.
             _ = Task.Run(() =>
@@ -144,7 +208,7 @@ namespace Metrologo
                 try
                 {
                     string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                    foreach (var nomTpl in new[] { "METROLOGO.xltm", "METROLOGO_Stab.xltm" })
+                    foreach (var nomTpl in new[] { "METROLOGO.xltx", "METROLOGO_Stab.xltx" })
                     {
                         string chemin = Path.Combine(baseDir, "Templates", nomTpl);
                         if (!File.Exists(chemin)) continue;
@@ -167,87 +231,84 @@ namespace Metrologo
                 }
             });
 
-            // ===== MODE DEV (publication) =====
-            // L'app saute l'écran de login : auto-connexion en tant qu'utilisateur "dev"
-            // avec le rôle Administrateur. L'utilisateur arrive directement sur l'écran
-            // de sélection Baie/Paillasse, qu'il garde (= choix conscient du poste).
-            //
-            // Pour réactiver l'écran de login en mode production : remettre l'ancien flux
-            // (LoginWindow + AuthService) à la place de ce bloc — ou conditionner par un
-            // flag #DEFINE / un paramètre de release au moment du build.
-            var fakeUser = new Utilisateur
-            {
-                Login = "dev",
-                Nom = "Mode Dev",
-                Prenom = "Test",
-                Role = RoleUtilisateur.Administrateur,
-                Actif = true,
-                DateCreation = DateTime.UtcNow
-            };
+            StartupLap("Vérif template Stab + start Excel COM + warm-up ClosedXML (FaF)");
 
-            Journal.Warn(CategorieLog.Systeme, "DEV_BYPASS",
-                "Mode dev : login bypassé, auto-connexion utilisateur=dev (admin). "
-              + "Sélection Baie/Paillasse conservée pour choix conscient.");
-
-            await Journal.DemarrerSessionAsync(fakeUser.Login);
-
-            var mainVMDev = new MainViewModel { UtilisateurConnecte = fakeUser };
-            // PAS de BypassSelectionPoste → l'écran de sélection s'affiche normalement.
-
-            var mainWinDev = new MainWindow { DataContext = mainVMDev };
-            mainWinDev.Closed += async (_, _) => await Journal.TerminerSessionAsync();
-            Application.Current.MainWindow = mainWinDev;
+            // ===== DÉMARRAGE =====
+            // L'app démarre directement sur l'écran de sélection utilisateur (menu déroulant
+            // alimenté par les comptes locaux). Le MainViewModel orchestre ensuite la suite :
+            // sélection Baie/Paillasse → Accueil. La session de journal est démarrée par le
+            // MainViewModel au moment où l'utilisateur est choisi.
+            var mainVM = new MainViewModel();
+            StartupLap("new MainViewModel");
+            var mainWin = new MainWindow { DataContext = mainVM };
+            StartupLap("new MainWindow (XAML parse)");
+            // Note : on NE met PAS « mainWin.Closed += async (_, _) => await Journal.TerminerSessionAsync(); »
+            // Le pattern async void laissait l'app s'arrêter avant l'écriture du fichier
+            // sessions.json → sessions zombies. La fermeture propre est désormais faite
+            // SYNCHRONIQUEMENT dans OnExit (cf. ci-dessous), seul moment garanti d'exécution
+            // avant que le process se termine.
+            Application.Current.MainWindow = mainWin;
             Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
-            mainWinDev.Show();
-            return;
+            mainWin.Show();
+            StartupLap("mainWin.Show");
 
-            // ===== FLUX LOGIN PRODUCTION (désactivé en mode dev) =====
-            // Code conservé en mort pour réactivation rapide en passage prod.
-#pragma warning disable CS0162   // Unreachable code
-            var authService = new AuthService();
-            var loginVM = new LoginViewModel(authService);
-            var loginWin = new Metrologo.Views.LoginWindow(loginVM);
-
-            loginVM.CloseAction = ok =>
+            // ===== ÉCRITURE DU PROFILING (À RETIRER UNE FOIS L'OPTIMISATION FAITE) =====
+            swStartup.Stop();
+            try
             {
-                if (loginWin.IsVisible)
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"Profiling démarrage Metrologo — Total : {swStartup.ElapsedMilliseconds} ms");
+                sb.AppendLine($"Date : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                sb.AppendLine();
+                sb.AppendLine("Temps(ms)  Delta(ms)  Étape");
+                sb.AppendLine("---------- ---------- ----------------------------------------------------------");
+                foreach (var (etape, msDeb, msFin) in lapsStartup)
                 {
-                    loginWin.DialogResult = ok;
-                    loginWin.Close();
+                    long delta = msFin - msDeb;
+                    sb.AppendLine($"{msFin,8}   {delta,8}   {etape}");
                 }
-            };
+                string contenu = sb.ToString();
 
-            bool? result = loginWin.ShowDialog();
+                Journal.Info(CategorieLog.Systeme, "STARTUP_PROFILING",
+                    $"Démarrage total {swStartup.ElapsedMilliseconds}ms — voir startup_profiling.txt à côté de l'exe.\n"
+                    + contenu);
 
-            if (result == true && loginVM.UtilisateurSession != null)
-            {
-                // Démarrage de la session journalisée
-                await Journal.DemarrerSessionAsync(loginVM.UtilisateurSession.Login);
-
-                var mainVM = new MainViewModel
-                {
-                    UtilisateurConnecte = loginVM.UtilisateurSession
-                };
-
-                var mainWin = new MainWindow { DataContext = mainVM };
-
-                // Fin de session à la fermeture
-                mainWin.Closed += async (_, _) => await Journal.TerminerSessionAsync();
-
-                Application.Current.MainWindow = mainWin;
-                Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
-                mainWin.Show();
+                // Écrit aussi dans un fichier à côté de l'exe (facile à copier-coller)
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string fichierProfiling = System.IO.Path.Combine(baseDir, "startup_profiling.txt");
+                System.IO.File.WriteAllText(fichierProfiling, contenu);
             }
-            else
+            catch (Exception ex)
             {
-                Application.Current.Shutdown();
+                Journal.Warn(CategorieLog.Systeme, "STARTUP_PROFILING_KO",
+                    $"Écriture profiling démarrage échouée : {ex.Message}");
             }
+            // ========================================================================
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
-            // Ferme proprement l'instance Excel cachée — sinon Excel.exe reste en tâche de fond
-            // et peut bloquer la sauvegarde de fichiers au prochain lancement.
+            // Termine la session journal FI utilisateur en cours (écrit FIN_SESSION dans
+            // Journal_<FI>.txt avec récap mesures effectuées/échouées + durée). Idempotent.
+            try { Metrologo.Services.Journal.JournalFIService.TerminerSession("Fermeture application"); }
+            catch { /* best-effort */ }
+
+            // Termine la session de journal de manière SYNCHRONE pour garantir que le
+            // sessions.json est écrit AVANT l'arrêt du process. Sinon, en async void,
+            // l'app peut se terminer avant la fin de l'écriture → la session reste
+            // marquée « en cours » indéfiniment dans le viewer du journal.
+            try
+            {
+                Journal.TerminerSessionAsync().GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // Best-effort : si l'écriture échoue (partage HS, etc.), on continue
+                // l'arrêt. Le nettoyage zombies au prochain démarrage rattrapera.
+            }
+
+            // Ferme proprement l'instance Excel cachée — sinon Excel.exe reste en tâche
+            // de fond et peut bloquer la sauvegarde de fichiers au prochain lancement.
             ExcelInteropHost.Instance.Dispose();
             base.OnExit(e);
         }
