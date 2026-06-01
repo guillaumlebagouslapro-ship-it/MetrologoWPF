@@ -130,6 +130,18 @@
                             <TextBlock Text="Retour" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
+
+                    <!-- Changer d'utilisateur : revient à l'écran de connexion sans quitter l'app
+                         (relais d'opérateur, ou prise en compte immédiate d'un compte tout juste créé). -->
+                    <Button Command="{Binding ChangerUtilisateurCommand}"
+                            Style="{StaticResource NavButtonStyle}"
+                            Margin="0,0,6,0"
+                            ToolTip="Revenir à l'écran de connexion pour changer d'opérateur">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Person24" FontSize="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="Changer d'utilisateur" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <!-- Bouton Quitter à droite -->

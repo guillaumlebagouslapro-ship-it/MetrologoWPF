@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Views;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace Metrologo.ViewModels
@@ -89,6 +90,10 @@ namespace Metrologo.ViewModels
                 _ = Metrologo.Services.Journal.Journal.DefinirPosteAsync(choixBaie ? "Baie" : "Paillasse");
             };
 
+            // Retour depuis la sélection du poste vers l'écran de connexion (mauvais
+            // utilisateur choisi au démarrage) — sans redémarrer l'application.
+            _selectionPosteViewModel.OnRetour = () => _ = RevenirAEcranConnexionAsync("Retour sélection poste");
+
             _accueilViewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(AccueilViewModel.RubidiumActifTexte))
@@ -152,6 +157,43 @@ namespace Metrologo.ViewModels
         private void RetourAccueil()
         {
             VueActuelle = _accueilViewModel;
+        }
+
+        /// <summary>
+        /// Revient à l'écran de sélection d'utilisateur sans quitter l'application — pour
+        /// changer d'opérateur (relais / reprise de FI), ou prendre en compte un compte tout
+        /// juste créé en administration. Clôture proprement la session journal de l'utilisateur
+        /// courant, déconnecte l'admin éventuellement authentifié, puis recharge la liste des
+        /// comptes (à jour, y compris ceux créés depuis un autre poste) avant de réafficher
+        /// l'écran de connexion.
+        /// </summary>
+        [RelayCommand]
+        private Task ChangerUtilisateur() => RevenirAEcranConnexionAsync("Changement d'utilisateur");
+
+        /// <summary>
+        /// Logique commune de retour à l'écran de connexion (utilisée par le bouton
+        /// « Changer d'utilisateur » de la barre de navigation et par le retour depuis la
+        /// sélection du poste). Clôture proprement la session journal de l'utilisateur courant,
+        /// déconnecte l'admin éventuellement authentifié, recharge la liste des comptes (à jour,
+        /// y compris ceux créés depuis un autre poste) puis réaffiche l'écran de connexion.
+        /// </summary>
+        private async Task RevenirAEcranConnexionAsync(string motif)
+        {
+            // Clôture la session journal FI utilisateur + la session système de l'utilisateur
+            // courant avant la bascule, pour que la session du prochain utilisateur soit distincte.
+            try { Metrologo.Services.Journal.JournalFIService.TerminerSession(motif); }
+            catch { /* best-effort */ }
+            try { await Metrologo.Services.Journal.Journal.TerminerSessionAsync(); }
+            catch { /* best-effort */ }
+
+            // L'admin doit re-saisir ses identifiants après un changement d'utilisateur.
+            EtatApplication.AdminConnecte = null;
+            EtatApplication.UtilisateurConnecte = null;
+            UtilisateurConnecte = null;
+
+            // Recharge la liste à jour (relit le JSON) puis réaffiche l'écran de connexion.
+            _selectionUtilisateurViewModel.Recharger();
+            VueActuelle = _selectionUtilisateurViewModel;
         }
 
         [RelayCommand]

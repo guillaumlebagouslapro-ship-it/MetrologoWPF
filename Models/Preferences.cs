@@ -102,6 +102,14 @@ namespace Metrologo.Models
             _cacheUtilisateurs = nouvelleListe;
         }
 
+        /// <summary>
+        /// Invalide le cache mémoire des utilisateurs : la prochaine lecture de
+        /// <see cref="Utilisateurs"/> relira le fichier JSON. Permet de refléter en temps réel
+        /// les comptes ajoutés / modifiés depuis un autre poste (ou via la gestion des
+        /// utilisateurs) sans redémarrer l'application.
+        /// </summary>
+        public static void InvaliderCacheUtilisateurs() => _cacheUtilisateurs = null;
+
         // -------- RÉSEAU : catalogue rubidiums --------
 
         private static List<Rubidium>? _cacheCatalogueRubidiums;

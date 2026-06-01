@@ -14,15 +14,37 @@
         </Grid.RowDefinitions>
 
         <!-- Bandeau d'en-tête -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock Text="Tableau de bord"
-                       FontSize="28" FontWeight="Bold"
-                       Foreground="{StaticResource AsertiNavyBrush}"/>
-            <TextBlock Text="Lancez une mesure ou consultez les paramètres de votre banc"
-                       FontSize="13"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       Margin="0,4,0,0"/>
-        </StackPanel>
+        <Grid Grid.Row="0" Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Tableau de bord"
+                           FontSize="28" FontWeight="Bold"
+                           Foreground="{StaticResource AsertiNavyBrush}"/>
+                <TextBlock Text="Lancez une mesure ou consultez les paramètres de votre banc"
+                           FontSize="13"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Margin="0,4,0,0"/>
+            </StackPanel>
+
+            <!-- Changer d'utilisateur : accessible directement depuis l'accueil si on s'aperçoit
+                 ici qu'on n'est pas le bon opérateur. Lié à la commande du MainViewModel (fenêtre
+                 parente), car le DataContext de cette vue est l'AccueilViewModel. -->
+            <ui:Button Grid.Column="1"
+                       VerticalAlignment="Center"
+                       Appearance="Secondary"
+                       Cursor="Hand"
+                       Command="{Binding DataContext.ChangerUtilisateurCommand, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}}"
+                       ToolTip="Revenir à l'écran de connexion pour changer d'opérateur">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="Person24" FontSize="16" Margin="0,0,8,0"/>
+                    <TextBlock Text="Changer d'utilisateur" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ui:Button>
+        </Grid>
 
         <!-- Bandeau "Fiche en cours" — visible dès qu'une configuration a été validée.
              Affiche en gros le N° FI sur lequel on travaille + type de mesure + appareil. -->

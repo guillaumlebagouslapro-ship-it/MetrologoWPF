@@ -216,6 +216,18 @@
                     </Button.Template>
                 </Button>
             </Grid>
+
+            <!-- Retour à l'écran de connexion si on s'est trompé d'utilisateur au démarrage. -->
+            <ui:Button HorizontalAlignment="Center"
+                       Margin="0,32,0,0"
+                       Appearance="Secondary"
+                       Cursor="Hand"
+                       Command="{Binding RetourCommand}">
+                <StackPanel Orientation="Horizontal">
+                    <ui:SymbolIcon Symbol="ArrowLeft24" FontSize="16" Margin="0,0,8,0"/>
+                    <TextBlock Text="Ce n'est pas vous ? Changer d'utilisateur" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ui:Button>
         </StackPanel>
     </Grid>
 </UserControl>

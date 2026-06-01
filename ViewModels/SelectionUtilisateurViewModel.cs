@@ -61,6 +61,10 @@ namespace Metrologo.ViewModels
         /// </summary>
         public void Recharger()
         {
+            // Relit le JSON à jour (cache mémoire invalidé) — indispensable pour voir un compte
+            // tout juste créé, y compris depuis un autre poste, sans redémarrer l'application.
+            Preferences.InvaliderCacheUtilisateurs();
+
             Utilisateurs.Clear();
             foreach (var u in ComptesLocauxService.Lister()) Utilisateurs.Add(u);
             UtilisateurSelectionne = Utilisateurs.FirstOrDefault();

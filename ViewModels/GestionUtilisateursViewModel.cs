@@ -51,6 +51,10 @@ namespace Metrologo.ViewModels
         {
             try
             {
+                // Relit le JSON à jour : le bouton « Rafraîchir » reflète ainsi les comptes
+                // créés / modifiés depuis un autre poste sans redémarrer l'application.
+                Preferences.InvaliderCacheUtilisateurs();
+
                 Utilisateurs.Clear();
                 foreach (var u in ComptesLocauxService.Lister()) Utilisateurs.Add(u);
                 Statut = $"{Utilisateurs.Count} utilisateur(s).";
