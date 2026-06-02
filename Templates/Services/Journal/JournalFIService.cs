@@ -19,6 +19,8 @@ namespace Metrologo.Services.Journal
         private static readonly object _sync = new();
         private static string _cheminFichier = string.Empty;
         private static string _numFICourant = string.Empty;
+        private static string _utilisateurCourant = string.Empty;
+        private static string _posteCourant = string.Empty;
         private static DateTime _debutSession = DateTime.MinValue;
 
         // Compteurs cumulés sur la session (pour le récap final FIN_SESSION).
@@ -61,7 +63,17 @@ namespace Metrologo.Services.Journal
                 {
                     TerminerSessionInterne("Changement de FI");
                 }
-                // Déjà sur cette FI ? Rien à faire.
+                // Même FI mais l'opérateur (ou le poste) a changé — ex. un collègue reprend la
+                // FI en se reconnectant sans relancer l'app. On clôt le bloc courant et on en
+                // ouvre un nouveau, pour que le journal reflète bien qui a travaillé sur la FI.
+                else if (!string.IsNullOrEmpty(_cheminFichier)
+                    && string.Equals(_numFICourant, numFI, StringComparison.OrdinalIgnoreCase)
+                    && (!string.Equals(_utilisateurCourant, utilisateur, StringComparison.Ordinal)
+                        || !string.Equals(_posteCourant, poste, StringComparison.Ordinal)))
+                {
+                    TerminerSessionInterne("Changement d'utilisateur");
+                }
+                // Déjà sur cette FI avec le même opérateur ? Rien à faire.
                 if (string.Equals(_numFICourant, numFI, StringComparison.OrdinalIgnoreCase)
                     && !string.IsNullOrEmpty(_cheminFichier))
                 {
@@ -77,6 +89,8 @@ namespace Metrologo.Services.Journal
                     Directory.CreateDirectory(dossier);
                     _cheminFichier = Path.Combine(dossier, $"Journal_{numFISafe}.txt");
                     _numFICourant = numFI;
+                    _utilisateurCourant = utilisateur ?? string.Empty;
+                    _posteCourant = poste ?? string.Empty;
                     _debutSession = DateTime.Now;
                     _nbMesuresEffectuees = 0;
                     _nbMesuresEchouees = 0;
@@ -193,6 +207,8 @@ namespace Metrologo.Services.Journal
             {
                 _cheminFichier = string.Empty;
                 _numFICourant = string.Empty;
+                _utilisateurCourant = string.Empty;
+                _posteCourant = string.Empty;
                 _debutSession = DateTime.MinValue;
                 _nbMesuresEffectuees = 0;
                 _nbMesuresEchouees = 0;

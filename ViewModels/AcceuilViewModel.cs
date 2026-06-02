@@ -707,6 +707,17 @@ namespace Metrologo.ViewModels
                     gps = rubi.AvecGPS
                 });
 
+            // S'assure que le journal FI est ouvert ET rattaché à l'OPÉRATEUR COURANT avant
+            // d'écrire. Couvre la reprise sans reconfiguration (bouton « Relancer », qui ne
+            // repasse pas par la fenêtre de config) et le changement d'utilisateur en cours de
+            // session : si l'opérateur a changé depuis le dernier bloc, DemarrerSession clôt
+            // l'ancien bloc et en ouvre un nouveau à son nom ; sinon c'est un no-op.
+            string utilisateurCourant = EtatApplication.UtilisateurConnecte?.NomComplet
+                ?? EtatApplication.UtilisateurConnecte?.Login
+                ?? "(inconnu)";
+            JournalFIService.DemarrerSession(config.NumFI ?? string.Empty,
+                utilisateurCourant, EstSurBaie ? "Baie" : "Paillasse");
+
             // Journal utilisateur FI : ligne MESURE_DEBUT avec préambule (Lancement / Relance).
             JournalFIService.Ecrire("MESURE_DEBUT",
                 $"{preambule} · {config.NbMesures} mesures · {nomAppareilLog}");
