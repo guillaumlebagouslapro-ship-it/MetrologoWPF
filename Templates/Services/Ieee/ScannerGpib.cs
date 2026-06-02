@@ -28,6 +28,15 @@ namespace Metrologo.Services.Ieee
 
         public bool AErreur => !string.IsNullOrEmpty(Erreur);
 
+        /// <summary>
+        /// Heuristique : la réponse <c>*IDN?</c> semble incohérente (plus de 4 champs, ou
+        /// caractères de contrôle) → <b>possible conflit d'adresse</b> : deux appareils réglés
+        /// sur la même adresse GPIB répondent en même temps et leurs réponses se mélangent sur
+        /// le bus. Best-effort : deux appareils <i>identiques</i> peuvent renvoyer une réponse
+        /// propre et passer inaperçus.
+        /// </summary>
+        public bool ConflitAdressePossible => Repond && ScannerGpib.EstIdnSuspect(ReponseIdn);
+
         /// <summary>Étiquette courte, ex: <c>GPIB0::15</c>.</summary>
         public string AdresseCourte => $"GPIB{Board}::{Adresse}";
 
@@ -241,6 +250,22 @@ namespace Metrologo.Services.Ieee
             string? fw  = parts.Length > 3 ? parts[3].Trim() : null;
 
             return (fab, mod, ser, fw);
+        }
+
+        /// <summary>
+        /// Détecte une réponse <c>*IDN?</c> incohérente, symptôme typique de deux appareils
+        /// réglés sur la même adresse GPIB (collision de bus : les deux réponses se superposent).
+        /// Une réponse standard IEEE-488.2 a exactement 4 champs « Fab,Modèle,Série,Firmware » et
+        /// ne contient que des caractères imprimables. Plus de 4 champs (deux IDN concaténés) ou
+        /// des caractères de contrôle ⇒ suspect.
+        /// </summary>
+        public static bool EstIdnSuspect(string? idn)
+        {
+            if (string.IsNullOrWhiteSpace(idn)) return false;
+            if (idn.Split(',').Length > 4) return true;
+            foreach (char c in idn)
+                if (char.IsControl(c) && c != '\t') return true;
+            return false;
         }
     }
 }

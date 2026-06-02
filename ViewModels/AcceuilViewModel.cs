@@ -160,7 +160,8 @@ namespace Metrologo.ViewModels
                             Modele = r.Modele,
                             NumeroSerie = r.NumeroSerie,
                             Firmware = r.Firmware,
-                            ModeleReconnu = modeleReconnu
+                            ModeleReconnu = modeleReconnu,
+                            ConflitAdressePossible = r.ConflitAdressePossible
                         };
                     })
                     .ToList();
@@ -225,6 +226,22 @@ namespace Metrologo.ViewModels
                     ? $"catalogue : {app.ModeleReconnu.Nom}"
                     : "non enregistré";
                 Log($"   • {app.AdresseCourte} — {app.Fabricant} {app.Modele} ({statut})");
+            }
+
+            // Avertissement : réponse *IDN? incohérente = possible conflit d'adresse (deux
+            // appareils réglés sur la même adresse GPIB).
+            var conflits = list.Where(a => a.ConflitAdressePossible).ToList();
+            if (conflits.Count > 0)
+            {
+                foreach (var c in conflits)
+                {
+                    Log($"⚠ {c.AdresseCourte} : réponse d'identification incohérente — "
+                      + "deux appareils sont peut-être réglés sur la même adresse GPIB. "
+                      + "Vérifie que chaque instrument a une adresse unique.");
+                    Journal.Warn(CategorieLog.Systeme, "GPIB_CONFLIT_ADRESSE",
+                        $"Réponse *IDN? incohérente à {c.AdresseCourte} (IDN brut : « {c.IdnBrut} ») "
+                      + "— possible conflit d'adresse (2 appareils sur la même adresse).");
+                }
             }
         }
 

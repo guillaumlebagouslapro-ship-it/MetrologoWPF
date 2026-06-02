@@ -24,6 +24,13 @@ namespace Metrologo.Models
 
         public bool EstReconnu => ModeleReconnu != null;
 
+        /// <summary>
+        /// Vrai si la réponse *IDN? de cet appareil semble incohérente — symptôme probable de
+        /// deux appareils réglés sur la même adresse GPIB (collision de bus). Renseigné depuis
+        /// <see cref="Metrologo.Services.Ieee.ResultatScanGpib.ConflitAdressePossible"/>.
+        /// </summary>
+        public bool ConflitAdressePossible { get; init; }
+
         public string AdresseCourte => $"GPIB{Board}::{Adresse}";
 
         public string Libelle => ModeleReconnu?.Nom
