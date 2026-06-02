@@ -972,34 +972,11 @@ namespace Metrologo.Services
                 Perf("Fin de mesure");
                 _excel.FermerExcel();
 
-                // Dump du fichier de profiling à côté du .xlsx (ou dans le dossier FI si
-                // la mesure a échoué avant la 1ère sauvegarde Excel). Toujours exécuté,
-                // même en cas de cancellation ou d'erreur — on garde la chronologie pour
-                // diagnostiquer les blocages. Best-effort : une erreur d'écriture ne doit
-                // pas masquer l'erreur réelle de la mesure.
-                try
-                {
-                    string dossier = !string.IsNullOrEmpty(result.CheminExcel)
-                        ? (Path.GetDirectoryName(result.CheminExcel) ?? "")
-                        : Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                            "Metrologo",
-                            string.IsNullOrWhiteSpace(mesure.NumFI) ? "sans-FI" : mesure.NumFI);
-
-                    if (!string.IsNullOrEmpty(dossier))
-                    {
-                        string nom = $"Profiling_{(string.IsNullOrWhiteSpace(mesure.NumFI) ? "sans-FI" : mesure.NumFI)}"
-                                   + $"_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-                        string entete = $"Profiling FI={mesure.NumFI} | Type={mesure.TypeMesure} | "
-                                      + $"NbMesures={mesure.NbMesures} | Date={DateTime.Now:dd/MM/yyyy HH:mm:ss}";
-                        profiler.EcrireFichier(Path.Combine(dossier, nom), entete);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    JournalLog.Warn(CategorieLog.Mesure, "PROFILING_KO",
-                        $"Écriture fichier profiling échouée : {ex.Message}");
-                }
+                // NOTE : l'écriture du fichier Profiling_<FI>_<date>.txt dans le dossier de la FI
+                // a été DÉSACTIVÉE — il polluait les dossiers de mesure et n'est plus consulté.
+                // Le profiler reste alimenté en mémoire (appels Perf(...)) au cas où on voudrait
+                // un jour le ré-exposer (ex. log central), mais plus aucun fichier n'est créé à
+                // côté des rapports Excel.
             }
 
             return result;

@@ -161,16 +161,19 @@ namespace Metrologo.Services
 
         /// <summary>
         /// Chemin du fichier Excel réellement utilisé pour cette mesure (peut différer de
-        /// <c>Mesures_{FI}.xlsx</c> si un fallback timestampé a été appliqué — cf. Excel verrouillé).
+        /// <c>stab.xlsx</c> de base si une itération de stabilité a été appliquée — stab1, stab2…).
         /// Exposé pour que la UI puisse en informer l'utilisateur.
         /// </summary>
         public string CheminFichierGenere => _cheminFichier;
 
         /// <summary>
         /// Reproduit le calcul du chemin fait dans <see cref="InitialiserRapportAsync"/>
-        /// (dossier Bureau\Metrologo\&lt;FI&gt;, nom de fichier <c>Mesures{_Stab|_Tachy}_&lt;FI&gt;.xlsx</c>)
-        /// sans effet de bord. Utilisé en amont de la mesure pour décider si le classeur
-        /// Excel actuellement ouvert peut être réutilisé (= même FI) ou doit être remplacé.
+        /// (dossier Bureau\Metrologo\&lt;FI&gt;, nom de fichier <c>freq.xlsx</c> pour tout sauf
+        /// la stabilité, <c>stab.xlsx</c> pour la stabilité) sans effet de bord. Utilisé en amont
+        /// de la mesure pour décider si le classeur Excel ouvert peut être réutilisé (= même FI).
+        ///
+        /// IMPORTANT : les noms de fichiers finaux (freq / stab) sont imposés par le logiciel tiers
+        /// d'extraction de données — ne pas y réintroduire le numéro de FI ni de préfixe.
         /// </summary>
         public string CalculerCheminFichierAttendu(Mesure mesure)
         {
@@ -179,9 +182,8 @@ namespace Metrologo.Services
                 Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
                 "Metrologo", numFISafe);
             bool estStab = mesure.TypeMesure == TypeMesure.Stabilite;
-            bool estTachy = EnTetesMesureHelper.EstTachymetre(mesure.TypeMesure);
-            string suffixe = estStab ? "_Stab" : (estTachy ? "_Tachy" : string.Empty);
-            return Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}.xlsx");
+            string baseNom = estStab ? "stab" : "freq";
+            return Path.Combine(dossier, $"{baseNom}.xlsx");
         }
 
         /// <summary>Vrai si le fichier a dû être écrit sous un nom de fallback au lieu du nom principal.</summary>
@@ -196,10 +198,11 @@ namespace Metrologo.Services
             await Task.Run(() =>
             {
                 // --- 1. Détermination du dossier et du fichier ---
-                //    La Stabilité utilise un fichier séparé (Récap. à 8 colonnes spécifique)
-                //    pour ne pas polluer la Récap. Fréquence du fichier principal du FI.
-                //    Les Tachymètres (Contact/Optique) utilisent leur propre fichier _Tachy_
-                //    pour ne pas se mélanger avec les rapports Fréquence du même FI.
+                //    La Stabilité utilise un fichier séparé « stab.xlsx » (Récap. à 8 colonnes
+                //    spécifique + itérations stab1, stab2…). Tout le reste — fréquence ET
+                //    tachymétrie — s'écrit dans « freq.xlsx » (noms imposés par le logiciel tiers
+                //    d'extraction). NB : freq et tachy partagent donc « freq.xlsx » ; on ne mélange
+                //    pas une mesure fréquence et une mesure tachy sur une même FI.
                 string numFISafe = SanitizerNomFichier(numeroFI);
 
                 // Fichier principal stocké sur le Bureau de l'utilisateur (au lieu de Documents).
@@ -211,21 +214,27 @@ namespace Metrologo.Services
                     "Metrologo", numFISafe);
                 Directory.CreateDirectory(dossier);
 
-                string suffixe = estStab ? "_Stab" : (estTachy ? "_Tachy" : string.Empty);
-                _cheminFichier = Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}.xlsx");
+                // Noms de fichiers finaux imposés par le logiciel tiers d'extraction : tout ce
+                // qui n'est PAS de la stabilité (fréquence, tachymétrie, intervalle…) s'appelle
+                // « freq », la stabilité s'appelle « stab ». Pas de numéro de FI dans le nom (le
+                // dossier porte déjà le FI). Les fichiers de FI différentes portent donc le même
+                // nom mais vivent dans des dossiers distincts.
+                string baseNom = estStab ? "stab" : "freq";
+                _cheminFichier = Path.Combine(dossier, $"{baseNom}.xlsx");
                 FallbackTimestampUtilise = false;
 
-                // Stabilité + nouvelle session + fichier existant → suffixe _v2, _v3, etc.
-                // Évite que le graphe Stab affiche les valeurs de la mesure précédente
-                // mélangées avec celles de la nouvelle session sur le même FI.
+                // Stabilité + nouvelle session + fichier existant → itération stab1, stab2, etc.
+                // (stab pour la 1re, stab1 pour la 2e, stab2 pour la 3e…). Évite que le graphe Stab
+                // mélange les valeurs de la session précédente avec celles de la nouvelle sur le
+                // même FI. La fréquence, elle, réutilise toujours le même « freq.xlsx ».
                 if (estStab && nouvelleSession && File.Exists(_cheminFichier))
                 {
-                    string baseSansExt = Path.Combine(dossier, $"Mesures{suffixe}_{numFISafe}");
-                    int v = 2;
+                    string baseSansExt = Path.Combine(dossier, "stab");
+                    int v = 1;
                     string candidat;
                     do
                     {
-                        candidat = $"{baseSansExt}_v{v}.xlsx";
+                        candidat = $"{baseSansExt}{v}.xlsx";
                         v++;
                     } while (File.Exists(candidat) && v < 1000);
                     _cheminFichier = candidat;
