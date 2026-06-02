@@ -411,14 +411,9 @@ namespace Metrologo.ViewModels
 
                     var vm = new ReglageDynamiqueViewModel(reglage);
 
-                    // Si une des commandes persistées correspond à une des options de ce réglage,
-                    // on pré-sélectionne cette option au lieu de rester sur le défaut (1ère option).
-                    var optionPersistee = reglage.Options
-                        .FirstOrDefault(o => commandesPersistees.Any(c => c == o.CommandeScpi));
-                    if (optionPersistee != null)
-                    {
-                        vm.OptionSelectionnee = optionPersistee;
-                    }
+                    // Restaure la sélection précédente de l'utilisateur (Choix OU valeur numérique
+                    // comme le Trigger) à partir des commandes SCPI persistées.
+                    vm.RestaurerDepuis(commandesPersistees);
 
                     ReglagesDynamiques.Add(vm);
 

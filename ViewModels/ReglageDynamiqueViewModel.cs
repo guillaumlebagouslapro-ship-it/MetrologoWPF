@@ -110,5 +110,47 @@ namespace Metrologo.ViewModels
                 return OptionSelectionnee?.CommandeScpi;
             }
         }
+
+        /// <summary>
+        /// Restaure la sélection de ce réglage à partir des commandes SCPI persistées
+        /// (<c>MesureConfig.CommandesScpiReglages</c>), pour que la fenêtre Configuration
+        /// retrouve les choix de l'utilisateur quand il la rouvre. Gère les deux types :
+        ///  - <b>Choix</b> : re-sélectionne l'option dont la commande figure dans la liste.
+        ///  - <b>Numérique</b> (ex. Trigger) : retrouve la commande correspondant au template
+        ///    <c>"préfixe{0}suffixe"</c> et en ré-extrait la valeur pour repeupler le champ.
+        /// </summary>
+        public void RestaurerDepuis(System.Collections.Generic.IEnumerable<string>? commandesPersistees)
+        {
+            if (commandesPersistees == null) return;
+            var liste = commandesPersistees.Where(c => !string.IsNullOrEmpty(c)).ToList();
+            if (liste.Count == 0) return;
+
+            if (_source.Type == TypeReglage.Choix)
+            {
+                var opt = Options.FirstOrDefault(o => liste.Any(c => c == o.CommandeScpi));
+                if (opt != null) OptionSelectionnee = opt;
+                return;
+            }
+
+            // Numérique : on reconstruit le motif à partir du template "préfixe{0}suffixe"
+            // et on isole la valeur dans la commande persistée correspondante.
+            string? template = _source.Options.Count > 0 ? _source.Options[0].CommandeScpi : null;
+            if (string.IsNullOrWhiteSpace(template)) return;
+            int pos = template.IndexOf("{0}", System.StringComparison.Ordinal);
+            if (pos < 0) return;
+
+            string prefixe = template.Substring(0, pos);
+            string suffixe = template.Substring(pos + 3);
+
+            foreach (var c in liste)
+            {
+                if (!c.StartsWith(prefixe, System.StringComparison.Ordinal)) continue;
+                if (suffixe.Length > 0 && !c.EndsWith(suffixe, System.StringComparison.Ordinal)) continue;
+                int longueur = c.Length - prefixe.Length - suffixe.Length;
+                if (longueur <= 0) continue;
+                Valeur = c.Substring(prefixe.Length, longueur).Trim();
+                return;
+            }
+        }
     }
 }
