@@ -2338,6 +2338,9 @@ namespace Metrologo.Services
                 // Déprotéger
                 try { recap.Unprotect("METROL"); } catch { try { recap.Unprotect("metrol"); } catch { try { recap.Unprotect(); } catch { } } }
 
+                // Élargit la colonne D (date) pour qu'elle s'affiche en entier au lieu de « #### ».
+                try { recap.Columns["D"].ColumnWidth = 13.0; } catch { }
+
                 // En-tête fiche : N° FI + date du jour. Écraser les valeurs héritées du
                 // template (sinon le récap affiche un FI/date qui n'a rien à voir avec la
                 // mesure en cours).
@@ -2410,6 +2413,9 @@ namespace Metrologo.Services
             try
             {
                 try { recap.Unprotect("METROL"); } catch { try { recap.Unprotect("metrol"); } catch { try { recap.Unprotect(); } catch { } } }
+
+                // Élargit la colonne D (date) pour qu'elle s'affiche en entier au lieu de « #### ».
+                try { recap.Columns["D"].ColumnWidth = 13.0; } catch { }
 
                 // En-tête fiche
                 EcrireValeurRecapInterne(recap, 1, 2, mesure.NumFI);

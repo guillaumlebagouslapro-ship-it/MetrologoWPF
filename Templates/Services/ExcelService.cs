@@ -925,6 +925,9 @@ namespace Metrologo.Services
                 var recap = _workbook.Worksheet(NOM_RECAP);
                 DeprotegerFeuille(recap);
 
+                // Élargit la colonne D (date) pour qu'elle s'affiche en entier au lieu de « #### ».
+                recap.Column(4).Width = 13;
+
                 // En-tête fiche : NumFI + date — idempotent à chaque itération de gate.
                 recap.Cell("B1").SetValue(mesure.NumFI);
                 recap.Cell("D1").SetValue(DateTime.Now.ToString("dd/MM/yyyy"));
@@ -997,6 +1000,9 @@ namespace Metrologo.Services
             var recap = _workbook.Worksheet(NOM_RECAP);
 
             DeprotegerFeuille(recap);
+
+            // Élargit la colonne D (date) pour qu'elle s'affiche en entier au lieu de « #### ».
+            recap.Column(4).Width = 13;
 
             // 1. Nettoyage des lignes "fantômes" héritées du template : ces lignes contiennent
             //    des formules =[0]!ZNxxx qui pointent vers ModFeuille (toujours vide) et
