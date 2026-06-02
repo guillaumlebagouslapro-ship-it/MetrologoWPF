@@ -1184,6 +1184,13 @@ namespace Metrologo.Services
                         // --- 2. Génère un nom de feuille unique (freq2, stab3, etc.) ---
                         string nomNouvelleFeuille = TrouverNomFeuilleUniqueInterne(config.TypeMesure);
 
+                        // Feuilles à nom fixe (avinter / fqfinale) : à la relance d'une mesure
+                        // avant/après intervention sur la même FI, le nom existe déjà → on ÉCRASE
+                        // l'ancienne feuille ET sa ligne Récap avant la copie (sinon le rename plus
+                        // bas lèverait sur doublon et la Récap afficherait deux lignes). No-op pour
+                        // les feuilles numérotées (nom toujours neuf).
+                        SupprimerFeuilleEtRecapInterne(nomNouvelleFeuille);
+
                         // --- 3. Copie ModFeuille à la fin du classeur ---
                         // ⚠ PIÈGE CRITIQUE D'EXCEL COM ⚠ : ws.Copy(Before, After) — selon la doc
                         // Microsoft, "If neither Before nor After is specified, Excel creates a
@@ -1662,6 +1669,162 @@ namespace Metrologo.Services
         /// Génère un nom de feuille unique (freq2, stab3, inter1, …) en parcourant les feuilles
         /// déjà présentes dans le classeur actif. Reproduit <c>ExcelService.TrouverNomFeuilleUnique</c>.
         /// </summary>
+        /// <summary>
+        /// Supprime la feuille de mesure <paramref name="nomFeuille"/> du classeur COM actif
+        /// (et sa ligne Récap.) puis sauvegarde. Appelé quand une mesure est STOPPÉE : la feuille
+        /// créée au démarrage ne doit pas être conservée (mesure traitée comme nulle).
+        /// Best-effort, ne lève jamais.
+        /// </summary>
+        public Task SupprimerFeuilleMesureAsync(string nomFeuille) => Task.Run(() =>
+        {
+            if (string.IsNullOrWhiteSpace(nomFeuille)) return;
+            lock (_sync)
+            {
+                if (_classeurActif == null) return;
+                try
+                {
+                    SupprimerFeuilleEtRecapInterne(nomFeuille);
+
+                    // La feuille courante était celle qu'on vient de supprimer → on lâche la
+                    // référence COM pour éviter tout accès ultérieur sur un objet déconnecté.
+                    if (_feuilleMesure != null)
+                    {
+                        try { Marshal.ReleaseComObject(_feuilleMesure); } catch { }
+                        _feuilleMesure = null;
+                    }
+
+                    try { _classeurActif.Save(); }
+                    catch (Exception ex)
+                    {
+                        JournalLog.Warn(CategorieLog.Excel, "EXCEL_SUPPR_FEUILLE_SAVE_KO",
+                            $"Sauvegarde après suppression de « {nomFeuille} » échouée : {ex.Message}");
+                    }
+
+                    JournalLog.Info(CategorieLog.Excel, "EXCEL_FEUILLE_STOP_SUPPRIMEE",
+                        $"Feuille « {nomFeuille} » supprimée suite à l'arrêt de la mesure.");
+                }
+                catch (Exception ex)
+                {
+                    JournalLog.Warn(CategorieLog.Excel, "EXCEL_SUPPR_FEUILLE_STOP_KO",
+                        $"Suppression de la feuille « {nomFeuille} » (arrêt) échouée : {ex.Message}");
+                }
+            }
+        });
+
+        /// <summary>
+        /// Supprime du classeur COM actif la feuille <paramref name="nomFeuille"/> si elle existe,
+        /// ainsi que les lignes de la Récap. qui la référencent. À appeler SOUS LOCK (_sync).
+        /// Gère DisplayAlerts pour éviter la confirmation Excel de suppression de feuille. No-op si
+        /// la feuille n'existe pas (cas des feuilles numérotées au nom neuf).
+        /// </summary>
+        private void SupprimerFeuilleEtRecapInterne(string nomFeuille)
+        {
+            if (_classeurActif == null || string.IsNullOrWhiteSpace(nomFeuille)) return;
+
+            // La feuille existe-t-elle ? Sinon no-op.
+            bool existe = false;
+            try
+            {
+                dynamic wsTest = _classeurActif.Worksheets.Item(nomFeuille);
+                existe = wsTest != null;
+                try { Marshal.ReleaseComObject(wsTest); } catch { }
+            }
+            catch { existe = false; }
+            if (!existe) return;
+
+            bool alertesOriginal = true;
+            try { alertesOriginal = (bool)_excel.DisplayAlerts; } catch { }
+            try { _excel.DisplayAlerts = false; } catch { }
+            try
+            {
+                // 1. Retire les lignes de la Récap. qui référencent la feuille (sinon doublon ou
+                //    #REF! après suppression / recréation d'une feuille de même nom).
+                try
+                {
+                    dynamic recap = _classeurActif.Worksheets.Item("Récap.");
+                    try
+                    {
+                        try { recap.Unprotect("METROL"); }
+                        catch { try { recap.Unprotect("metrol"); } catch { try { recap.Unprotect(); } catch { } } }
+
+                        // Borne le balayage à la zone utilisée (évite 100×12 lectures COM inutiles).
+                        int maxLigne = 60;
+                        try
+                        {
+                            dynamic used = recap.UsedRange;
+                            int firstRow = (int)used.Row;
+                            int rowCount = (int)used.Rows.Count;
+                            maxLigne = firstRow + rowCount - 1;
+                            try { Marshal.ReleaseComObject(used); } catch { }
+                        }
+                        catch { maxLigne = 60; }
+                        if (maxLigne > 200) maxLigne = 200;
+
+                        // Descendant : supprimer une ligne ne décale pas les lignes < r non visitées.
+                        for (int r = maxLigne; r >= 6; r--)
+                        {
+                            if (!LigneRecapRefereFeuilleInterne(recap, r, nomFeuille)) continue;
+                            try
+                            {
+                                dynamic cellA = recap.Range[$"A{r}"];
+                                try
+                                {
+                                    dynamic entireRow = cellA.EntireRow;
+                                    try { entireRow.Delete(); }
+                                    finally { try { Marshal.ReleaseComObject(entireRow); } catch { } }
+                                }
+                                finally { try { Marshal.ReleaseComObject(cellA); } catch { } }
+                            }
+                            catch { /* ligne inaccessible — skip */ }
+                        }
+                    }
+                    finally { try { Marshal.ReleaseComObject(recap); } catch { } }
+                }
+                catch { /* pas de Récap. — non bloquant */ }
+
+                // 2. Supprime la feuille elle-même.
+                try
+                {
+                    dynamic ws = _classeurActif.Worksheets.Item(nomFeuille);
+                    try { ws.Delete(); }
+                    finally { try { Marshal.ReleaseComObject(ws); } catch { } }
+                }
+                catch (Exception ex)
+                {
+                    JournalLog.Warn(CategorieLog.Excel, "EXCEL_SUPPR_FEUILLE_KO",
+                        $"Suppression de la feuille « {nomFeuille} » échouée : {ex.Message}");
+                }
+            }
+            finally
+            {
+                try { _excel.DisplayAlerts = alertesOriginal; } catch { }
+            }
+        }
+
+        /// <summary>Vrai si une cellule (col 1..12) de la ligne Récap. contient une formule référençant la feuille.</summary>
+        private bool LigneRecapRefereFeuilleInterne(dynamic recap, int row, string nomFeuille)
+        {
+            for (int c = 1; c <= 12; c++)
+            {
+                try
+                {
+                    dynamic cell = recap.Cells[row, c];
+                    try
+                    {
+                        string f = "";
+                        try { f = (string)cell.Formula; } catch { }
+                        if (!string.IsNullOrEmpty(f)
+                            && (f.IndexOf($"{nomFeuille}!", StringComparison.OrdinalIgnoreCase) >= 0
+                                || f.IndexOf($"'{nomFeuille}'!", StringComparison.OrdinalIgnoreCase) >= 0))
+                            return true;
+                    }
+                    finally { try { Marshal.ReleaseComObject(cell); } catch { } }
+                }
+                catch { }
+            }
+            return false;
+        }
+
         private string TrouverNomFeuilleUniqueInterne(TypeMesure type)
         {
             if (_classeurActif == null) return "Mesure1";

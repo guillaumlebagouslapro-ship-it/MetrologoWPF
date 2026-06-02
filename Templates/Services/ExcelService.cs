@@ -303,6 +303,13 @@ namespace Metrologo.Services
 
                 // --- 3. Création d'une nouvelle feuille (copie de ModFeuille) ---
                 _nomFeuilleMesure = TrouverNomFeuilleUnique(config.TypeMesure);
+
+                // Feuilles à nom fixe (avinter / fqfinale) : à la relance d'une mesure « avant
+                // intervention » ou « finale » sur la même FI, le nom existe déjà → on ÉCRASE :
+                // suppression de l'ancienne feuille ET de sa ligne Récap (sinon doublon ou erreur
+                // de doublon au CopyTo). Pour les types numérotés, le nom est toujours libre → no-op.
+                SupprimerFeuilleEtLigneRecapSiExiste(_nomFeuilleMesure);
+
                 _feuilleMesure = modFeuille.CopyTo(_nomFeuilleMesure);
 
                 // ModFeuille est cachée dans le template (convention métier — c'est juste un
@@ -1547,6 +1554,57 @@ namespace Metrologo.Services
             //    _1ZNDeltaF, _10ZNPlageFReelle) deviennent orphelines mais ne sont pas
             //    consommées par le graphe (qui pointe vers Récap. directement) — on les
             //    laisse en place ; ClosedXML ne plante pas dessus.
+        }
+
+        /// <summary>
+        /// Supprime du classeur ClosedXML en cours la feuille <paramref name="nomFeuille"/> si
+        /// elle existe, ainsi que les lignes de la Récap. qui la référencent (formules
+        /// <c>='nom'!ZN...</c>). Sert à écraser proprement une feuille à nom fixe (avinter /
+        /// fqfinale) lors d'une relance avant/après intervention. No-op si la feuille n'existe pas
+        /// (cas des feuilles numérotées dont le nom est toujours neuf).
+        /// </summary>
+        private void SupprimerFeuilleEtLigneRecapSiExiste(string nomFeuille)
+        {
+            if (_workbook == null || string.IsNullOrWhiteSpace(nomFeuille)) return;
+
+            var feuille = _workbook.Worksheets
+                .FirstOrDefault(w => string.Equals(w.Name, nomFeuille, StringComparison.OrdinalIgnoreCase));
+            if (feuille == null) return; // nom libre → rien à écraser
+
+            // 1. Retire les lignes de la Récap. qui pointent vers cette feuille (sinon, après
+            //    recréation de la feuille de même nom, une nouvelle ligne Récap s'ajouterait en
+            //    doublon de l'ancienne).
+            try
+            {
+                if (_workbook.Worksheets.Any(w => w.Name == NOM_RECAP))
+                {
+                    var recap = _workbook.Worksheet(NOM_RECAP);
+                    int derniere = recap.LastRowUsed()?.RowNumber() ?? LIGNE_ENTETE_RECAP;
+                    for (int row = derniere; row > LIGNE_ENTETE_RECAP; row--)
+                    {
+                        if (LigneRefereFeuille(recap, row, nomFeuille))
+                            recap.Row(row).Delete();
+                    }
+                }
+            }
+            catch { /* best-effort : la suppression de la feuille reste prioritaire */ }
+
+            // 2. Supprime la feuille elle-même.
+            try { feuille.Delete(); } catch { /* best-effort */ }
+        }
+
+        /// <summary>Vrai si une cellule de la ligne contient une formule référençant la feuille donnée.</summary>
+        private static bool LigneRefereFeuille(IXLWorksheet recap, int row, string nomFeuille)
+        {
+            foreach (var cell in recap.Row(row).CellsUsed())
+            {
+                if (!cell.HasFormula) continue;
+                var f = cell.FormulaA1 ?? string.Empty;
+                if (f.IndexOf($"{nomFeuille}!", StringComparison.OrdinalIgnoreCase) >= 0
+                    || f.IndexOf($"'{nomFeuille}'!", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+            return false;
         }
 
         private string TrouverNomFeuilleUnique(TypeMesure type)

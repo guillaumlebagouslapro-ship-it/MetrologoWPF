@@ -95,6 +95,14 @@ namespace Metrologo.Services
             var profiler = new ProfilerSession();
             void Perf(string label) => profiler.Mark(label);
 
+            // Déclarées AVANT le try pour être visibles dans le catch d'annulation (suppression
+            // de la feuille de la mesure stoppée).
+            string? derniereFeuille = null;
+            // Vrai entre la création de la feuille d'une gate et la fin de son acquisition.
+            // Sert à savoir, en cas d'arrêt utilisateur, si la feuille courante est incomplète
+            // (à supprimer) ou s'il s'agit d'une gate déjà terminée (à conserver).
+            bool feuilleCouranteIncomplete = false;
+
             try
             {
                 Perf("START");
@@ -150,7 +158,6 @@ namespace Metrologo.Services
                 int etape = 0;
 
                 string? cheminFichier = null;
-                string? derniereFeuille = null;
 
                 bool bulkDejaEchoue = false;
 
@@ -304,6 +311,11 @@ namespace Metrologo.Services
                             Perf("Interop.OuvrirEtAfficherAsync");
                         }
                     }
+
+                    // La feuille de cette gate vient d'être créée mais ses valeurs ne sont pas
+                    // encore acquises : si l'utilisateur stoppe maintenant, il faudra la supprimer
+                    // (cf. catch OperationCanceledException). Repassé à false en fin de gate.
+                    feuilleCouranteIncomplete = true;
 
                     // 3.b Programmation de la gate de cette itération
                     progress?.Report(new ProgressionMesure
@@ -929,6 +941,10 @@ namespace Metrologo.Services
                             GateLibelle = EnTetesMesureHelper.LibelleGate(gateIdx),
                             NbMesures = valeurs.Count
                         });
+
+                    // Gate terminée : sa feuille est complète. Si un arrêt survient pendant la
+                    // gate suivante, on ne doit PAS supprimer cette feuille-ci.
+                    feuilleCouranteIncomplete = false;
                 }
 
                 if (cheminFichier != null) result.CheminExcel = cheminFichier;
@@ -960,6 +976,19 @@ namespace Metrologo.Services
             {
                 result.Erreur = "Mesure annulée par l'utilisateur.";
                 JournalLog.Warn(CategorieLog.Mesure, "Execute", result.Erreur);
+
+                // Mesure stoppée : la feuille créée pour la mesure en cours ne doit pas être
+                // conservée. On ne supprime QUE si la feuille courante est incomplète (sinon, en
+                // balayage stabilité, on effacerait une gate précédente déjà terminée).
+                if (feuilleCouranteIncomplete && !string.IsNullOrEmpty(derniereFeuille))
+                {
+                    try { await ExcelInteropHost.Instance.SupprimerFeuilleMesureAsync(derniereFeuille); }
+                    catch (Exception exSuppr)
+                    {
+                        JournalLog.Warn(CategorieLog.Mesure, "Execute_SupprFeuilleStop",
+                            $"Suppression de la feuille « {derniereFeuille} » après arrêt échouée : {exSuppr.Message}");
+                    }
+                }
             }
             catch (Exception ex)
             {
