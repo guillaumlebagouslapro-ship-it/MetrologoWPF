@@ -1290,14 +1290,14 @@ namespace Metrologo.Services
                         EcrireValeurCelluleInterne(nouvelleFeuille, "B31", entetes.LabelIncertGlob);
 
                         // --- 7. Module d'incertitude affiché UNE seule fois ---
-                        // Les colonnes n°Module / Fonction / Condition 1 ont été retirées du
-                        // template. On n'écrit que le module, dans la cellule valeur à côté du
-                        // label « Module = » : F10 (layout standard) ou G10 (tachy, 1 colonne de plus).
+                        // On écrit le module SÉLECTIONNÉ dans la config (config.NumModuleIncertitude),
+                        // dans la cellule valeur à côté du label « Module = » : F10 (layout standard)
+                        // ou G10 (tachy, 1 colonne de plus).
                         bool estTachy = EnTetesMesureHelper.EstTachymetre(config.TypeMesure);
-                        var (module, _) = MesureConfigService.ObtenirPourType(config.TypeMesure);
+                        string moduleSelectionne = config.NumModuleIncertitude ?? string.Empty;
                         string celluleModule = estTachy ? "G10" : "F10";
-                        if (!string.IsNullOrEmpty(module))
-                            EcrireValeurCelluleInterne(nouvelleFeuille, celluleModule, module);
+                        if (!string.IsNullOrEmpty(moduleSelectionne))
+                            EcrireValeurCelluleInterne(nouvelleFeuille, celluleModule, moduleSelectionne);
 
                         // --- 8. Tachymétrie : col K (conversion Hz → tr/min) ---
                         if (estTachy)

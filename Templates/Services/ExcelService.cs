@@ -345,12 +345,14 @@ namespace Metrologo.Services
 
                 // --- 5b. Module d'incertitude affiché UNE seule fois ---
                 // Les colonnes n°Module / Fonction / Condition 1 ont été retirées du template.
-                // On affiche seulement le module, dans la cellule valeur prévue à côté du label
-                // « Module = » : F10 pour le layout standard (freq/stab/…), G10 pour le tachy
-                // (qui a une colonne de plus). Le Récap lit cette même cellule.
-                var (module, _) = MesureConfigService.ObtenirPourType(config.TypeMesure);
+                // On affiche le module SÉLECTIONNÉ dans la config de la mesure (config.NumModuleIncertitude
+                // — celui qui alimente les coefficients d'incertitude), dans la cellule valeur à côté
+                // du label « Module = » : F10 pour le layout standard, G10 pour le tachy. Le Récap
+                // lit cette même cellule.
+                string moduleSelectionne = config.NumModuleIncertitude ?? string.Empty;
                 string celluleModule = estTachy ? "G10" : "F10";
-                if (!string.IsNullOrEmpty(module)) _feuilleMesure.Cell(celluleModule).SetValue(module);
+                if (!string.IsNullOrEmpty(moduleSelectionne))
+                    _feuilleMesure.Cell(celluleModule).SetValue(moduleSelectionne);
 
                 // Mémorisation pour PreparerLignesMesureAsync (col N conversion tr/min)
                 _typeMesureCourant = config.TypeMesure;
