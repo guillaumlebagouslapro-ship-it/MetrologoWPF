@@ -168,17 +168,17 @@ namespace Metrologo
             await PresetsStabiliteService.Instance.ChargerAsync();
             StartupLap("PresetsStabiliteService.ChargerAsync");
 
-            // METROLOGO_Stab.xltx est livré avec l'app (extrait de Stab1.xls historique avec
+            // METROLOGO_Stab.xlsx est livré avec l'app (extrait de Stab1.xls historique avec
             // graphe pro intégré). Le builder n'est utilisé qu'en filet de sécurité si quelqu'un
             // a supprimé le template — il génère alors une version basique sans graphe pro.
             try
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string stabPath = Path.Combine(baseDir, "Templates", "METROLOGO_Stab.xltx");
+                string stabPath = Path.Combine(baseDir, "Templates", "METROLOGO_Stab.xlsx");
                 if (!File.Exists(stabPath))
                 {
                     StabTemplateBuilder.EnsureExists(
-                        Path.Combine(baseDir, "Templates", "METROLOGO.xltx"),
+                        Path.Combine(baseDir, "Templates", "METROLOGO.xlsx"),
                         stabPath);
                 }
             }
@@ -200,7 +200,7 @@ namespace Metrologo
 
             // Warm-up ClosedXML : ouvre les 2 templates en arrière-plan pour pré-JIT les
             // assemblies (ClosedXML.dll, DocumentFormat.OpenXml.dll) + déclencher le cache
-            // disque OS du fichier .xltx. Sans ce warm-up, la 1ère InitialiserRapportAsync
+            // disque OS du fichier .xlsx. Sans ce warm-up, la 1ère InitialiserRapportAsync
             // d'une mesure prend ~1 s ; après warm-up, ~25 ms (gain mesuré dans le profiler).
             // Fire-and-forget : ne bloque pas le démarrage de l'app.
             _ = Task.Run(() =>
@@ -208,7 +208,7 @@ namespace Metrologo
                 try
                 {
                     string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                    foreach (var nomTpl in new[] { "METROLOGO.xltx", "METROLOGO_Stab.xltx" })
+                    foreach (var nomTpl in new[] { "METROLOGO.xlsx", "METROLOGO_Stab.xlsx" })
                     {
                         string chemin = Path.Combine(baseDir, "Templates", nomTpl);
                         if (!File.Exists(chemin)) continue;

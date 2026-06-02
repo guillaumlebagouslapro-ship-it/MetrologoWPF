@@ -511,19 +511,17 @@ namespace Metrologo.Services
                     try
                     {
                         int row = ligneDebut + indexMesure;
-                        // Décalage de 3 colonnes : col=4 (D) = HEURE, col=5 (E) = mesure brute.
-                        // Les colonnes 1-3 (A/B/C) sont réservées à n°Module/Fonction/Condition 1
-                        // (écrites une fois par ExcelService.InitialiserRapportAsync).
+                        // Tableau en A-D : col=1 (A) = HEURE, col=2 (B) = mesure brute.
                         //
-                        // Écriture en bloc D:E via un Range + matrice [1,2] au lieu de 2 appels
+                        // Écriture en bloc A:B via un Range + matrice [1,2] au lieu de 2 appels
                         // .Cells[r,c].Value2 successifs. Excel ne ré-active alors qu'une seule
                         // fois le rectangle de sélection visible sur la zone écrite (au lieu de
-                        // 2 fois — col D puis col E). Réduit le clignotement / effet « valeur
+                        // 2 fois — col A puis col B). Réduit le clignotement / effet « valeur
                         // barrée pendant la saisie » côté utilisateur.
                         // Bonus perf : ~30-40 % plus rapide (1 marshal COM au lieu de 2).
                         range = _feuilleMesure.Range[
-                            _feuilleMesure.Cells[row, 4],
-                            _feuilleMesure.Cells[row, 5]];
+                            _feuilleMesure.Cells[row, 1],
+                            _feuilleMesure.Cells[row, 2]];
                         range.Value2 = new object[1, 2]
                         {
                             { horodatage.ToString("HH:mm:ss"), valeur }
@@ -569,13 +567,11 @@ namespace Metrologo.Services
                             matrix[i, 1] = mesures[i].valeur;
                         }
 
-                        // Décalage de 3 colonnes (idem EcrireValeursBatchClosedXMLAsync) :
-                        // col 4 (D) = HEURE, col 5 (E) = mesure brute. Les colonnes A/B/C
-                        // sont réservées aux entêtes N°Module / Fonction / Condition 1.
+                        // Tableau en A-D : col 1 (A) = HEURE, col 2 (B) = mesure brute.
                         int ligneFin = ligneDebut + mesures.Count - 1;
                         dynamic plage = feuille.Range[
-                            feuille.Cells[ligneDebut, 4],
-                            feuille.Cells[ligneFin, 5]];
+                            feuille.Cells[ligneDebut, 1],
+                            feuille.Cells[ligneFin, 2]];
                         plage.Value2 = matrix;
                         Marshal.ReleaseComObject(plage);
                     }
@@ -1234,7 +1230,7 @@ namespace Metrologo.Services
 
                         // --- 5. CLONAGE DES NAMES SHEET-SCOPE (PARTIE CRITIQUE) ---
                         // Les templates ont les Names workbook-scope pointant vers ModFeuille!
-                        // (33 sur METROLOGO.xltx, idem sur Stab/Tachy). Worksheet.Copy COM ne
+                        // (33 sur METROLOGO.xlsx, idem sur Stab/Tachy). Worksheet.Copy COM ne
                         // les clone PAS automatiquement (il ne clone que les sheet-scope, qui
                         // n'existent pas sur ModFeuille). On doit donc recréer chaque Name en
                         // version sheet-scope sur la nouvelle feuille — sans ça, ZNFreqMoyReel,
@@ -1281,35 +1277,35 @@ namespace Metrologo.Services
                             + $"{nbNamesClones} clonés, {nbNamesIgnores} ignorés "
                             + $"(sur {nomsAClones.Count} candidats trouvés pointant vers ModFeuille!).");
 
-                        // --- 6. En-têtes adaptatifs col D/E/F/G + labels col E ---
+                        // --- 6. En-têtes adaptatifs col A/B/C/D + labels col B ---
                         var entetes = EnTetesMesureHelper.Pour(config.TypeMesure);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "D7",  entetes.EnteteHeure);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "E7",  entetes.EnteteMesuree);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "F7",  entetes.EnteteReelle);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "G7",  entetes.EnteteDelta);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "E13", entetes.LabelMoyenne);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "E21", entetes.LabelFreqRef);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "E23", entetes.LabelFreqCorr);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "E25", entetes.LabelIncertResol);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "E31", entetes.LabelIncertGlob);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "A7",  entetes.EnteteHeure);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "B7",  entetes.EnteteMesuree);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "C7",  entetes.EnteteReelle);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "D7",  entetes.EnteteDelta);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "B13", entetes.LabelMoyenne);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "B21", entetes.LabelFreqRef);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "B23", entetes.LabelFreqCorr);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "B25", entetes.LabelIncertResol);
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "B31", entetes.LabelIncertGlob);
 
-                        // --- 7. Colonnes n°Module / Fonction / Condition 1 (ligne 9) ---
-                        var (module, fonction) = MesureConfigService.ObtenirPourType(config.TypeMesure);
-                        if (!string.IsNullOrEmpty(module))
-                            EcrireValeurCelluleInterne(nouvelleFeuille, "A9", module);
-                        if (!string.IsNullOrEmpty(fonction))
-                            EcrireValeurCelluleInterne(nouvelleFeuille, "B9", fonction);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "C9",
-                            EnTetesMesureHelper.SecondesGate(gateInscrite));
-
-                        // --- 8. Tachymétrie : col N (conversion Hz → tr/min) ---
+                        // --- 7. Module d'incertitude affiché UNE seule fois ---
+                        // Les colonnes n°Module / Fonction / Condition 1 ont été retirées du
+                        // template. On n'écrit que le module, dans la cellule valeur à côté du
+                        // label « Module = » : F10 (layout standard) ou G10 (tachy, 1 colonne de plus).
                         bool estTachy = EnTetesMesureHelper.EstTachymetre(config.TypeMesure);
+                        var (module, _) = MesureConfigService.ObtenirPourType(config.TypeMesure);
+                        string celluleModule = estTachy ? "G10" : "F10";
+                        if (!string.IsNullOrEmpty(module))
+                            EcrireValeurCelluleInterne(nouvelleFeuille, celluleModule, module);
+
+                        // --- 8. Tachymétrie : col K (conversion Hz → tr/min) ---
                         if (estTachy)
                         {
-                            EcrireValeurCelluleInterne(nouvelleFeuille, "N7", "Vitesse (tr/min)");
-                            try { ((dynamic)nouvelleFeuille.Columns["N"]).ColumnWidth = 18; } catch { }
-                            EcrireFormuleCelluleInterne(nouvelleFeuille, "N9",  "=E9*60");
-                            EcrireFormuleCelluleInterne(nouvelleFeuille, "N10", "=E10*60");
+                            EcrireValeurCelluleInterne(nouvelleFeuille, "K7", "Vitesse (tr/min)");
+                            try { ((dynamic)nouvelleFeuille.Columns["K"]).ColumnWidth = 18; } catch { }
+                            EcrireFormuleCelluleInterne(nouvelleFeuille, "K9",  "=B9*60");
+                            EcrireFormuleCelluleInterne(nouvelleFeuille, "K10", "=B10*60");
                         }
 
                         // --- 9. Métadonnées via zones nommées sheet-scope (clonées plus haut) ---
@@ -1403,24 +1399,16 @@ namespace Metrologo.Services
                         for (int i = 2; i < nbMesures; i++)
                         {
                             int row = 9 + i;
-                            string fF = $"=IF(ISBLANK(ZNCoeffMult),E{row},"
-                                + $"(((E{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
-                            EcrireFormuleCelluleInterne(nouvelleFeuille, $"F{row}", fF);
-                            EcrireFormuleCelluleInterne(nouvelleFeuille, $"G{row}", $"=F{row - 1}-F{row}");
+                            string fC = $"=IF(ISBLANK(ZNCoeffMult),B{row},"
+                                + $"(((B{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
+                            EcrireFormuleCelluleInterne(nouvelleFeuille, $"C{row}", fC);
+                            EcrireFormuleCelluleInterne(nouvelleFeuille, $"D{row}", $"=C{row - 1}-C{row}");
                             if (conversionTrMin)
-                                EcrireFormuleCelluleInterne(nouvelleFeuille, $"N{row}", $"=E{row}*60");
+                                EcrireFormuleCelluleInterne(nouvelleFeuille, $"K{row}", $"=B{row}*60");
                         }
 
-                        // --- 12. Col A : N°Module sur CHAQUE ligne de mesure ---
-                        if (!string.IsNullOrWhiteSpace(config.NumModuleIncertitude))
-                        {
-                            for (int i = 0; i < nbMesures; i++)
-                            {
-                                int row = 9 + i;
-                                EcrireValeurCelluleInterne(nouvelleFeuille, $"A{row}",
-                                    config.NumModuleIncertitude);
-                            }
-                        }
+                        // --- 12. n°Module : plus écrit par ligne (colonne retirée) ; il est
+                        //         affiché une seule fois dans la cellule « Module = » (étape 7).
 
                         // --- 13. Formules métier (ZNFreqMoyReel, ZNVariance, ZNEcartType, …) ---
                         // Posées via Worksheet.Names → RefersToRange.Formula (les Names sheet-scope
@@ -1429,7 +1417,7 @@ namespace Metrologo.Services
                         int ligneDeb = 9;
                         int ligneFin = 9 + nbMesures - 1;
                         EcrireFormuleZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqMoyReel",
-                            $"=IF(ISBLANK(ZNNbMesures),,AVERAGE(F{ligneDeb}:F{ligneFin}))");
+                            $"=IF(ISBLANK(ZNNbMesures),,AVERAGE(C{ligneDeb}:C{ligneFin}))");
 
                         // ⚠ PIÈGE EXCEL COM : la formule `=[1]!Cal_variance(SUMSQ(...),...,...)`
                         // est rejetée (0x800A03EC) par .Formula/.Formula2/.FormulaLocal en COM
@@ -1459,7 +1447,7 @@ namespace Metrologo.Services
                         // (cf. EcrireFormuleRecapInterne pour le même fix sur Récap.).
                         try
                         {
-                            dynamic rangeFormules = nouvelleFeuille.Range[$"F{ligneDeb}:G{ligneFin}"];
+                            dynamic rangeFormules = nouvelleFeuille.Range[$"C{ligneDeb}:D{ligneFin}"];
                             try { rangeFormules.NumberFormat = "General"; }
                             finally { try { Marshal.ReleaseComObject(rangeFormules); } catch { } }
                         }
@@ -2397,13 +2385,13 @@ namespace Metrologo.Services
                 // Col 10 : fréquence finale calculée
                 int n = nouvelleLigne;
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 10, $"=IF(ISNUMBER(E{n}),(E{n}/C{n})*A{n},C{n})");
-                // Col 11 : n°Module | 12 : Fonction
-                EcrireFormuleRecapInterne(recap, nouvelleLigne, 11, $"={qf}A9");
-                EcrireFormuleRecapInterne(recap, nouvelleLigne, 12, $"={qf}B9");
+                // Col 11 : n°Module — lu depuis la cellule « Module = » de la feuille (F10, ou
+                // G10 en tachy). La colonne Fonction a été retirée.
+                string celModuleRecap = EnTetesMesureHelper.EstTachymetre(mesure.TypeMesure) ? "G10" : "F10";
+                EcrireFormuleRecapInterne(recap, nouvelleLigne, 11, $"={qf}{celModuleRecap}");
 
-                // En-têtes K et L si vides
+                // En-tête K si vide
                 EcrireValeurRecapSiVideInterne(recap, ligneEntete, 11, "n°Module");
-                EcrireValeurRecapSiVideInterne(recap, ligneEntete, 12, "Fonction");
             }
             finally
             {
@@ -2461,11 +2449,10 @@ namespace Metrologo.Services
                 EcrireFormuleRecapInterne(recap, ligne, 7, $"=C{ligne}+F{ligne}");
                 EcrireFormuleRecapInterne(recap, ligne, 8,
                     $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0,C{ligne}-F{ligne}))");
-                EcrireFormuleRecapInterne(recap, ligne, 11, $"={qf}A9");
-                EcrireFormuleRecapInterne(recap, ligne, 12, $"={qf}B9");
+                // n°Module lu depuis la cellule « Module = » (F10) ; colonne Fonction retirée.
+                EcrireFormuleRecapInterne(recap, ligne, 11, $"={qf}F10");
 
                 EcrireValeurRecapSiVideInterne(recap, 5, 11, "n°Module");
-                EcrireValeurRecapSiVideInterne(recap, 5, 12, "Fonction");
             }
             finally
             {
@@ -2481,7 +2468,7 @@ namespace Metrologo.Services
                 try
                 {
                     // CAUSE RACINE du bug "ligne 1 du Récap. en texte" :
-                    // Le template METROLOGO.xltx a une ligne 6 pré-stylée avec des cellules
+                    // Le template METROLOGO.xlsx a une ligne 6 pré-stylée avec des cellules
                     // marquées t="s" (shared string) dans le XML xlsx. Quand la 1ère mesure
                     // tombe sur cette ligne, l'écriture .Formula = "=..." STOCKE LA FORMULE
                     // COMME STRING (entrée dans sharedStrings.xml) au lieu d'une vraie formule.

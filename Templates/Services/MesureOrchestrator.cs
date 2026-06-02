@@ -924,7 +924,7 @@ namespace Metrologo.Services
                     // en fonction du Temps de porte). Idempotent côté Interop, et on save
                     // pour persister le graphe dans le fichier final.
                     // Le graphe de stabilité est désormais embarqué directement dans le template
-                    // METROLOGO_Stab.xltx (extrait de Stab1.xls historique avec toutes ses
+                    // METROLOGO_Stab.xlsx (extrait de Stab1.xls historique avec toutes ses
                     // propriétés exactes : HiLoLines, log Y, markers Diamond/Dash/Dot, légende
                     // en bas, etc.). Plus besoin de le recréer programmatiquement — il est cloné
                     // automatiquement à chaque nouveau classeur de mesure stabilité.

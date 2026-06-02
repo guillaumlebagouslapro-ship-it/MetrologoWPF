@@ -23,10 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Templates\METROLOGO.xltx">
+    <None Update="Templates\METROLOGO.xlsx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Templates\METROLOGO_Stab.xltx">
+    <None Update="Templates\METROLOGO_Stab.xlsx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="Templates\METROLOGO_Tachy.xlsx">

@@ -152,10 +152,10 @@ namespace Metrologo.Services
         /// stroboscope. Choisie volontairement éloignée des colonnes D-G (qui alimentent
         /// la Récap. Fréquence via les zones nommées scope-feuille) pour ne PAS interférer
         /// avec les formules cross-sheet de la Récap. CEAO/SDAO ne lit pas cette colonne.
-        /// Position N après le décalage de 3 colonnes pour les nouvelles colonnes
-        /// n°Module/Fonction/Condition 1 ajoutées en A/B/C.
+        /// Colonne dédiée à la conversion Hz → tr/min (tachymétrie), placée à droite du bloc
+        /// de mesures A-D pour ne pas interférer avec la Récap (qui lit via zones nommées).
         /// </summary>
-        private const string COL_CONVERSION_TR_MIN = "N";
+        private const string COL_CONVERSION_TR_MIN = "K";
 
         public string NomFeuilleMesure => _nomFeuilleMesure;
 
@@ -246,9 +246,9 @@ namespace Metrologo.Services
                 //    en tr/min, zones ZNCoeffC/D et ZNIncertResolRpm spécifiques), template
                 //    Fréquence universel pour le reste.
                 string nomTemplate =
-                    estStab ? "METROLOGO_Stab.xltx" :
+                    estStab ? "METROLOGO_Stab.xlsx" :
                     estTachy ? "METROLOGO_Tachy.xlsx" :
-                    "METROLOGO.xltx";
+                    "METROLOGO.xlsx";
                 string templatePath = Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, "Templates", nomTemplate);
 
@@ -285,7 +285,7 @@ namespace Metrologo.Services
                 }
 
                 // --- 2b. Nettoyage des feuilles « 1 » à « N » héritées du Stab1.xls historique ---
-                // Le template METROLOGO_Stab.xltx contient 10 feuilles vides nommées "1".."10"
+                // Le template METROLOGO_Stab.xlsx contient 10 feuilles vides nommées "1".."10"
                 // (slots des 10 procédures auto figées du Delphi historique). Sans nettoyage,
                 // TrouverNomFeuilleUnique attribue 11, 12, 13… aux nouvelles gates et la
                 // Récap. affiche 10 lignes parasites pointant vers des feuilles vides.
@@ -320,43 +320,37 @@ namespace Metrologo.Services
 
                 DeprotegerFeuille(_feuilleMesure);
 
-                // Largeurs : le template a été décalé de 3 colonnes pour accueillir
-                // n°Module / Fonction / Condition 1. Les anciennes col B/C/E deviennent
-                // E/F/H (le bloc des mesures HEURE/Mesurée/Réelle/Delta est maintenant
-                // en col D-G).
-                _feuilleMesure.Column("E").Width = 30;
-                _feuilleMesure.Column("F").Width = 28;
-                _feuilleMesure.Column("H").Width = 30;
+                // Layout sans les colonnes module/fonction/condition : le tableau des mesures
+                // commence directement en colonne A (HEURE=A, Mesurée=B, Réelle=C, Delta=D).
+                _feuilleMesure.Column("B").Width = 30;   // Mesurée
+                _feuilleMesure.Column("C").Width = 28;   // Réelle
+                _feuilleMesure.Column("E").Width = 30;   // bloc labels droite
 
                 // --- 4. Clonage des zones nommées en sheet-scope sur la nouvelle feuille ---
                 ClonerZonesNommeesPourNouvelleFeuille(modFeuille, _feuilleMesure);
 
-                // --- 5. En-têtes adaptatifs (colonnes D/E/F/G + labels de lignes col E) ---
-                // Décalage post-ajout des colonnes A/B/C (n°Module / Fonction / Condition 1) :
-                //   Ancien A → Nouveau D (HEURE)
-                //   Ancien B → Nouveau E (Mesurée)
-                //   Ancien C → Nouveau F (Réelle)
-                //   Ancien D → Nouveau G (Delta)
-                //   Labels en B?? → E?? (les valeurs associées en col F via formules)
+                // --- 5. En-têtes adaptatifs (tableau en colonnes A/B/C/D + labels col B) ---
+                //   A = HEURE, B = Mesurée, C = Réelle, D = Delta.
+                //   Labels de lignes en col B (les valeurs associées en col C via formules/zones).
                 var entetes = EnTetesMesureHelper.Pour(config.TypeMesure);
-                _feuilleMesure.Cell("D7").SetValue(entetes.EnteteHeure);
-                _feuilleMesure.Cell("E7").SetValue(entetes.EnteteMesuree);
-                _feuilleMesure.Cell("F7").SetValue(entetes.EnteteReelle);
-                _feuilleMesure.Cell("G7").SetValue(entetes.EnteteDelta);
-                _feuilleMesure.Cell("E13").SetValue(entetes.LabelMoyenne);
-                _feuilleMesure.Cell("E21").SetValue(entetes.LabelFreqRef);
-                _feuilleMesure.Cell("E23").SetValue(entetes.LabelFreqCorr);
-                _feuilleMesure.Cell("E25").SetValue(entetes.LabelIncertResol);
-                _feuilleMesure.Cell("E31").SetValue(entetes.LabelIncertGlob);
+                _feuilleMesure.Cell("A7").SetValue(entetes.EnteteHeure);
+                _feuilleMesure.Cell("B7").SetValue(entetes.EnteteMesuree);
+                _feuilleMesure.Cell("C7").SetValue(entetes.EnteteReelle);
+                _feuilleMesure.Cell("D7").SetValue(entetes.EnteteDelta);
+                _feuilleMesure.Cell("B13").SetValue(entetes.LabelMoyenne);
+                _feuilleMesure.Cell("B21").SetValue(entetes.LabelFreqRef);
+                _feuilleMesure.Cell("B23").SetValue(entetes.LabelFreqCorr);
+                _feuilleMesure.Cell("B25").SetValue(entetes.LabelIncertResol);
+                _feuilleMesure.Cell("B31").SetValue(entetes.LabelIncertGlob);
 
-                // --- 5b. Nouvelles colonnes n°Module / Fonction / Condition 1 (ligne 9) ---
-                // Ces 3 valeurs sont écrites une seule fois sur la 1ère ligne de mesure
-                // (ligne 9 = 1ère mesure dans le template). Elles décrivent la session :
-                // quel module/fonction de l'instrument est utilisé + temps de gate sélectionné.
-                var (module, fonction) = MesureConfigService.ObtenirPourType(config.TypeMesure);
-                if (!string.IsNullOrEmpty(module)) _feuilleMesure.Cell("A9").SetValue(module);
-                if (!string.IsNullOrEmpty(fonction)) _feuilleMesure.Cell("B9").SetValue(fonction);
-                _feuilleMesure.Cell("C9").SetValue(EnTetesMesureHelper.SecondesGate(gateInscrite));
+                // --- 5b. Module d'incertitude affiché UNE seule fois ---
+                // Les colonnes n°Module / Fonction / Condition 1 ont été retirées du template.
+                // On affiche seulement le module, dans la cellule valeur prévue à côté du label
+                // « Module = » : F10 pour le layout standard (freq/stab/…), G10 pour le tachy
+                // (qui a une colonne de plus). Le Récap lit cette même cellule.
+                var (module, _) = MesureConfigService.ObtenirPourType(config.TypeMesure);
+                string celluleModule = estTachy ? "G10" : "F10";
+                if (!string.IsNullOrEmpty(module)) _feuilleMesure.Cell(celluleModule).SetValue(module);
 
                 // Mémorisation pour PreparerLignesMesureAsync (col N conversion tr/min)
                 _typeMesureCourant = config.TypeMesure;
@@ -374,17 +368,17 @@ namespace Metrologo.Services
                 // --- 5c. Tachymétrie : colonne N dédiée à la conversion Hz → tr/min ---
                 // Le compteur GPIB mesure une fréquence d'impulsions (Hz). La conversion
                 // tr/min = Hz × 60 (1 imp/tour) est faite côté Excel pour rester visible
-                // à l'utilisateur. Colonne N (= ancienne K + 3) choisie loin de D-G pour
-                // ne pas interférer avec la Récap qui lit E/F/G via les zones nommées.
-                // Note : la mesure brute est désormais en col E (post-décalage de 3).
+                // à l'utilisateur. Colonne K choisie à droite du bloc de mesures A-D pour ne
+                // pas interférer avec la Récap (qui lit via les zones nommées).
+                // Note : la mesure brute est en col B (Mesurée).
                 if (EnTetesMesureHelper.EstTachymetre(config.TypeMesure))
                 {
                     _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}7").SetValue("Vitesse (tr/min)");
                     _feuilleMesure.Column(COL_CONVERSION_TR_MIN).Width = 18;
                     // Formules pour les 2 lignes de mesure pré-existantes du template (9 et 10).
                     // Les lignes additionnelles (11+) seront alimentées par PreparerLignesMesureAsync.
-                    _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}9").FormulaA1 = "=E9*60";
-                    _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}10").FormulaA1 = "=E10*60";
+                    _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}9").FormulaA1 = "=B9*60";
+                    _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}10").FormulaA1 = "=B10*60";
                 }
 
                 // --- 6. Métadonnées via zones nommées (sheet-scope) ---
@@ -422,7 +416,7 @@ namespace Metrologo.Services
                 SetNamed("ZNTempsMesureAccredite", 10);
 
                 // --- 7. Nettoyage anticipé des lignes "fantômes" du Récap. ---
-                // Le template METROLOGO.xltx contient des lignes pré-remplies dans la
+                // Le template METROLOGO.xlsx contient des lignes pré-remplies dans la
                 // feuille Récap. qui pointent vers ModFeuille (formules =[0]!ZNxxx →
                 // évaluées à 0). Si on n'enlève ces lignes qu'au moment d'écrire le
                 // récap final (cf. EcrireLigneRecap), l'utilisateur qui ouvre le fichier
@@ -460,29 +454,18 @@ namespace Metrologo.Services
                 for (int i = 2; i < nbMesures; i++)
                 {
                     int row = LIGNE_DEBUT_MESURES + i;
-                    // Décalage de 3 colonnes : ancien B/C/D → nouveau E/F/G.
-                    //   E = mesurée (lue par GPIB) ; F = réelle (formule de correction) ;
-                    //   G = delta entre 2 mesures consécutives.
-                    _feuilleMesure.Cell($"F{row}").FormulaA1 =
-                        $"IF(ISBLANK(ZNCoeffMult),E{row},"
-                        + $"(((E{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
-                    _feuilleMesure.Cell($"G{row}").FormulaA1 = $"F{row - 1}-F{row}";
+                    // Tableau en colonnes A-D : B = mesurée (lue par GPIB) ; C = réelle (formule
+                    // de correction) ; D = delta entre 2 mesures consécutives.
+                    _feuilleMesure.Cell($"C{row}").FormulaA1 =
+                        $"IF(ISBLANK(ZNCoeffMult),B{row},"
+                        + $"(((B{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
+                    _feuilleMesure.Cell($"D{row}").FormulaA1 = $"C{row - 1}-C{row}";
                     if (conversionTrMin)
-                        _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}{row}").FormulaA1 = $"=E{row}*60";
+                        _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}{row}").FormulaA1 = $"=B{row}*60";
                 }
 
-                // Col A « N°Module » : on inscrit le numéro du module d'incertitude
-                // sélectionné sur CHAQUE ligne de mesure (de la 1ère à la N-ième). Permet
-                // au lecteur de retrouver d'un coup d'œil quel module a alimenté les
-                // coefficients du rapport, sans avoir à scroller jusqu'au bloc stats.
-                if (!string.IsNullOrWhiteSpace(_numModuleIncertitudeCourant))
-                {
-                    for (int i = 0; i < nbMesures; i++)
-                    {
-                        int row = LIGNE_DEBUT_MESURES + i;
-                        _feuilleMesure.Cell($"A{row}").Value = _numModuleIncertitudeCourant;
-                    }
-                }
+                // Le n°Module n'est plus inscrit par ligne (colonne retirée) : il est affiché
+                // une seule fois dans la cellule « Module = » de l'en-tête (cf. InitialiserRapportAsync).
 
                 // Restaure les formules métier historiques (héritage Stab1.xls) qui calculent
                 // les statistiques à partir des plages de mesures. Faites ici car ModFeuille
@@ -526,14 +509,14 @@ namespace Metrologo.Services
                 if (cell != null) cell.FormulaA1 = formule;
             }
 
-            // Moyenne sur la colonne F (= Fréq. Réelle, après conversion Indirect ligne par ligne).
+            // Moyenne sur la colonne C (= Fréq. Réelle, après conversion Indirect ligne par ligne).
             EcrireSurZN("ZNFreqMoyReel",
-                $"IF(ISBLANK(ZNNbMesures),,AVERAGE(F{ligneDeb}:F{ligneFin}))");
+                $"IF(ISBLANK(ZNNbMesures),,AVERAGE(C{ligneDeb}:C{ligneFin}))");
 
-            // Variance via macro VBA Metrologo.xla. La 1ère ligne de delta est G{deb+1}
-            // (G{deb} reste vide car il n'y a pas de mesure précédente pour la 1ère).
+            // Variance via macro VBA Metrologo.xla. La 1ère ligne de delta est D{deb+1}
+            // (D{deb} reste vide car il n'y a pas de mesure précédente pour la 1ère).
             EcrireSurZN("ZNVariance",
-                $"[1]!Cal_variance(SUMSQ(G{ligneDeb + 1}:G{ligneFin}),ZNNbMesures,ZNFreqMoyReel)");
+                $"[1]!Cal_variance(SUMSQ(D{ligneDeb + 1}:D{ligneFin}),ZNNbMesures,ZNFreqMoyReel)");
 
             // Statistiques dérivées — idempotentes pour Freq (déjà dans ModFeuille),
             // créées pour Stab (ModFeuille du template Stab n'avait rien).
@@ -553,9 +536,9 @@ namespace Metrologo.Services
                 for (int i = 0; i < mesures.Count; i++)
                 {
                     int row = ligneDebut + i;
-                    // Décalage de 3 colonnes : col 4 (D) = HEURE ; col 5 (E) = mesure brute.
-                    _feuilleMesure.Cell(row, 4).SetValue(mesures[i].ts.ToString("HH:mm:ss"));
-                    _feuilleMesure.Cell(row, 5).SetValue(mesures[i].valeur);
+                    // Tableau en A-D : col 1 (A) = HEURE ; col 2 (B) = mesure brute.
+                    _feuilleMesure.Cell(row, 1).SetValue(mesures[i].ts.ToString("HH:mm:ss"));
+                    _feuilleMesure.Cell(row, 2).SetValue(mesures[i].valeur);
                 }
             });
         }
@@ -878,6 +861,8 @@ namespace Metrologo.Services
         {
             if (_workbook == null || _feuilleMesure == null) return;
             string nomFeuille = _feuilleMesure.Name;
+            // Cellule où le module est affiché dans la feuille de mesure (cf. InitialiserRapportAsync).
+            string celluleModule = EnTetesMesureHelper.EstTachymetre(mesure.TypeMesure) ? "G10" : "F10";
 
             await Task.Run(() => EcrireLigneRecap(
                 nomFeuille,
@@ -903,8 +888,7 @@ namespace Metrologo.Services
                     // fréquence corrigée (col C) selon le ratio E/C*A ; sinon on garde C tel quel.
                     // {N} = numéro de la ligne, substitué dynamiquement par EcrireLigneRecap.
                     "=IF(ISNUMBER(E{N}),(E{N}/C{N})*A{N},C{N})",
-                    $"='{nomFeuille}'!A9",                  // Col 11 : n°Module (depuis A9 de la feuille de mesure)
-                    $"='{nomFeuille}'!B9"                   // Col 12 : Fonction (depuis B9 de la feuille de mesure)
+                    $"='{nomFeuille}'!{celluleModule}"      // Col 11 : n°Module (cellule « Module = » de la feuille)
                 },
                 colValeurDirecte: 5,
                 valeurDirecte: mesure.SourceMesure == SourceMesure.Generateur
@@ -913,8 +897,7 @@ namespace Metrologo.Services
                 entetesColonne: new[]
                 {
                     null, null, null, null, null, null, null, null, null, null,
-                    "n°Module",   // Col 11 : header en ligne 5 si pas déjà présent
-                    "Fonction"    // Col 12
+                    "n°Module"    // Col 11 : header en ligne 5 si pas déjà présent
                 }));
         }
 
@@ -965,14 +948,11 @@ namespace Metrologo.Services
                 recap.Cell(ligne, 8).FormulaA1 =
                     $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0,C{ligne}-F{ligne}))";
 
-                // Cols K et L : n°Module et Fonction (lus depuis A9/B9 de la feuille de
-                // mesure stab). Pour la Stabilité, la 1ère gate écrit ces valeurs, les
-                // gates suivantes les répètent (même session = même module/fonction).
-                recap.Cell(ligne, 11).FormulaA1 = $"='{nomFeuille}'!A9";
-                recap.Cell(ligne, 12).FormulaA1 = $"='{nomFeuille}'!B9";
-                // En-têtes ligne 5 (idempotent : on n'écrase que si la cellule est vide).
+                // Col K : n°Module (lu depuis la cellule « Module = » de la feuille de mesure,
+                // F10 pour la stabilité). La colonne Fonction a été retirée.
+                recap.Cell(ligne, 11).FormulaA1 = $"='{nomFeuille}'!F10";
+                // En-tête ligne 5 (idempotent : on n'écrase que si la cellule est vide).
                 if (recap.Cell(5, 11).IsEmpty()) recap.Cell(5, 11).SetValue("n°Module");
-                if (recap.Cell(5, 12).IsEmpty()) recap.Cell(5, 12).SetValue("Fonction");
             });
         }
 
@@ -991,7 +971,7 @@ namespace Metrologo.Services
             return compteur;
         }
 
-        // Ligne d'entête des colonnes dans le template Récap. (observé dans METROLOGO.xltx).
+        // Ligne d'entête des colonnes dans le template Récap. (observé dans METROLOGO.xlsx).
         // Toute nouvelle mesure est insérée juste en dessous (row 6) pour avoir "newest on top".
         private const int LIGNE_ENTETE_RECAP = 5;
 
