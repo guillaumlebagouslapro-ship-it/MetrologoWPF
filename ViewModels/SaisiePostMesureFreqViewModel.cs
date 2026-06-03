@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Metrologo.Services;
 using System;
 using System.Globalization;
 
@@ -49,17 +50,17 @@ namespace Metrologo.ViewModels
         [RelayCommand]
         private void Valider()
         {
-            if (!TryParse(FrequenceLueTexte, out var f) || f <= 0)
+            if (!SaisieHelper.TryParsePositiveDouble(FrequenceLueTexte, out var f))
             {
                 MessageErreur = $"Fréquence lue invalide : '{FrequenceLueTexte}' (doit être > 0).";
                 return;
             }
-            if (!TryParse(ResolutionTexte, out var res) || res < 0)
+            if (!SaisieHelper.TryParseNonNegativeDouble(ResolutionTexte, out var res))
             {
                 MessageErreur = $"Résolution invalide : '{ResolutionTexte}'.";
                 return;
             }
-            if (!TryParse(IncertSuppTexte, out var supp) || supp < 0)
+            if (!SaisieHelper.TryParseNonNegativeDouble(IncertSuppTexte, out var supp))
             {
                 MessageErreur = $"Incertitude sup. relative invalide : '{IncertSuppTexte}'.";
                 return;
@@ -73,11 +74,5 @@ namespace Metrologo.ViewModels
 
         [RelayCommand]
         private void Annuler() => CloseAction?.Invoke(false);
-
-        private static bool TryParse(string s, out double v)
-        {
-            return double.TryParse((s ?? "").Trim().Replace(',', '.'),
-                NumberStyles.Float, CultureInfo.InvariantCulture, out v);
-        }
     }
 }

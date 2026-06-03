@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:behaviors="clr-namespace:Metrologo.Behaviors"
         Title="Saisie post-mesure"
         Height="640" Width="500"
         WindowStartupLocation="CenterOwner"
@@ -55,6 +56,8 @@
                         <TextBlock Text="FRÉQUENCE LUE (HZ)"
                                    Style="{StaticResource FormLabelStyle}"/>
                         <ui:TextBox x:Name="txtFreq"
+                                    behaviors:NumericInput.IsEnabled="True"
+                                    behaviors:NumericInput.AllowNegative="False"
                                     Text="{Binding FrequenceLueTexte, UpdateSourceTrigger=PropertyChanged}"
                                     PlaceholderText="10000000"
                                     FontFamily="Cascadia Mono, Consolas"
@@ -75,7 +78,9 @@
                     <StackPanel>
                         <TextBlock Text="RÉSOLUTION (HZ)"
                                    Style="{StaticResource FormLabelStyle}"/>
-                        <ui:TextBox Text="{Binding ResolutionTexte, UpdateSourceTrigger=PropertyChanged}"
+                        <ui:TextBox behaviors:NumericInput.IsEnabled="True"
+                                    behaviors:NumericInput.AllowNegative="False"
+                                    Text="{Binding ResolutionTexte, UpdateSourceTrigger=PropertyChanged}"
                                     PlaceholderText="0.01"
                                     FontFamily="Cascadia Mono, Consolas"
                                     Padding="10,8"
@@ -94,7 +99,9 @@
                     <StackPanel>
                         <TextBlock Text="INCERTITUDE SUP. RELATIVE (DÉGRADATION)"
                                    Style="{StaticResource FormLabelStyle}"/>
-                        <ui:TextBox Text="{Binding IncertSuppTexte, UpdateSourceTrigger=PropertyChanged}"
+                        <ui:TextBox behaviors:NumericInput.IsEnabled="True"
+                                    behaviors:NumericInput.AllowNegative="False"
+                                    Text="{Binding IncertSuppTexte, UpdateSourceTrigger=PropertyChanged}"
                                     PlaceholderText="0.0"
                                     FontFamily="Cascadia Mono, Consolas"
                                     Padding="10,8"
