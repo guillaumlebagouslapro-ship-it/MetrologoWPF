@@ -6,9 +6,10 @@ namespace Metrologo.Services.Besancon
 {
     /// <summary>
     /// Configuration de la tâche quotidienne Besançon (récupération FTP + moyenne hebdo).
-    /// Stockée LOCALEMENT par poste (contient des identifiants FTP) dans
-    /// <c>%LocalAppData%\Metrologo\Configuration\besancon.ftp.json</c> — donc PAS sur le partage
-    /// réseau et PAS dans le dépôt git.
+    /// Stockée sur le PARTAGE réseau (<c>M:\…\Besancon\besancon.ftp.json</c>) pour que tous les
+    /// postes partagent les mêmes identifiants FTP — plus besoin de reconfigurer chaque poste.
+    /// ⚠ Le mot de passe FTP est donc en clair sur le partage : toute personne ayant accès au
+    /// dossier Besançon peut le lire (compromis assumé pour la mutualisation).
     ///
     /// <para><see cref="Active"/> est <c>false</c> par défaut : la tâche ne doit tourner que sur
     /// UN SEUL poste (sinon plusieurs postes iraient chercher le même fichier en même temps).
@@ -34,11 +35,29 @@ namespace Metrologo.Services.Besancon
         /// legacy). DÉCONSEILLÉ en multi-poste — laissé à false par défaut.</summary>
         public bool SupprimerApresTelechargement { get; set; } = false;
 
+        /// <summary>Emplacement PARTAGÉ (tous les postes lisent/écrivent la même config).</summary>
         public static string Chemin =>
+            Path.Combine(CheminsMetrologo.Besancon, "besancon.ftp.json");
+
+        /// <summary>Ancien emplacement LOCAL (avant mutualisation) — sert à la migration one-shot.</summary>
+        private static string CheminLocalLegacy =>
             Path.Combine(CheminsMetrologo.Configuration, "besancon.ftp.json");
 
         public static BesanconConfig Charger()
         {
+            // Migration one-shot : si la config partagée n'existe pas encore mais qu'une ancienne
+            // config locale existe (identifiants déjà saisis sur ce poste), on la promeut sur le
+            // partage pour que tous les postes en bénéficient.
+            try
+            {
+                if (!File.Exists(Chemin) && File.Exists(CheminLocalLegacy))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(Chemin)!);
+                    File.Copy(CheminLocalLegacy, Chemin, overwrite: false);
+                }
+            }
+            catch { /* partage injoignable → on retombe sur le défaut plus bas */ }
+
             try
             {
                 if (File.Exists(Chemin))
@@ -50,7 +69,7 @@ namespace Metrologo.Services.Besancon
             catch { /* fichier corrompu → on régénère un défaut */ }
 
             var defaut = new BesanconConfig();
-            defaut.Sauvegarder();   // crée le gabarit à remplir (hôte pré-rempli, identifiants vides)
+            defaut.Sauvegarder();   // crée le gabarit à remplir sur le partage (hôte pré-rempli, identifiants vides)
             return defaut;
         }
 

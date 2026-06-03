@@ -14,21 +14,19 @@
         /// </summary>
         public bool EstReglageManuel { get; set; }
 
-        // Une petite propriété pratique qui formate le nom tout seul
+        // Affiche directement le nom choisi dans le catalogue (réglage manuel à part).
         public string NomAffichage => EstReglageManuel
             ? $"Réglage manuel ({FrequenceMoyenne} Hz)"
-            : (AvecGPS ? $"GPS + {Designation}" : Designation);
+            : Designation;
 
         /// <summary>
-        /// Libellé écrit dans la feuille de mesure (zone <c>ZNRubidium</c>) : désignation +
-        /// mode de raccordement réellement sélectionné en admin. Trois cas :
-        ///   - réglage manuel  → "Réglage manuel (xxx Hz)" (pas de raccord Allouis/GPS) ;
-        ///   - GPS             → "<désignation> (raccord GPS)" ;
-        ///   - sinon           → "<désignation> (raccord Allouis)".
-        /// Évite d'afficher « raccord Allouis » par défaut quand le rubidium est en manuel.
+        /// Libellé écrit dans la feuille de mesure (zone <c>ZNRubidium</c>). On affiche
+        /// directement la <see cref="Designation"/> choisie dans le catalogue (le nom est libre :
+        /// y inclure une mention de raccordement — « GPS » etc. — si besoin). Aucun suffixe
+        /// automatique n'est ajouté. Pour un réglage manuel : « Réglage manuel (xxx Hz) ».
         /// </summary>
         public string DesignationAvecRaccord => EstReglageManuel
             ? $"Réglage manuel ({FrequenceMoyenne} Hz)"
-            : Designation + (AvecGPS ? " (raccord GPS)" : " (raccord Allouis)");
+            : Designation;
     }
 }

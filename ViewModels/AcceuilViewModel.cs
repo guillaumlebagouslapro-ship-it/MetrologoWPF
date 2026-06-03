@@ -719,8 +719,7 @@ namespace Metrologo.ViewModels
             string nomAppareilLog = ResolvedNomAppareil(config);
             Log("═══════════════════════════════════════════");
             Log($"{preambule} : {config.NbMesures} mesures sur {nomAppareilLog}");
-            Log($"   FI {config.NumFI} · Rubidium : {rubi.Designation} · "
-              + (rubi.AvecGPS ? "GPS" : "Allouis"));
+            Log($"   FI {config.NumFI} · Rubidium : {rubi.Designation}");
 
             Journal.Info(CategorieLog.Mesure, "MESURE_DEBUT",
                 $"{preambule} : {config.NbMesures} mesures sur {nomAppareilLog} pour FI {config.NumFI}",

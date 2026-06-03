@@ -52,7 +52,7 @@ namespace Metrologo.ViewModels
                 EtatApplication.RubidiumActif = rubi;
 
                 Journal.Info(CategorieLog.Rubidium, "SELECTION_RUBIDIUM",
-                    $"{rubi.Designation} — {(rubi.AvecGPS ? "GPS" : "Allouis")}",
+                    $"{rubi.Designation}",
                     new { id = rubi.Id, gps = rubi.AvecGPS });
             }
         }
