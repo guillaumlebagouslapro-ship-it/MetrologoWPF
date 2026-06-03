@@ -132,6 +132,17 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
+        /// Ouvre le journal d'AUDIT administrateur (actions de configuration : rubidium,
+        /// modules d'incertitude, catalogue appareils, utilisateurs…). Hors consultations.
+        /// </summary>
+        [RelayCommand]
+        private void OuvrirJournalAdmin()
+        {
+            var win = new JournalAdminWindow { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>
         /// Force l'archivage du mois précédent immédiatement (sans attendre que l'app
         /// redémarre le 1er du mois). Utile pour test ou pour rattraper un mois qui
         /// aurait été manqué (PC éteint pendant plusieurs jours).

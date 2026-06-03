@@ -329,6 +329,24 @@
                                Foreground="{StaticResource AsertiNavyBrush}"/>
                 </StackPanel>
             </Button>
+
+            <!-- Journal d'audit administrateur (actions de configuration). -->
+            <Button Grid.Row="2" Grid.Column="2"
+                    Command="{Binding OuvrirJournalAdminCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="40" Height="40" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,12"
+                            Background="#FFE0E7FF">
+                        <ui:SymbolIcon Symbol="ShieldKeyhole24" FontSize="20"
+                                       Foreground="#FF4338CA"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Journal administrateur" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                </StackPanel>
+            </Button>
         </Grid>
 
         

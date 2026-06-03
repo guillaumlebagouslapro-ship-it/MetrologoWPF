@@ -1,0 +1,146 @@
+<ui:FluentWindow x:Class="Metrologo.Views.JournalAdminWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Journal administrateur"
+        Height="720" Width="1080"
+        WindowStartupLocation="CenterOwner"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Journal administrateur">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <Border Grid.Row="1" Padding="24,14,24,8">
+            <StackPanel Orientation="Horizontal">
+                <Border Width="44" Height="44" CornerRadius="10"
+                        Background="{StaticResource AsertiNavyBrush}" Margin="0,0,14,0">
+                    <ui:SymbolIcon Symbol="ShieldKeyhole24" FontSize="22" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Journal administrateur"
+                               FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Actions de configuration (rubidium, incertitudes, catalogue, utilisateurs…) — hors consultations."
+                               FontSize="11"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2" Padding="24,0,24,8">
+            <ui:TextBox Text="{Binding Recherche, UpdateSourceTrigger=PropertyChanged}"
+                        PlaceholderText="Rechercher une action, un opérateur, un détail…" Padding="10,6">
+                <ui:TextBox.Icon>
+                    <ui:SymbolIcon Symbol="Search24"/>
+                </ui:TextBox.Icon>
+            </ui:TextBox>
+        </Border>
+
+        <Border Grid.Row="3" Margin="24,0,24,8" Background="White"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- En-têtes (marges alignées sur le contenu + réservation scrollbar) -->
+                <Grid Grid.Row="0" Margin="11,2,28,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="240"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="DATE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
+                    <TextBlock Grid.Column="1" Text="OPÉRATEUR" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
+                    <TextBlock Grid.Column="2" Text="ACTION" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
+                    <TextBlock Grid.Column="3" Text="DÉTAIL" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Visible">
+                    <ItemsControl ItemsSource="{Binding Entrees}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border CornerRadius="6" Padding="10,6" Margin="0,0,0,3"
+                                        Background="White"
+                                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="240"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding HorodatageAffiche}"
+                                                   FontFamily="Cascadia Mono, Consolas" FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Utilisateur}"
+                                                   FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource AsertiNavyBrush}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ActionLisible}"
+                                                   FontSize="12" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource AsertiNavyBrush}"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Detail}"
+                                                   FontSize="12" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   TextWrapping="Wrap"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="4" Padding="24,12"
+                Background="{DynamicResource LayerFillColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Statut}"
+                           VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           TextTrimming="CharacterEllipsis"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="📄 Ouvrir le fichier"
+                            Command="{Binding OuvrirFichierCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Padding="14,8" Margin="0,0,8,0"/>
+                    <Button Content="Rafraîchir"
+                            Command="{Binding RafraichirCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Padding="14,8" MinWidth="100" Margin="0,0,8,0"/>
+                    <Button Content="Fermer" IsCancel="True" IsDefault="True"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Padding="14,8" MinWidth="100"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</ui:FluentWindow>
