@@ -198,6 +198,17 @@ namespace Metrologo
             // M:\ est toujours indispo, no-op. Fire-and-forget : ne bloque pas le démarrage.
             _ = TransfertReseauService.TenterTransfertsEnAttenteAsync();
 
+            // Tâche quotidienne Besançon : récupération FTP du fichier corrigé + calcul de la
+            // moyenne hebdomadaire du rubidium. No-op si désactivée sur ce poste (la tâche ne
+            // doit tourner que sur UN poste « maître » — cf. besancon.ftp.json : Active=false par
+            // défaut). Fire-and-forget : ne bloque pas le démarrage.
+            try { Metrologo.Services.Besancon.BesanconScheduler.Demarrer(); }
+            catch (Exception exBes)
+            {
+                Journal.Warn(CategorieLog.Systeme, "BESANCON_DEMARRAGE_KO",
+                    $"Démarrage de la tâche Besançon échoué : {exBes.Message}");
+            }
+
             // Warm-up ClosedXML : ouvre les 2 templates en arrière-plan pour pré-JIT les
             // assemblies (ClosedXML.dll, DocumentFormat.OpenXml.dll) + déclencher le cache
             // disque OS du fichier .xlsx. Sans ce warm-up, la 1ère InitialiserRapportAsync
