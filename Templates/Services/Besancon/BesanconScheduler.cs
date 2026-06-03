@@ -135,7 +135,7 @@ namespace Metrologo.Services.Besancon
         {
             try
             {
-                string dossier = Path.Combine(CheminsMetrologo.Rubidiums, "SavBesancon");
+                string dossier = Path.Combine(CheminsMetrologo.Besancon, "SavBesancon");
                 Directory.CreateDirectory(dossier);
                 File.WriteAllText(Path.Combine(dossier, $"{DateTime.Now:yyyyMMdd_HHmmss}.txt"), contenu);
             }

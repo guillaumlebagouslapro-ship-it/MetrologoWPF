@@ -59,6 +59,7 @@ namespace Metrologo.Services
         public static readonly string UtilisateursServeurDefaut  = Path.Combine(BaseServeur, "Utilisateurs");
         public static readonly string RubidiumsServeurDefaut     = Path.Combine(BaseServeur, "Rubidiums");
         public static readonly string LogsServeurDefaut          = Path.Combine(BaseServeur, "Logs");
+        public static readonly string BesanconServeurDefaut      = Path.Combine(BaseServeur, "Besancon");
 
         /// <summary>URL effective du fichier maître (depuis paths.config.json local).</summary>
         public static string MasterPathsUrl
@@ -170,6 +171,7 @@ namespace Metrologo.Services
                 Directory.CreateDirectory(UtilisateursServeurDefaut);
                 Directory.CreateDirectory(RubidiumsServeurDefaut);
                 Directory.CreateDirectory(LogsServeurDefaut);
+                Directory.CreateDirectory(BesanconServeurDefaut);
 
                 // Fichier maître paths.config.json — créé UNIQUEMENT s'il n'existe pas
                 // (sinon on écraserait les modifs d'un autre admin).
@@ -185,6 +187,7 @@ namespace Metrologo.Services
                         [nameof(Utilisateurs)]  = UtilisateursServeurDefaut,
                         [nameof(Rubidiums)]     = RubidiumsServeurDefaut,
                         [nameof(Logs)]          = LogsServeurDefaut,
+                        [nameof(Besancon)]      = BesanconServeurDefaut,
                     };
                     string json = JsonSerializer.Serialize(config,
                         new JsonSerializerOptions { WriteIndented = true });
@@ -212,6 +215,7 @@ namespace Metrologo.Services
                         AjouterSiAbsent(nameof(Utilisateurs), UtilisateursServeurDefaut);
                         AjouterSiAbsent(nameof(Rubidiums), RubidiumsServeurDefaut);
                         AjouterSiAbsent(nameof(Logs), LogsServeurDefaut);
+                        AjouterSiAbsent(nameof(Besancon), BesanconServeurDefaut);
                         if (modifie)
                         {
                             string json = JsonSerializer.Serialize(dict,
@@ -338,6 +342,11 @@ namespace Metrologo.Services
         /// <summary>Logs courants partagés entre postes — surchargeable réseau (clé <c>Logs</c>).</summary>
         public static string Logs =>
             AvecOverride(nameof(Logs), Path.Combine(Racine, "Logs"));
+
+        /// <summary>Données Besançon (valeurs journalières + moyennes hebdo) partagées entre postes
+        /// — surchargeable réseau (clé <c>Besancon</c>) → M:\exe_spe\Data_Metrologo\Besancon.</summary>
+        public static string Besancon =>
+            AvecOverride(nameof(Besancon), Path.Combine(Racine, "Besancon"));
 
         /// <summary>Fichier JSON des utilisateurs + hash mdp.</summary>
         public static string FichierUtilisateurs =>

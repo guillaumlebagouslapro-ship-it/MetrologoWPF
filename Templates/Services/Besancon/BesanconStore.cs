@@ -39,7 +39,7 @@ namespace Metrologo.Services.Besancon
     {
         private static readonly object _sync = new();
 
-        public static string Chemin => Path.Combine(CheminsMetrologo.Rubidiums, "besancon-suivi.json");
+        public static string Chemin => Path.Combine(CheminsMetrologo.Besancon, "besancon-suivi.json");
 
         public static DonneesBesancon Charger()
         {
