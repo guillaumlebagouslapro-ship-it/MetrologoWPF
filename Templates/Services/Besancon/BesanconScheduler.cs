@@ -84,14 +84,16 @@ namespace Metrologo.Services.Besancon
             }
             res.RubidiumDesignation = rub.Designation;
 
-            string? contenu = await BesanconFtpService.TelechargerAsync(cfg);
-            if (contenu == null)
+            var ftp = await BesanconFtpService.TelechargerAsync(cfg);
+            if (!ftp.Ok)
             {
-                res.Erreur = $"Téléchargement FTP échoué ou FTP non configuré "
-                           + $"(hôte « {cfg.FtpHote} », fichier « {cfg.FichierDistant} »). Voir le Journal (Système).";
+                res.Erreur = ftp.ConfigManquante
+                    ? $"FTP non configuré : {ftp.Erreur}"
+                    : $"Échec FTP sur {ftp.Url}\n→ {ftp.Erreur}";
                 return res;
             }
             res.Telecharge = true;
+            string contenu = ftp.Contenu!;
 
             // Dépose le brut sur le partage (récupère le chemin exact, ou null si échec).
             res.CheminBrut = SauvegarderBrut(contenu);
