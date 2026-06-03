@@ -2538,6 +2538,9 @@ namespace Metrologo.Services
                 string celModuleRecap = EnTetesMesureHelper.EstTachymetre(mesure.TypeMesure) ? "G10" : "F10";
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 11, $"={qf}{celModuleRecap}");
 
+                // Écritures scientifiques (écart-type + incertitudes) : forcées à 2 décimales.
+                FormaterScientifiqueRecapInterne(recap, nouvelleLigne, 4, 6, 7, 8, 9);
+
                 // En-tête K si vide
                 EcrireValeurRecapSiVideInterne(recap, ligneEntete, 11, "n°Module");
             }
@@ -2663,11 +2666,32 @@ namespace Metrologo.Services
                 // n°Module lu depuis la cellule « Module = » (F10) ; colonne Fonction retirée.
                 EcrireFormuleRecapInterne(recap, ligne, 11, $"={qf}F10");
 
+                // Écritures scientifiques (écart-type + incertitudes) : forcées à 2 décimales.
+                FormaterScientifiqueRecapInterne(recap, ligne, 3, 4, 5, 6);
+
                 EcrireValeurRecapSiVideInterne(recap, 5, 11, "n°Module");
             }
             finally
             {
                 try { Marshal.ReleaseComObject(recap); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Force le format scientifique à 2 décimales (<c>0.00E+00</c>) sur les cellules indiquées
+        /// d'une ligne du récap (colonnes d'incertitude / écart-type). Best-effort par cellule.
+        /// </summary>
+        private static void FormaterScientifiqueRecapInterne(dynamic recap, int row, params int[] colonnes)
+        {
+            foreach (int col in colonnes)
+            {
+                try
+                {
+                    dynamic c = recap.Cells[row, col];
+                    c.NumberFormat = "0.00E+00";
+                    Marshal.ReleaseComObject(c);
+                }
+                catch { /* best-effort */ }
             }
         }
 
