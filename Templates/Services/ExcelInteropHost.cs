@@ -1112,6 +1112,13 @@ namespace Metrologo.Services
                     // .xlsx (posées par notre Calculate ci-dessus) sont utilisées telles quelles.
                     try { _classeurActif.UpdateLinks = 2; /* xlUpdateLinksNever */ } catch { }
 
+                    // 4.ter Verrouillage post-mesure : à la dernière gate, on re-protège toutes
+                    //       les feuilles avec le mot de passe prédéfini AVANT le Save (pour que la
+                    //       protection soit persistée). Le rapport devient non modifiable dans Excel
+                    //       sans le mot de passe ; l'app le déprotège seule à la relance (mdp connu).
+                    if (isDerniereGate)
+                        ProtegerToutesFeuillesActifInterne();
+
                     // 5. Save (avec valeurs caches à jour grâce au Calculate ci-dessus)
                     try { _classeurActif.Save(); }
                     catch (Exception ex)
@@ -2409,6 +2416,57 @@ namespace Metrologo.Services
                 finally { try { Marshal.ReleaseComObject(ws); } catch { } }
             }
             catch { /* best-effort */ }
+        }
+
+        /// <summary>Mot de passe prédéfini de protection des feuilles (verrouillage post-mesure).</summary>
+        private const string MotDePasseProtectionFeuille = "METROL";
+
+        /// <summary>
+        /// Re-protège TOUTES les feuilles du classeur actif (feuilles de mesure + Récap.) avec
+        /// <see cref="MotDePasseProtectionFeuille"/>. Appelé en fin de mesure, juste avant le Save :
+        /// le rapport n'est plus modifiable dans Excel sans le mot de passe.
+        ///
+        /// L'app, qui connaît ce mot de passe, déprotège automatiquement à chaque relance / ajout
+        /// de mesure (AjouterFeuilleMesureAsync déprotège la nouvelle feuille, les mises à jour
+        /// Récap. déprotègent la feuille Récap.). Chaque feuille est d'abord déprotégée (idempotent —
+        /// Protect lève si déjà protégée) puis re-protégée. Best-effort : un échec sur une feuille
+        /// n'interrompt ni les autres ni la sauvegarde.
+        /// </summary>
+        private void ProtegerToutesFeuillesActifInterne()
+        {
+            if (_classeurActif == null) return;
+
+            dynamic? sheets = null;
+            try
+            {
+                sheets = _classeurActif.Worksheets;
+                int count = (int)sheets.Count;
+                for (int i = 1; i <= count; i++)
+                {
+                    dynamic? ws = null;
+                    try
+                    {
+                        ws = sheets.Item(i);
+                        try { ws.Unprotect(MotDePasseProtectionFeuille); }
+                        catch { try { ws.Unprotect("metrol"); } catch { try { ws.Unprotect(); } catch { } } }
+                        ws.Protect(MotDePasseProtectionFeuille);
+                    }
+                    catch (Exception ex)
+                    {
+                        JournalLog.Warn(CategorieLog.Excel, "PROTECTION_FEUILLE_KO",
+                            $"Protection d'une feuille via COM échouée : {ex.Message}");
+                    }
+                    finally { if (ws != null) { try { Marshal.ReleaseComObject(ws); } catch { } } }
+                }
+                JournalLog.Info(CategorieLog.Excel, "FEUILLES_PROTEGEES",
+                    $"{count} feuille(s) re-protégée(s) (mot de passe prédéfini) en fin de mesure.");
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Excel, "PROTECTION_CLASSEUR_KO",
+                    $"Protection des feuilles échouée : {ex.Message}");
+            }
+            finally { if (sheets != null) { try { Marshal.ReleaseComObject(sheets); } catch { } } }
         }
 
         /// <summary>Ajoute la ligne Récap Fréquence via COM (équivalent MettreAJourRecapFreqAsync).</summary>
