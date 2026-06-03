@@ -132,15 +132,22 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // Numérique : on reconstruit le motif à partir du template "préfixe{0}suffixe"
-            // et on isole la valeur dans la commande persistée correspondante.
+            // Numérique : on reconstruit le motif "préfixe{0}suffixe" pour isoler la valeur
+            // dans la commande persistée correspondante.
             string? template = _source.Options.Count > 0 ? _source.Options[0].CommandeScpi : null;
             if (string.IsNullOrWhiteSpace(template)) return;
-            int pos = template.IndexOf("{0}", System.StringComparison.Ordinal);
+
+            // ⚠ Un template peut être CHAÎNÉ (ex. 53230A : ":INP1:LEV:AUTO OFF;:INP1:LEV {0}").
+            // À la persistance, ConfigurationViewModel.SplitCommandesScpi l'a découpé en
+            // entrées distinctes (":INP1:LEV:AUTO OFF", ":INP1:LEV 1"). Pour matcher la bonne
+            // entrée, on doit dériver le préfixe/suffixe du SEUL sous-template porteur de {0}
+            // (":INP1:LEV {0}"), pas du template chaîné entier — sinon aucun match → valeur perdue.
+            string sousTemplate = SousCommandeAvecValeur(template);
+            int pos = sousTemplate.IndexOf("{0}", System.StringComparison.Ordinal);
             if (pos < 0) return;
 
-            string prefixe = template.Substring(0, pos);
-            string suffixe = template.Substring(pos + 3);
+            string prefixe = sousTemplate.Substring(0, pos);
+            string suffixe = sousTemplate.Substring(pos + 3);
 
             foreach (var c in liste)
             {
@@ -151,6 +158,29 @@ namespace Metrologo.ViewModels
                 Valeur = c.Substring(prefixe.Length, longueur).Trim();
                 return;
             }
+        }
+
+        /// <summary>
+        /// Isole, dans un template SCPI éventuellement chaîné ("a;:b{0};:c"), le sous-template
+        /// qui porte le marqueur <c>{0}</c>. Réplique le découpage de
+        /// <c>ConfigurationViewModel.SplitCommandesScpi</c> (séparateur ";:", réajout du ":"
+        /// initial sur les parties suivantes) pour que le préfixe/suffixe dérivé corresponde
+        /// EXACTEMENT à la commande persistée après split. Si le template n'est pas chaîné,
+        /// il est renvoyé tel quel.
+        /// </summary>
+        private static string SousCommandeAvecValeur(string template)
+        {
+            if (!template.Contains(";:")) return template;
+
+            var parts = template.Split(";:", System.StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i].Trim();
+                if (p.Length == 0) continue;
+                if (p.Contains("{0}"))
+                    return i == 0 ? p : ":" + p;
+            }
+            return template;
         }
     }
 }
