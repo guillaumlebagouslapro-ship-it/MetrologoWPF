@@ -218,16 +218,6 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Ouvre la fenêtre de consultation / correction manuelle d'une valeur journalière
-        /// Besançon (lecture + écriture dans le suivi partagé, pour le rubidium actif).
-        /// </summary>
-        [RelayCommand]
-        private void ConsulterBesancon()
-        {
-            var win = new ModifValBesanconWindow { Owner = Application.Current.MainWindow };
-            win.ShowDialog();
-        }
 
         [RelayCommand]
         private void OuvrirGestionModules()
