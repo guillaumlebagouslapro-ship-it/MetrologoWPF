@@ -186,12 +186,29 @@ namespace Metrologo.ViewModels
 
             try
             {
-                await Metrologo.Services.Besancon.BesanconScheduler.ExecuterAsync();
+                var r = await Metrologo.Services.Besancon.BesanconScheduler.ExecuterAsync();
+
+                if (!r.Succes)
+                {
+                    MessageBox.Show(
+                        "Récupération Besançon NON aboutie.\n\n" + (r.Erreur ?? "Cause inconnue — voir le Journal (Système)."),
+                        "Besançon", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                string hebdo = r.DerniereMoyenneHebdo.HasValue
+                    ? $"{r.DerniereMoyenneHebdo.Value:G9} (mardi MJD {r.DerniereMoyenneHebdoMjd})"
+                    : "aucune (il faut 7 jours consécutifs)";
+
                 MessageBox.Show(
-                    "Récupération Besançon terminée.\n\n"
-                  + "Consulte le Journal (catégorie Système) pour le détail : valeurs lues, "
-                  + "nouvelles valeurs intégrées, moyennes hebdomadaires calculées, ou cause d'échec "
-                  + "(FTP non configuré, fichier introuvable, etc.).",
+                    "Récupération Besançon terminée ✔\n\n"
+                  + $"• Rubidium : {r.RubidiumDesignation}\n"
+                  + $"• Valeurs lues dans le fichier : {r.ValeursLues}\n"
+                  + $"• Nouvelles valeurs intégrées : {r.Nouvelles}\n"
+                  + $"• Total stocké pour ce rubidium : {r.TotalJournalieres}\n"
+                  + $"• Dernière moyenne hebdo : {hebdo}\n\n"
+                  + $"Fichier brut (consultable) :\n{r.CheminBrut ?? "⚠ NON ÉCRIT — voir le Journal (partage injoignable ?)"}\n\n"
+                  + $"Suivi JSON :\n{(r.SauvegardeJsonOk ? r.CheminJson : "⚠ NON ÉCRIT — voir le Journal")}",
                     "Besançon", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -199,6 +216,17 @@ namespace Metrologo.ViewModels
                 MessageBox.Show($"Récupération Besançon échouée : {ex.Message}",
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// Ouvre la fenêtre de consultation / correction manuelle d'une valeur journalière
+        /// Besançon (lecture + écriture dans le suivi partagé, pour le rubidium actif).
+        /// </summary>
+        [RelayCommand]
+        private void ConsulterBesancon()
+        {
+            var win = new ModifValBesanconWindow { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
         }
 
         [RelayCommand]

@@ -70,29 +70,40 @@ namespace Metrologo.Services.Besancon
         /// journalières pour le rubidium actif, et (le mardi) calcule les moyennes hebdomadaires.
         /// Public pour permettre un déclenchement manuel (« Forcer la récupération »).
         /// </summary>
-        public static async Task ExecuterAsync()
+        public static async Task<ResultatBesancon> ExecuterAsync()
         {
+            var res = new ResultatBesancon { CheminJson = BesanconStore.Chemin };
             var cfg = BesanconConfig.Charger();
 
             var rub = EtatApplication.RubidiumActif;
             if (rub == null)
             {
-                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_PAS_RUBIDIUM",
-                    "Aucun rubidium actif — tâche Besançon ignorée.");
-                return;
+                res.Erreur = "Aucun rubidium actif — sélectionne un rubidium avant de récupérer Besançon.";
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_PAS_RUBIDIUM", res.Erreur);
+                return res;
             }
+            res.RubidiumDesignation = rub.Designation;
 
             string? contenu = await BesanconFtpService.TelechargerAsync(cfg);
-            if (contenu == null) return;
+            if (contenu == null)
+            {
+                res.Erreur = $"Téléchargement FTP échoué ou FTP non configuré "
+                           + $"(hôte « {cfg.FtpHote} », fichier « {cfg.FichierDistant} »). Voir le Journal (Système).";
+                return res;
+            }
+            res.Telecharge = true;
 
-            SauvegarderBrut(contenu);   // copie datée brute (équiv. SavBesancon du legacy)
+            // Dépose le brut sur le partage (récupère le chemin exact, ou null si échec).
+            res.CheminBrut = SauvegarderBrut(contenu);
 
             var mesures = BesanconParser.Parser(contenu);
-            var donnees = BesanconStore.Charger();
+            res.ValeursLues = mesures.Count;
 
+            var donnees = BesanconStore.Charger();
             int nouvelles = 0;
             foreach (var m in mesures)
                 if (BesanconStore.UpsertValeurJournaliere(donnees, rub.Id, m.Mjd, m.Valeur)) nouvelles++;
+            res.Nouvelles = nouvelles;
 
             // Moyennes hebdo : le mardi, on (re)calcule les 3 mardis précédents + le mardi courant
             // (comme le legacy) ; les autres jours, on tente le dernier mardi passé.
@@ -110,14 +121,29 @@ namespace Metrologo.Services.Besancon
                 TenterCalculHebdo(donnees, rub.Id, mjdDernierMardi);
             }
 
-            BesanconStore.Sauvegarder(donnees);
+            res.SauvegardeJsonOk = BesanconStore.Sauvegarder(donnees);
+
+            // Synthèse pour la consultation immédiate (stock total + dernière moyenne hebdo).
+            res.TotalJournalieres = donnees.Journalieres.Count(v => v.RubidiumId == rub.Id);
+            var derniereHebdo = donnees.Hebdos
+                .Where(h => h.RubidiumId == rub.Id)
+                .OrderByDescending(h => h.MardiMjd)
+                .FirstOrDefault();
+            if (derniereHebdo != null)
+            {
+                res.DerniereMoyenneHebdo = derniereHebdo.Moyenne;
+                res.DerniereMoyenneHebdoMjd = derniereHebdo.MardiMjd;
+            }
 
             Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_OK",
                 $"Besançon intégré : {mesures.Count} valeur(s) lue(s), {nouvelles} nouvelle(s) "
-              + $"pour le rubidium « {rub.Designation} » (#{rub.Id}).");
+              + $"pour le rubidium « {rub.Designation} » (#{rub.Id}). "
+              + $"Brut : {res.CheminBrut ?? "NON ÉCRIT"} · JSON : {(res.SauvegardeJsonOk ? res.CheminJson : "NON ÉCRIT")}.");
 
             if (cfg.SupprimerApresTelechargement)
                 await BesanconFtpService.SupprimerDistantAsync(cfg);
+
+            return res;
         }
 
         private static void TenterCalculHebdo(DonneesBesancon d, int rubId, int mardiMjd)
@@ -131,15 +157,52 @@ namespace Metrologo.Services.Besancon
             }
         }
 
-        private static void SauvegarderBrut(string contenu)
+        /// <summary>
+        /// Dépose une copie datée du fichier brut sur le partage (dossier <c>SavBesancon</c>),
+        /// pour qu'il reste consultable tel quel. Retourne le chemin écrit, ou <c>null</c> si
+        /// l'écriture a échoué — auquel cas le chemin tenté et l'erreur sont loggués (utile pour
+        /// diagnostiquer un partage réseau injoignable).
+        /// </summary>
+        private static string? SauvegarderBrut(string contenu)
         {
+            string dossier = Path.Combine(CheminsMetrologo.Besancon, "SavBesancon");
+            string chemin = Path.Combine(dossier, $"{DateTime.Now:yyyyMMdd_HHmmss}.txt");
             try
             {
-                string dossier = Path.Combine(CheminsMetrologo.Besancon, "SavBesancon");
                 Directory.CreateDirectory(dossier);
-                File.WriteAllText(Path.Combine(dossier, $"{DateTime.Now:yyyyMMdd_HHmmss}.txt"), contenu);
+                File.WriteAllText(chemin, contenu);
+                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_BRUT_OK",
+                    $"Fichier brut Besançon déposé sur le partage : {chemin}");
+                return chemin;
             }
-            catch { /* best-effort */ }
+            catch (Exception ex)
+            {
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_BRUT_KO",
+                    $"Écriture du fichier brut Besançon échouée ({chemin}) : {ex.Message}");
+                return null;
+            }
         }
+    }
+
+    /// <summary>
+    /// Compte-rendu d'une exécution de la tâche Besançon — sert à afficher à l'admin un résumé
+    /// concret (fichier récupéré, chemins exacts sur le partage, valeurs lues/intégrées, dernière
+    /// moyenne hebdo) ou la cause précise d'échec, au lieu d'un simple « voir le Journal ».
+    /// </summary>
+    public sealed class ResultatBesancon
+    {
+        public bool Telecharge { get; set; }
+        public string? CheminBrut { get; set; }
+        public string CheminJson { get; set; } = "";
+        public bool SauvegardeJsonOk { get; set; }
+        public int ValeursLues { get; set; }
+        public int Nouvelles { get; set; }
+        public int TotalJournalieres { get; set; }
+        public double? DerniereMoyenneHebdo { get; set; }
+        public int DerniereMoyenneHebdoMjd { get; set; }
+        public string RubidiumDesignation { get; set; } = "";
+        public string? Erreur { get; set; }
+
+        public bool Succes => Telecharge && Erreur == null;
     }
 }

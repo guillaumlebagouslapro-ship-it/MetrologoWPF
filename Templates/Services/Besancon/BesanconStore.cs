@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Metrologo.Services.Journal;
 
 namespace Metrologo.Services.Besancon
 {
@@ -56,7 +57,9 @@ namespace Metrologo.Services.Besancon
             }
         }
 
-        public static void Sauvegarder(DonneesBesancon d)
+        /// <summary>Persiste le suivi sur le partage. Retourne true si l'écriture a réussi
+        /// (échec loggué avec le chemin exact — utile si le partage réseau est injoignable).</summary>
+        public static bool Sauvegarder(DonneesBesancon d)
         {
             lock (_sync)
             {
@@ -67,8 +70,14 @@ namespace Metrologo.Services.Besancon
                     File.WriteAllText(tmp,
                         JsonSerializer.Serialize(d, new JsonSerializerOptions { WriteIndented = true }));
                     File.Move(tmp, Chemin, overwrite: true);   // écriture atomique
+                    return true;
                 }
-                catch { /* best-effort */ }
+                catch (Exception ex)
+                {
+                    Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_STORE_KO",
+                        $"Écriture du suivi Besançon échouée ({Chemin}) : {ex.Message}");
+                    return false;
+                }
             }
         }
 
