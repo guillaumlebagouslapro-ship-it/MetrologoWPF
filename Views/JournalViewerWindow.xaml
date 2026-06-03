@@ -63,8 +63,10 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- En-têtes de colonnes -->
-                <Grid Grid.Row="0" Margin="10,2,10,8">
+                <!-- En-têtes de colonnes. Marges alignées sur le contenu des lignes (10 padding
+                     + 1 bordure = 11 à gauche) et réservation de la scrollbar à droite (≈17 +
+                     11) pour que les colonnes de droite restent alignées avec les valeurs. -->
+                <Grid Grid.Row="0" Margin="11,2,28,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="200"/>
                         <ColumnDefinition Width="*"/>
@@ -78,7 +80,7 @@
                     <TextBlock Grid.Column="3" Text="MESURES" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
                 </Grid>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Visible">
                     <ItemsControl ItemsSource="{Binding Fiches}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
