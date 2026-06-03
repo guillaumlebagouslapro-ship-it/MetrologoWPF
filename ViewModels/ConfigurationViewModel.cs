@@ -407,7 +407,9 @@ namespace Metrologo.ViewModels
                     // Réglages "Auto" : ne s'affichent JAMAIS dans la fenêtre Configuration.
                     // L'option est sélectionnée automatiquement à la validation selon le contexte
                     // (TypeMesure + VoieActive), cf. CalculerCommandesAutomatiques.
-                    if (reglage.Auto) continue;
+                    // « Mode de mesure » est désormais traité comme Auto : plus de menu déroulant,
+                    // la commande CONF:FREQ est toujours calculée d'après la voie active.
+                    if (reglage.Auto || EstReglageMode(reglage)) continue;
 
                     var vm = new ReglageDynamiqueViewModel(reglage);
 
@@ -436,6 +438,14 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(GateLibelleSelectionne));
             NotifierVoiesActives();
         }
+
+        /// <summary>
+        /// Vrai si ce réglage est le « Mode de mesure » (commande CONF:FREQ / :FUNC). Ce réglage
+        /// n'est plus proposé dans la fenêtre Configuration : il est masqué de l'UI et sa commande
+        /// est toujours calculée automatiquement selon la voie active (cf. SelectionnerOptionAuto).
+        /// </summary>
+        private static bool EstReglageMode(ReglageAppareil reglage)
+            => reglage.Nom.Contains("Mode", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Retrouve le modèle du catalogue correspondant à l'appareil actuellement sélectionné
@@ -720,7 +730,10 @@ namespace Metrologo.ViewModels
             var modele = ModeleCatalogueSelectionne();
             if (modele == null) return commandes;
 
-            foreach (var reglage in modele.Reglages.Where(r => r.Auto))
+            // « Mode de mesure » est inclus même s'il n'est pas marqué Auto au catalogue :
+            // il n'est plus proposé à l'utilisateur, sa commande CONF:FREQ est toujours
+            // calculée automatiquement selon la voie active.
+            foreach (var reglage in modele.Reglages.Where(r => r.Auto || EstReglageMode(r)))
             {
                 var option = SelectionnerOptionAuto(reglage);
                 if (option != null && !string.IsNullOrWhiteSpace(option.CommandeScpi))
@@ -853,13 +866,19 @@ namespace Metrologo.ViewModels
                 cmd.StartsWith(":FUNC", StringComparison.OrdinalIgnoreCase) ||
                 cmd.StartsWith(":CONF", StringComparison.OrdinalIgnoreCase);
 
-            var commandesSetup = commandesUtilisateur.Where(EstCommandeSetup).ToList();
+            // CONF:FREQ / :FUNC provient maintenant des commandes AUTO (« Mode de mesure » n'est
+            // plus un réglage utilisateur). On extrait les commandes de setup de TOUTES les
+            // sources pour les garder en tête : sinon CONF:FREQ, qui réinitialise l'appareil,
+            // écraserait les commandes envoyées avant lui.
+            var commandesSetup = commandesUtilisateur.Where(EstCommandeSetup)
+                .Concat(commandesAuto.Where(EstCommandeSetup)).ToList();
+            var commandesAutoReste = commandesAuto.Where(c => !EstCommandeSetup(c)).ToList();
             var commandesEntree = commandesUtilisateur.Where(c => !EstCommandeSetup(c)).ToList();
 
             var commandes = new List<string>();
-            commandes.AddRange(commandesSetup);    // 1. CONF:FREQ (réinitialise les inputs)
-            commandes.AddRange(commandesAuto);     // 2. :SENS:FREQ:MODE
-            commandes.AddRange(commandesEntree);   // 3. INP1:IMP/COUP/FILT/RANG + LEV:AUTO OFF + LEV
+            commandes.AddRange(commandesSetup);       // 1. CONF:FREQ / :FUNC (réinitialise les inputs)
+            commandes.AddRange(commandesAutoReste);   // 2. :SENS:FREQ:MODE (résolution)
+            commandes.AddRange(commandesEntree);      // 3. INP1:IMP/COUP/FILT/RANG + LEV:AUTO OFF + LEV
 
             // On mémorise les commandes choisies dans la Mesure — l'orchestrator les rejouera
             // après le *RST pour que l'état de l'appareil soit cohérent avec la configuration
