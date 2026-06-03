@@ -135,7 +135,9 @@
                                             <TextBlock Text="FRÉQUENCE MOYENNE (Hz)" FontSize="9" FontWeight="Bold"
                                                        Foreground="{StaticResource AsertiOrangeBrush}"
                                                        Margin="0,0,0,2"/>
-                                            <ui:TextBox Text="{Binding FrequenceMoyenne, UpdateSourceTrigger=LostFocus, StringFormat=N2}"
+                                            <!-- Pas de StringFormat : on conserve/affiche la valeur EXACTE
+                                                 (toute la precision saisie), au lieu de la tronquer a 2 decimales. -->
+                                            <ui:TextBox Text="{Binding FrequenceMoyenne, UpdateSourceTrigger=LostFocus}"
                                                         Padding="8,6"
                                                         FontFamily="Cascadia Mono, Consolas"
                                                         FontSize="13"/>

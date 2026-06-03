@@ -16,7 +16,7 @@
 
         // Une petite propriété pratique qui formate le nom tout seul
         public string NomAffichage => EstReglageManuel
-            ? $"Réglage manuel ({FrequenceMoyenne:N2} Hz)"
+            ? $"Réglage manuel ({FrequenceMoyenne} Hz)"
             : (AvecGPS ? $"GPS + {Designation}" : Designation);
 
         /// <summary>
@@ -28,7 +28,7 @@
         /// Évite d'afficher « raccord Allouis » par défaut quand le rubidium est en manuel.
         /// </summary>
         public string DesignationAvecRaccord => EstReglageManuel
-            ? $"Réglage manuel ({FrequenceMoyenne:N2} Hz)"
+            ? $"Réglage manuel ({FrequenceMoyenne} Hz)"
             : Designation + (AvecGPS ? " (raccord GPS)" : " (raccord Allouis)");
     }
 }

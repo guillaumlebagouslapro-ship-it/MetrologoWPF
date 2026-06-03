@@ -71,9 +71,11 @@ namespace Metrologo.Models
                 AssurerChargement();
                 if (_rubidiumActif == null) return "Rubidium : non défini";
 
-                // Format français avec espace milliers : "10 000 000,00 Hz".
+                // Valeur EXACTE de la fréquence de référence : toute la précision du double
+                // (jusqu'à ~8-9 décimales utiles), sans troncature à 2 décimales. C'est cette
+                // valeur que ZNFreqRef reprend telle quelle dans le rapport Excel.
                 string freq = _rubidiumActif.FrequenceMoyenne.ToString(
-                    "N2", CultureInfo.GetCultureInfo("fr-FR"));
+                    CultureInfo.GetCultureInfo("fr-FR"));
                 string libelle = _rubidiumActif.EstReglageManuel
                     ? "Réglage manuel"
                     : _rubidiumActif.Designation;

@@ -82,8 +82,10 @@ namespace Metrologo.ViewModels
             if (actif != null && actif.EstReglageManuel)
             {
                 ModeManuel = true;
+                // Valeur exacte (toute la précision saisie), pas tronquée à 2 décimales :
+                // au retour dans la fenêtre on retrouve la fréquence de référence telle quelle.
                 FrequenceManuelleTexte = actif.FrequenceMoyenne.ToString(
-                    "0.##", CultureInfo.InvariantCulture);
+                    CultureInfo.InvariantCulture);
                 RubidiumSelectionne = Rubidiums.FirstOrDefault();
                 return;
             }
