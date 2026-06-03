@@ -565,29 +565,44 @@ namespace Metrologo.ViewModels
 
         private async Task LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
         {
-            // Vérifie d'abord si un Excel externe (autre que notre instance COM cachée) est
-            // ouvert : il peut tenir verrouillé le fichier .xlsx de la mesure et faire échouer
-            // ClosedXML. On propose à l'utilisateur de fermer ces instances avant de lancer.
-            var excelsExternes = ExcelInteropHost.Instance.ListerExcelsExternes();
-            if (excelsExternes.Count > 0)
+            // Vérifie si un Excel externe (autre que notre instance COM cachée) est ouvert :
+            // il peut tenir verrouillé le fichier .xlsx de la mesure et faire échouer ClosedXML.
+            // On distingue les reliquats COM sans fenêtre (fantômes) des vrais classeurs ouverts.
+            var (excelsVisibles, excelsFantomes) = ExcelInteropHost.Instance.ListerExcelsExternesClasses();
+
+            // 1. Fantômes (aucune fenêtre = reliquat de pilotage COM, jamais un document
+            //    utilisateur) : on les ferme en silence pour libérer un éventuel verrou.
+            if (excelsFantomes.Count > 0)
             {
-                int nbExternes = excelsExternes.Count;
+                int nbFantomes = ExcelInteropHost.Instance.FermerExcels(excelsFantomes);
+                Journal.Info(CategorieLog.Excel, "EXCELS_FANTOMES_NETTOYES",
+                    $"{nbFantomes} processus EXCEL.EXE résiduel(s) (sans fenêtre) fermé(s) "
+                  + "automatiquement avant la mesure.");
+            }
+
+            // 2. Classeurs réellement ouverts par l'utilisateur (fenêtre visible) : ils
+            //    peuvent contenir un travail non sauvegardé → on demande confirmation.
+            if (excelsVisibles.Count > 0)
+            {
+                int nbVisibles = excelsVisibles.Count;
                 var choix = MessageBox.Show(
-                    $"{nbExternes} instance{(nbExternes > 1 ? "s" : "")} Excel détectée"
-                  + $"{(nbExternes > 1 ? "s" : "")} en plus de Metrologo.\n\n"
-                  + "Si l'une d'elles a ouvert le rapport de cette FI, la mesure risque "
+                    $"{nbVisibles} classeur{(nbVisibles > 1 ? "s" : "")} Excel ouvert"
+                  + $"{(nbVisibles > 1 ? "s" : "")} détecté{(nbVisibles > 1 ? "s" : "")} "
+                  + "en plus de Metrologo.\n\n"
+                  + "Si l'un d'eux a ouvert le rapport de cette FI, la mesure risque "
                   + "d'échouer (fichier verrouillé).\n\n"
-                  + $"Voulez-vous fermer ces instance{(nbExternes > 1 ? "s" : "")} Excel maintenant ?",
+                  + $"Voulez-vous fermer ce{(nbVisibles > 1 ? "s" : "")} classeur"
+                  + $"{(nbVisibles > 1 ? "s" : "")} Excel maintenant ?",
                     "Excel ouvert détecté",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
 
                 if (choix == MessageBoxResult.Yes)
                 {
-                    int nbFermes = ExcelInteropHost.Instance.FermerExcelsExternes();
-                    Log($"🗑 {nbFermes} instance(s) Excel externe(s) fermée(s) avant lancement.");
+                    int nbFermes = ExcelInteropHost.Instance.FermerExcels(excelsVisibles);
+                    Log($"🗑 {nbFermes} classeur(s) Excel fermé(s) avant lancement.");
                     Journal.Info(CategorieLog.Excel, "EXCELS_EXTERNES_FERMES",
-                        $"{nbFermes} instance(s) Excel externe(s) fermée(s) avant lancement de la mesure.");
+                        $"{nbFermes} classeur(s) Excel ouvert(s) fermé(s) avant lancement de la mesure.");
                 }
                 // Si Non, on continue sans rien faire (l'utilisateur a vu l'avertissement
                 // et accepte le risque que la mesure échoue si le fichier est verrouillé).
@@ -972,11 +987,14 @@ namespace Metrologo.ViewModels
 
             Log($"📝 Post-mesure : FLue={vm.FrequenceLue:F6} Hz · Résolution={vm.Resolution:E3} · IncertSupRel={vm.IncertSupp:E3}");
 
-            // Écrit via Interop dans le classeur actif (zones nommées du template).
-            // ZNFreqRef = cellule "Valeur de réf. (Hz) =" du bloc stats : on l'aligne sur
-            // la fréquence saisie (ex. 15 kHz) au lieu de la valeur héritée du rubidium
-            // (10 MHz par défaut). Cette zone alimente aussi la formule ZNFreqCorr.
-            await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNFreqRef", vm.FrequenceLue);
+            // La fréquence saisie est une valeur d'affichage : elle va UNIQUEMENT dans la
+            // colonne 5 « fréquence indiquée » du récap (même emplacement que « Géné. » en
+            // mode Générateur). On ne l'écrit PLUS dans la feuille de mesure : la cellule
+            // « Valeur de réf. (Hz) = » (ZNFreqRef) reste à la valeur du rubidium et n'est
+            // donc plus polluée, et la fréquence corrigée (ZNFreqCorr) n'en dépend plus.
+            await ExcelInteropHost.Instance.EcrireFreqIndiqueeRecapAsync(vm.FrequenceLue);
+
+            // Les incertitudes restent des zones nommées de la feuille (formules du récap).
             await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertResol", vm.Resolution);
             await ExcelInteropHost.Instance.EcrireZoneNommeeAsync("ZNIncertSup", vm.IncertSupp);
             await ExcelInteropHost.Instance.SauvegarderAsync();

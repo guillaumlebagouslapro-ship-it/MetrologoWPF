@@ -95,10 +95,17 @@ namespace Metrologo.Services
         /// Retourne le nombre de process effectivement fermés. Best-effort : si un kill échoue
         /// (permissions, race condition), on continue avec les suivants.
         /// </summary>
-        public int FermerExcelsExternes()
+        public int FermerExcelsExternes() => FermerExcels(ListerExcelsExternes());
+
+        /// <summary>
+        /// Termine la liste de processus EXCEL.EXE fournie (Process.Kill). Best-effort :
+        /// un kill qui échoue (permissions, race) n'interrompt pas les suivants.
+        /// Retourne le nombre de process effectivement fermés.
+        /// </summary>
+        public int FermerExcels(IEnumerable<Process> procs)
         {
             int nbFermes = 0;
-            foreach (var p in ListerExcelsExternes())
+            foreach (var p in procs)
             {
                 try
                 {
@@ -116,6 +123,71 @@ namespace Metrologo.Services
                 }
             }
             return nbFermes;
+        }
+
+        /// <summary>
+        /// Classe les EXCEL.EXE externes en deux catégories :
+        ///   - <c>visibles</c> : possèdent une fenêtre principale (MainWindowHandle != 0) =
+        ///     un vrai classeur ouvert par l'utilisateur, susceptible de contenir un travail
+        ///     non sauvegardé → ne JAMAIS fermer sans confirmation.
+        ///   - <c>fantomes</c> : aucun fenêtre = reliquat de pilotage COM (session Metrologo
+        ///     précédente, complément, crash). Non visible par l'utilisateur, donc fermable
+        ///     en silence pour libérer un éventuel verrou de fichier.
+        /// </summary>
+        /// <summary>
+        /// Photographie l'ensemble des PID EXCEL.EXE actuellement en cours. À appeler
+        /// JUSTE avant <c>Activator.CreateInstance("Excel.Application")</c> pour pouvoir,
+        /// après création, identifier de façon fiable le PID de NOTRE nouvelle instance
+        /// (cf. <see cref="ResoudrePidExcelCree"/>). Plus robuste que la lecture du HWND,
+        /// qui échoue quand l'instance cachée n'a pas (encore) de fenêtre exploitable.
+        /// </summary>
+        private static HashSet<int> SnapshotPidsExcel()
+        {
+            var set = new HashSet<int>();
+            try
+            {
+                foreach (var p in Process.GetProcessesByName("EXCEL"))
+                {
+                    try { set.Add(p.Id); } catch { /* process mourant */ }
+                }
+            }
+            catch { /* énumération impossible : on retournera un set vide */ }
+            return set;
+        }
+
+        /// <summary>
+        /// Renvoie le PID du process EXCEL.EXE apparu depuis <paramref name="avant"/>
+        /// (le snapshot pris avant <c>CreateInstance</c>) — c'est notre instance COM.
+        /// Retourne 0 si rien de neuf (timing/échec), auquel cas l'appelant retombe sur
+        /// la lecture du HWND comme solution de repli.
+        /// </summary>
+        private static int ResoudrePidExcelCree(HashSet<int> avant)
+        {
+            try
+            {
+                foreach (var p in Process.GetProcessesByName("EXCEL"))
+                {
+                    try { if (!avant.Contains(p.Id)) return p.Id; } catch { }
+                }
+            }
+            catch { }
+            return 0;
+        }
+
+        public (List<Process> visibles, List<Process> fantomes) ListerExcelsExternesClasses()
+        {
+            var visibles = new List<Process>();
+            var fantomes = new List<Process>();
+            foreach (var p in ListerExcelsExternes())
+            {
+                try
+                {
+                    if (p.MainWindowHandle != IntPtr.Zero) visibles.Add(p);
+                    else fantomes.Add(p);
+                }
+                catch { fantomes.Add(p); /* process mourant : traité comme fantôme */ }
+            }
+            return (visibles, fantomes);
         }
 
         /// <summary>
@@ -353,6 +425,10 @@ namespace Metrologo.Services
                         return;
                     }
 
+                    // Photo des EXCEL.EXE déjà présents AVANT de créer le nôtre, pour
+                    // identifier ensuite notre PID de façon fiable (cf. plus bas).
+                    var pidsAvant = SnapshotPidsExcel();
+
                     _excel = Activator.CreateInstance(excelType);
                     if (_excel == null) return;
 
@@ -361,19 +437,24 @@ namespace Metrologo.Services
                     _excel.ScreenUpdating = false;
                     _excel.AskToUpdateLinks = false;
 
-                    // Récupère le PID du process Excel via son HWND principal — utilisé
-                    // par TuerProcessExcelAsync() pour libérer en urgence des COM calls
-                    // bloqués si l'utilisateur ferme Excel manuellement pendant une mesure.
-                    try
+                    // Identifie le PID de NOTRE instance par diff de la liste des process
+                    // (fiable même sans fenêtre). Repli sur le HWND si le diff ne trouve rien.
+                    // Ce PID sert à s'auto-exclure de la détection « Excel externe » et à
+                    // TuerProcessExcelAsync() en cas de COM bloqué pendant une mesure.
+                    _excelPid = ResoudrePidExcelCree(pidsAvant);
+                    if (_excelPid == 0)
                     {
-                        IntPtr hwnd = new IntPtr((int)_excel.Hwnd);
-                        if (hwnd != IntPtr.Zero)
+                        try
                         {
-                            GetWindowThreadProcessId(hwnd, out uint pid);
-                            _excelPid = (int)pid;
+                            IntPtr hwnd = new IntPtr((int)_excel.Hwnd);
+                            if (hwnd != IntPtr.Zero)
+                            {
+                                GetWindowThreadProcessId(hwnd, out uint pid);
+                                _excelPid = (int)pid;
+                            }
                         }
+                        catch { /* best-effort, on saura par le journal si la mesure freeze */ }
                     }
-                    catch { /* best-effort, on saura par le journal si la mesure freeze */ }
 
                     JournalLog.Info(CategorieLog.Excel, "EXCEL_HOTE_DEMARRE",
                         $"Instance Excel cachée prête en arrière-plan (PID={_excelPid}).");
@@ -736,6 +817,7 @@ namespace Metrologo.Services
             {
                 var excelType = Type.GetTypeFromProgID("Excel.Application");
                 if (excelType == null) return;
+                var pidsAvant = SnapshotPidsExcel();
                 _excel = Activator.CreateInstance(excelType);
                 if (_excel == null) return;
                 _excel.Visible = false;
@@ -748,17 +830,21 @@ namespace Metrologo.Services
                 PreChargerXlaInterne();
 
                 // Recapture le PID du NOUVEAU process Excel — sinon TuerProcessExcelAsync
-                // taperait sur un PID obsolète et ne servirait à rien.
-                try
+                // taperait sur un PID obsolète et ne servirait à rien. Diff fiable + repli HWND.
+                _excelPid = ResoudrePidExcelCree(pidsAvant);
+                if (_excelPid == 0)
                 {
-                    IntPtr hwnd = new IntPtr((int)_excel.Hwnd);
-                    if (hwnd != IntPtr.Zero)
+                    try
                     {
-                        GetWindowThreadProcessId(hwnd, out uint pid);
-                        _excelPid = (int)pid;
+                        IntPtr hwnd = new IntPtr((int)_excel.Hwnd);
+                        if (hwnd != IntPtr.Zero)
+                        {
+                            GetWindowThreadProcessId(hwnd, out uint pid);
+                            _excelPid = (int)pid;
+                        }
                     }
+                    catch { _excelPid = 0; }
                 }
-                catch { _excelPid = 0; }
             }
             catch (Exception ex)
             {
@@ -2375,10 +2461,11 @@ namespace Metrologo.Services
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 2,  $"={qf}ZNLibGate");
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 3,  $"={qf}ZNFreqCorr");
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 4,  $"={qf}ZNEcartType");
-                // Col 5 : fréquence indiquée — Frequencemetre = ZNFreqRef, Generateur = "Géné."
-                if (mesure.SourceMesure == SourceMesure.Frequencemetre)
-                    EcrireFormuleRecapInterne(recap, nouvelleLigne, 5,  $"={qf}ZNFreqRef");
-                else
+                // Col 5 : fréquence indiquée. Générateur = « Géné. » (écrit direct).
+                // Fréquencemètre = valeur saisie en post-mesure, écrite DIRECTEMENT dans
+                // cette cellule par EcrireFreqIndiqueeRecapAsync (la pop-up) → on laisse
+                // la cellule vide ici, plus aucune formule vers ZNFreqRef de la feuille.
+                if (mesure.SourceMesure == SourceMesure.Generateur)
                     EcrireValeurRecapInterne(recap, nouvelleLigne, 5,  "Géné.");
                 // Col 6 : ZNIncertResol | 7 : ZNIncertSup | 8 : ZNIncertAccreditee | 9 : ZNIncertGlobale
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 6,  $"={qf}ZNIncertResol");
@@ -2401,6 +2488,66 @@ namespace Metrologo.Services
                 try { Marshal.ReleaseComObject(recap); } catch { }
             }
         }
+
+        /// <summary>
+        /// Écrit la « fréquence indiquée » saisie en post-mesure (mode Fréquencemètre)
+        /// DIRECTEMENT dans la colonne 5 de la ligne Récap de la feuille de mesure active —
+        /// à l'emplacement exact où le mode Générateur écrit « Géné. ».
+        ///
+        /// Ne touche PAS la feuille de mesure : la valeur n'est qu'un report d'affichage
+        /// dans le récap, elle n'alimente plus ZNFreqRef ni la fréquence corrigée (ZNFreqCorr).
+        /// La bonne ligne est identifiée par la formule de sa colonne 1
+        /// (<c>='&lt;feuille&gt;'!ZNFreqMoyReel</c>) qui référence la feuille active.
+        /// </summary>
+        public Task EcrireFreqIndiqueeRecapAsync(double valeur) => Task.Run(() =>
+        {
+            lock (_sync)
+            {
+                if (_classeurActif == null || _feuilleMesure == null) return;
+
+                string nomFeuille;
+                try { nomFeuille = (string)_feuilleMesure.Name; }
+                catch { return; }
+
+                dynamic? recap = null;
+                try { recap = _classeurActif.Worksheets.Item("Récap."); } catch { return; }
+                if (recap == null) return;
+
+                try
+                {
+                    try { recap.Unprotect("METROL"); }
+                    catch { try { recap.Unprotect("metrol"); } catch { try { recap.Unprotect(); } catch { } } }
+
+                    // Parcourt les lignes de données (à partir de la ligne 6) et repère
+                    // celle dont la col 1 référence la feuille active.
+                    for (int row = 6; row <= 100; row++)
+                    {
+                        dynamic? cell = null;
+                        try
+                        {
+                            cell = recap.Cells[row, 1];
+                            string formule = "";
+                            try { formule = (string)(cell.Formula ?? ""); } catch { }
+
+                            if (formule.IndexOf("'" + nomFeuille + "'!", StringComparison.OrdinalIgnoreCase) >= 0
+                                || formule.IndexOf(nomFeuille + "!", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                EcrireValeurRecapInterne(recap, row, 5, valeur);
+                                JournalLog.Info(CategorieLog.Excel, "RECAP_FREQ_INDIQUEE",
+                                    $"Fréquence indiquée {valeur} écrite en col 5 du récap (ligne {row}, feuille {nomFeuille}).");
+                                break;
+                            }
+                        }
+                        catch { }
+                        finally { if (cell != null) { try { Marshal.ReleaseComObject(cell); } catch { } } }
+                    }
+                }
+                finally
+                {
+                    try { Marshal.ReleaseComObject(recap); } catch { }
+                }
+            }
+        });
 
         /// <summary>Ajoute la ligne Récap Stabilité via COM (équivalent MettreAJourRecapStabAsync).</summary>
         private void AjouterLigneRecapStabViaComInterne(Mesure mesure, string nomFeuille)

@@ -875,12 +875,12 @@ namespace Metrologo.Services
                     $"='{nomFeuille}'!ZNLibGate",           // Col 2 : temps de mesure (libellé gate)
                     $"='{nomFeuille}'!ZNFreqCorr",          // Col 3 : fréquence corrigée
                     $"='{nomFeuille}'!ZNEcartType",         // Col 4 : écart-type
-                    // Col 5 : fréquence indiquée — en mode Fréquencemètre on pointe vers la
-                    // valeur saisie post-mesure par l'utilisateur (ZNFreqRef de la feuille).
-                    // En mode Générateur on écrit la chaîne « Géné. » via valeurDirecte.
-                    mesure.SourceMesure == SourceMesure.Frequencemetre
-                        ? $"='{nomFeuille}'!ZNFreqRef"
-                        : null,
+                    // Col 5 : fréquence indiquée — laissée vide ici. En mode Générateur,
+                    // « Géné. » est posé via valeurDirecte (col 5). En mode Fréquencemètre,
+                    // la valeur saisie en post-mesure est écrite DIRECTEMENT dans cette
+                    // cellule du récap par ExcelInteropHost.EcrireFreqIndiqueeRecapAsync
+                    // (la pop-up) — on n'écrit plus aucune formule vers ZNFreqRef de la feuille.
+                    null,
                     $"='{nomFeuille}'!ZNIncertResol",       // Col 6 : incertitude de résolution
                     $"='{nomFeuille}'!ZNIncertSup",         // Col 7 : incertitude supplémentaire
                     $"='{nomFeuille}'!ZNIncertAccreditee",  // Col 8 : incertitude accréditée
@@ -895,7 +895,7 @@ namespace Metrologo.Services
                 colValeurDirecte: 5,
                 valeurDirecte: mesure.SourceMesure == SourceMesure.Generateur
                     ? (object)"Géné."
-                    : null,   // Frequencemetre : la formule ZNFreqRef ci-dessus prend le relais
+                    : null,   // Frequencemetre : col 5 remplie par la pop-up (EcrireFreqIndiqueeRecapAsync)
                 entetesColonne: new[]
                 {
                     null, null, null, null, null, null, null, null, null, null,
