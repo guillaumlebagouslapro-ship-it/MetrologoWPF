@@ -19,7 +19,7 @@ namespace Metrologo.Services.Besancon
     /// </summary>
     public static class BesanconParser
     {
-        public static List<MesureBesancon> Parser(string contenu, bool ignorerPremiereLigne = true)
+        public static List<MesureBesancon> Parser(string contenu, bool ignorerPremiereLigne = false)
         {
             var resultats = new List<MesureBesancon>();
             if (string.IsNullOrWhiteSpace(contenu)) return resultats;
@@ -31,6 +31,10 @@ namespace Metrologo.Services.Besancon
 
                 string ligne = lignes[i].Trim();
                 if (ligne.Length == 0) continue;
+
+                // Le fichier ef_utcop commence par plusieurs lignes de commentaire « # … »
+                // (instabilité, sauts de phase) — on les ignore explicitement.
+                if (ligne[0] == '#' || ligne[0] == ';') continue;
 
                 var tokens = ligne.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                 if (tokens.Length < 2) continue;
