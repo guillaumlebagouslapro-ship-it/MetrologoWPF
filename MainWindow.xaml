@@ -144,15 +144,25 @@
                     </Button>
                 </StackPanel>
 
-                <!-- Bouton Quitter à droite -->
-                <Button Grid.Column="2"
-                        Command="{Binding QuitterCommand}"
-                        Style="{StaticResource NavAccentButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Power24" FontSize="18" Margin="0,0,8,0"/>
-                        <TextBlock Text="Quitter" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
+                <!-- Utilisateur connecté (en gros) + bouton Quitter, à droite — à l'opposé de la
+                     navigation (Accueil / Administration…). -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:SymbolIcon Symbol="Person24" FontSize="22"
+                                   Foreground="White"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Text="{Binding TexteUtilisateurConnecte}"
+                               Foreground="White"
+                               FontSize="18" FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,20,0"/>
+                    <Button Command="{Binding QuitterCommand}"
+                            Style="{StaticResource NavAccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Power24" FontSize="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="Quitter" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -175,10 +185,8 @@
                 <TextBlock Text="{Binding TexteMode}" FontWeight="SemiBold" VerticalAlignment="Center"
                            Foreground="{StaticResource AsertiNavyBrush}"/>
                 <Rectangle Width="1" Fill="{DynamicResource ControlStrokeColorDefaultBrush}" Margin="16,2"/>
-                <ui:SymbolIcon Symbol="Person24" Margin="0,0,8,0" FontSize="14"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                <TextBlock Text="{Binding TexteUtilisateurConnecte}" VerticalAlignment="Center"/>
-                <Rectangle Width="1" Fill="{DynamicResource ControlStrokeColorDefaultBrush}" Margin="16,2"/>
+                <!-- Le nom d'utilisateur connecté est désormais affiché en gros dans le bandeau
+                     bleu de navigation (à droite, près de « Quitter »). -->
                 <ui:SymbolIcon Symbol="Timer24" Margin="0,0,8,0" FontSize="14"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 <TextBlock Text="{Binding RubidiumActifTexte}" VerticalAlignment="Center"/>
