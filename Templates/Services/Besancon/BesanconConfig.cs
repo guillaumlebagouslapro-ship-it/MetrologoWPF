@@ -45,32 +45,40 @@ namespace Metrologo.Services.Besancon
 
         public static BesanconConfig Charger()
         {
-            // Migration one-shot : si la config partagée n'existe pas encore mais qu'une ancienne
-            // config locale existe (identifiants déjà saisis sur ce poste), on la promeut sur le
-            // partage pour que tous les postes en bénéficient.
-            try
-            {
-                if (!File.Exists(Chemin) && File.Exists(CheminLocalLegacy))
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(Chemin)!);
-                    File.Copy(CheminLocalLegacy, Chemin, overwrite: false);
-                }
-            }
-            catch { /* partage injoignable → on retombe sur le défaut plus bas */ }
+            // 1. Config partagée déjà valide (identifiants renseignés) → on l'utilise.
+            var partagee = LireFichier(Chemin);
+            if (partagee != null && !string.IsNullOrWhiteSpace(partagee.FtpUtilisateur))
+                return partagee;
 
-            try
+            // 2. Sinon (partagée absente OU vide), on promeut une config LOCALE déjà remplie
+            //    (ancien emplacement, identifiants saisis avant la mutualisation) vers le partage.
+            //    Robuste même si un autre poste a déjà créé une config partagée vide.
+            var locale = LireFichier(CheminLocalLegacy);
+            if (locale != null && !string.IsNullOrWhiteSpace(locale.FtpUtilisateur))
             {
-                if (File.Exists(Chemin))
-                {
-                    var cfg = JsonSerializer.Deserialize<BesanconConfig>(File.ReadAllText(Chemin));
-                    if (cfg != null) return cfg;
-                }
+                locale.Sauvegarder();   // écrit sur le partage (Chemin)
+                return locale;
             }
-            catch { /* fichier corrompu → on régénère un défaut */ }
 
+            // 3. Partagée existante mais vide, et rien à migrer → on garde la partagée (gabarit).
+            if (partagee != null)
+                return partagee;
+
+            // 4. Rien nulle part → crée un gabarit par défaut sur le partage (à remplir une fois).
             var defaut = new BesanconConfig();
-            defaut.Sauvegarder();   // crée le gabarit à remplir sur le partage (hôte pré-rempli, identifiants vides)
+            defaut.Sauvegarder();
             return defaut;
+        }
+
+        private static BesanconConfig? LireFichier(string chemin)
+        {
+            try
+            {
+                if (File.Exists(chemin))
+                    return JsonSerializer.Deserialize<BesanconConfig>(File.ReadAllText(chemin));
+            }
+            catch { /* fichier corrompu ou injoignable */ }
+            return null;
         }
 
         public void Sauvegarder()
