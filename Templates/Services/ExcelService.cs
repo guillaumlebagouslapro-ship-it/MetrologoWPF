@@ -388,8 +388,7 @@ namespace Metrologo.Services
                 SetNamed("ZNDate", DateTime.Now.ToString("dd/MM/yyyy"));
                 SetNamed("ZNTypeMesure", EnTetesMesureHelper.LibelleType(config.TypeMesure));
                 SetNamed("ZNFreqUtilise", NomAppareilDepuisCatalogue(config.IdModeleCatalogue));
-                SetNamed("ZNRubidium",
-                    rubidium.Designation + (rubidium.AvecGPS ? " (raccord GPS)" : " (raccord Allouis)"));
+                SetNamed("ZNRubidium", rubidium.DesignationAvecRaccord);
                 SetNamed("ZNGate", EnTetesMesureHelper.LibelleGate(gateInscrite));
                 SetNamed("ZNLibGate", EnTetesMesureHelper.LibelleGate(gateInscrite));
                 SetNamed("ZNValGateSecondes", EnTetesMesureHelper.SecondesGate(gateInscrite));

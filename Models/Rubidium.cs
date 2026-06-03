@@ -18,5 +18,17 @@
         public string NomAffichage => EstReglageManuel
             ? $"Réglage manuel ({FrequenceMoyenne:N2} Hz)"
             : (AvecGPS ? $"GPS + {Designation}" : Designation);
+
+        /// <summary>
+        /// Libellé écrit dans la feuille de mesure (zone <c>ZNRubidium</c>) : désignation +
+        /// mode de raccordement réellement sélectionné en admin. Trois cas :
+        ///   - réglage manuel  → "Réglage manuel (xxx Hz)" (pas de raccord Allouis/GPS) ;
+        ///   - GPS             → "<désignation> (raccord GPS)" ;
+        ///   - sinon           → "<désignation> (raccord Allouis)".
+        /// Évite d'afficher « raccord Allouis » par défaut quand le rubidium est en manuel.
+        /// </summary>
+        public string DesignationAvecRaccord => EstReglageManuel
+            ? $"Réglage manuel ({FrequenceMoyenne:N2} Hz)"
+            : Designation + (AvecGPS ? " (raccord GPS)" : " (raccord Allouis)");
     }
 }

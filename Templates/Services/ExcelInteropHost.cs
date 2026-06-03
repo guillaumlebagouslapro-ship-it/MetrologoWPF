@@ -1403,7 +1403,7 @@ namespace Metrologo.Services
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqUtilise",
                             NomAppareilDepuisCatalogueLocal(config.IdModeleCatalogue));
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNRubidium",
-                            rubidium.Designation + (rubidium.AvecGPS ? " (raccord GPS)" : " (raccord Allouis)"));
+                            rubidium.DesignationAvecRaccord);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNGate",
                             EnTetesMesureHelper.LibelleGate(gateInscrite));
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNLibGate",
