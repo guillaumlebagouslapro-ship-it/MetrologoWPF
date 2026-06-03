@@ -221,6 +221,11 @@
                 <ColumnDefinition Width="10"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
             <Button Grid.Column="0"
                     Command="{Binding OuvrirUtilisateursCommand}"
@@ -303,6 +308,24 @@
                                        VerticalAlignment="Center"/>
                     </Border>
                     <TextBlock Text="Chemins de stockage" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                </StackPanel>
+            </Button>
+
+            <!-- Forcer la récupération Besançon (FTP + moyenne hebdo) sans attendre l'horaire. -->
+            <Button Grid.Row="2" Grid.Column="0"
+                    Command="{Binding RecupererBesanconMaintenantCommand}"
+                    Style="{StaticResource ActionCardStyle}">
+                <StackPanel>
+                    <Border Width="40" Height="40" CornerRadius="10"
+                            HorizontalAlignment="Left" Margin="0,0,0,12"
+                            Background="#FFD1FAE5">
+                        <ui:SymbolIcon Symbol="CloudArrowDown24" FontSize="20"
+                                       Foreground="#FF059669"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Récupérer Besançon" FontSize="15" FontWeight="SemiBold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
                 </StackPanel>
             </Button>

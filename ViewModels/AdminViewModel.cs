@@ -167,6 +167,40 @@ namespace Metrologo.ViewModels
             }
         }
 
+        /// <summary>
+        /// Déclenche manuellement la tâche Besançon (récupération FTP du fichier corrigé +
+        /// intégration des valeurs journalières + recalcul des moyennes hebdo), sans attendre
+        /// l'horaire quotidien. Utile pour tester/forcer. Le détail va dans le Journal (Système).
+        /// </summary>
+        [RelayCommand]
+        private async System.Threading.Tasks.Task RecupererBesanconMaintenantAsync()
+        {
+            var conf = MessageBox.Show(
+                "Lancer maintenant la récupération du fichier de Besançon sur le FTP, "
+              + "l'intégration des valeurs et le calcul des moyennes hebdomadaires ?\n\n"
+              + "Nécessite : un rubidium actif défini + les identifiants FTP renseignés "
+              + "(fichier besancon.ftp.json).",
+                "Récupération Besançon",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (conf != MessageBoxResult.Yes) return;
+
+            try
+            {
+                await Metrologo.Services.Besancon.BesanconScheduler.ExecuterAsync();
+                MessageBox.Show(
+                    "Récupération Besançon terminée.\n\n"
+                  + "Consulte le Journal (catégorie Système) pour le détail : valeurs lues, "
+                  + "nouvelles valeurs intégrées, moyennes hebdomadaires calculées, ou cause d'échec "
+                  + "(FTP non configuré, fichier introuvable, etc.).",
+                    "Besançon", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Récupération Besançon échouée : {ex.Message}",
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         [RelayCommand]
         private void OuvrirGestionModules()
         {
