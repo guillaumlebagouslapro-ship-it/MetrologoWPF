@@ -2678,20 +2678,25 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Force le format scientifique à 2 décimales (<c>0.00E+00</c>) sur les cellules indiquées
-        /// d'une ligne du récap (colonnes d'incertitude / écart-type). Best-effort par cellule.
+        /// Force le format scientifique à 2 décimales sur les cellules indiquées d'une ligne du
+        /// récap (incertitudes / écart-type). On utilise <c>NumberFormatLocal</c> avec la VIRGULE
+        /// (« 0,00E+00 ») : sur un Excel français, poser une chaîne de format avec un point via
+        /// <c>NumberFormat</c> est mal interprété et corrompt l'affichage (mantisse non normalisée).
+        /// Best-effort par cellule, avec repli sur le format US si besoin.
         /// </summary>
         private static void FormaterScientifiqueRecapInterne(dynamic recap, int row, params int[] colonnes)
         {
             foreach (int col in colonnes)
             {
+                dynamic? c = null;
                 try
                 {
-                    dynamic c = recap.Cells[row, col];
-                    c.NumberFormat = "0.00E+00";
-                    Marshal.ReleaseComObject(c);
+                    c = recap.Cells[row, col];
+                    try { c.NumberFormatLocal = "0,00E+00"; }
+                    catch { try { c.NumberFormat = "0.00E+00"; } catch { } }
                 }
                 catch { /* best-effort */ }
+                finally { if (c != null) { try { Marshal.ReleaseComObject(c); } catch { } } }
             }
         }
 
