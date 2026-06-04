@@ -1,133 +1,123 @@
+using Dapper;
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text.Json;
-using Metrologo.Services.Journal;
+using System.Threading.Tasks;
 
 namespace Metrologo.Services.Besancon
 {
-    /// <summary>Valeur journalière corrigée (équivalent d'une ligne de T_METROLOGO_DATESRUBIS).</summary>
-    public sealed class ValeurJournaliereBesancon
-    {
-        public int RubidiumId { get; set; }
-        public int Mjd { get; set; }
-        public double Valeur { get; set; }
-    }
-
-    /// <summary>Moyenne hebdomadaire calculée (équivalent d'une ligne de TJ_METROLOGO_SUIVIRUBI).</summary>
-    public sealed class MoyenneHebdoBesancon
-    {
-        public int RubidiumId { get; set; }
-        public int MardiMjd { get; set; }
-        public double Moyenne { get; set; }
-        public double DeltaTpsSecondes { get; set; }
-        public DateTime CalculeLe { get; set; }
-    }
-
-    public sealed class DonneesBesancon
-    {
-        public List<ValeurJournaliereBesancon> Journalieres { get; set; } = new();
-        public List<MoyenneHebdoBesancon> Hebdos { get; set; } = new();
-    }
-
     /// <summary>
-    /// Persistance JSON (sur le partage réseau, dossier <c>Rubidiums</c>) des valeurs journalières
-    /// de Besançon et des moyennes hebdomadaires. Équivalent fichier des tables legacy
-    /// <c>T_METROLOGO_DATESRUBIS</c> / <c>TJ_METROLOGO_SUIVIRUBI</c> (migrable vers SQL plus tard).
+    /// Persistance SQL du suivi Besançon dans la base <c>BASE_E2M</c> (SVR-OR) :
+    ///   - <c>T_METROLOGO_DATESRUBIS</c> (DAT_ID = date julienne MJD, RUB_ACTIF = id rubidium,
+    ///     DAT_VALEUR = valeur corrigée du jour) ;
+    ///   - <c>TJ_METROLOGO_SUIVIRUBI</c> (RUB_ID, RUB_AVECGPS, DAT_ID = mardi MJD, SUV_ECARTF =
+    ///     moyenne hebdo, SUV_DELTATPS = moyenne × 86400 s/jour).
+    ///
+    /// Reproduit fidèlement la logique legacy <c>GetMoyenneHebdo</c> (F_Main.pas:3810) :
+    /// moyenne sur les 7 jours précédant un mardi, EXIGE exactement 7 valeurs, SUV_DELTATPS =
+    /// moyenne × 86400. Accès via <see cref="MetrologoDbService"/> + Dapper.
     /// </summary>
     public static class BesanconStore
     {
-        private static readonly object _sync = new();
-
-        public static string Chemin => Path.Combine(CheminsMetrologo.Besancon, "besancon-suivi.json");
-
-        public static DonneesBesancon Charger()
-        {
-            lock (_sync)
-            {
-                try
-                {
-                    if (File.Exists(Chemin))
-                        return JsonSerializer.Deserialize<DonneesBesancon>(File.ReadAllText(Chemin))
-                               ?? new DonneesBesancon();
-                }
-                catch { /* corrompu → repart à vide */ }
-                return new DonneesBesancon();
-            }
-        }
-
-        /// <summary>Persiste le suivi sur le partage. Retourne true si l'écriture a réussi
-        /// (échec loggué avec le chemin exact — utile si le partage réseau est injoignable).</summary>
-        public static bool Sauvegarder(DonneesBesancon d)
-        {
-            lock (_sync)
-            {
-                try
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(Chemin)!);
-                    string tmp = Chemin + ".tmp";
-                    File.WriteAllText(tmp,
-                        JsonSerializer.Serialize(d, new JsonSerializerOptions { WriteIndented = true }));
-                    File.Move(tmp, Chemin, overwrite: true);   // écriture atomique
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_STORE_KO",
-                        $"Écriture du suivi Besançon échouée ({Chemin}) : {ex.Message}");
-                    return false;
-                }
-            }
-        }
-
         /// <summary>
-        /// Insère ou met à jour une valeur journalière (dédoublonnage par rubidium + MJD, comme
-        /// la procédure stockée legacy gérait les doublons). Retourne true si c'est une nouvelle
-        /// valeur, false si on a mis à jour une valeur déjà présente.
+        /// Insère ou met à jour la valeur journalière (clé : DAT_ID + RUB_ACTIF). Retourne true
+        /// si c'est une NOUVELLE valeur, false si une valeur existait déjà (mise à jour).
         /// </summary>
-        public static bool UpsertValeurJournaliere(DonneesBesancon d, int rubidiumId, int mjd, double valeur)
+        public static async Task<bool> UpsertValeurJournaliereAsync(int rubidiumId, int mjd, double valeur)
         {
-            var existante = d.Journalieres.FirstOrDefault(v => v.RubidiumId == rubidiumId && v.Mjd == mjd);
-            if (existante != null) { existante.Valeur = valeur; return false; }
-            d.Journalieres.Add(new ValeurJournaliereBesancon { RubidiumId = rubidiumId, Mjd = mjd, Valeur = valeur });
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+
+            int existe = await c.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM T_METROLOGO_DATESRUBIS WHERE DAT_ID=@mjd AND RUB_ACTIF=@rub",
+                new { mjd, rub = rubidiumId });
+
+            if (existe > 0)
+            {
+                await c.ExecuteAsync(
+                    "UPDATE T_METROLOGO_DATESRUBIS SET DAT_VALEUR=@v WHERE DAT_ID=@mjd AND RUB_ACTIF=@rub",
+                    new { v = valeur, mjd, rub = rubidiumId });
+                return false;
+            }
+
+            await c.ExecuteAsync(
+                "INSERT INTO T_METROLOGO_DATESRUBIS (DAT_ID, RUB_ACTIF, DAT_VALEUR) VALUES (@mjd, @rub, @v)",
+                new { mjd, rub = rubidiumId, v = valeur });
             return true;
         }
 
         /// <summary>
-        /// Calcule la moyenne hebdo pour le mardi <paramref name="mardiMjd"/> : moyenne des valeurs
-        /// des 7 jours précédents <c>[mardiMjd-7 ; mardiMjd-1]</c>. Comme le legacy, EXIGE exactement
-        /// 7 valeurs présentes — sinon retourne false (calcul impossible). <paramref name="deltaTps"/>
-        /// = moyenne × 86400 (s/jour).
+        /// Calcule la moyenne hebdo pour le mardi <paramref name="mardiMjd"/> sur les 7 jours
+        /// précédents [mardiMjd-7 ; mardiMjd-1]. Retourne null si la base ne contient pas
+        /// EXACTEMENT 7 valeurs (comportement legacy). Sinon (moyenne, moyenne × 86400).
         /// </summary>
-        public static bool CalculerMoyenneHebdo(DonneesBesancon d, int rubidiumId, int mardiMjd,
-            out double moyenne, out double deltaTps)
+        public static async Task<(double moyenne, double deltaTps)?> CalculerMoyenneHebdoAsync(int rubidiumId, int mardiMjd)
         {
-            moyenne = 0; deltaTps = 0;
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+
             int debut = mardiMjd - 7, fin = mardiMjd - 1;
-            var sur7Jours = d.Journalieres
-                .Where(v => v.RubidiumId == rubidiumId && v.Mjd >= debut && v.Mjd <= fin)
-                .ToList();
-            if (sur7Jours.Count != 7) return false;
-            moyenne = sur7Jours.Average(v => v.Valeur);
-            deltaTps = moyenne * 86400.0;
-            return true;
+            int nb = await c.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM T_METROLOGO_DATESRUBIS WHERE RUB_ACTIF=@rub AND DAT_ID BETWEEN @d AND @f",
+                new { rub = rubidiumId, d = debut, f = fin });
+            if (nb != 7) return null;
+
+            double moyenne = await c.ExecuteScalarAsync<double>(
+                "SELECT AVG(DAT_VALEUR) FROM T_METROLOGO_DATESRUBIS WHERE RUB_ACTIF=@rub AND DAT_ID BETWEEN @d AND @f",
+                new { rub = rubidiumId, d = debut, f = fin });
+
+            return (moyenne, moyenne * 86400.0);
         }
 
-        public static void UpsertMoyenneHebdo(DonneesBesancon d, int rubidiumId, int mardiMjd,
-            double moyenne, double deltaTps)
+        /// <summary>Insère ou met à jour la moyenne hebdo (clé : RUB_ID + DAT_ID = mardi).</summary>
+        public static async Task UpsertMoyenneHebdoAsync(int rubidiumId, bool avecGps, int mardiMjd, double moyenne, double deltaTps)
         {
-            var ex = d.Hebdos.FirstOrDefault(h => h.RubidiumId == rubidiumId && h.MardiMjd == mardiMjd);
-            if (ex != null)
-            {
-                ex.Moyenne = moyenne; ex.DeltaTpsSecondes = deltaTps; ex.CalculeLe = DateTime.Now;
-                return;
-            }
-            d.Hebdos.Add(new MoyenneHebdoBesancon
-            {
-                RubidiumId = rubidiumId, MardiMjd = mardiMjd,
-                Moyenne = moyenne, DeltaTpsSecondes = deltaTps, CalculeLe = DateTime.Now
-            });
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+
+            int existe = await c.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM TJ_METROLOGO_SUIVIRUBI WHERE RUB_ID=@rub AND DAT_ID=@mjd",
+                new { rub = rubidiumId, mjd = mardiMjd });
+
+            if (existe > 0)
+                await c.ExecuteAsync(
+                    "UPDATE TJ_METROLOGO_SUIVIRUBI SET SUV_ECARTF=@e, SUV_DELTATPS=@dt, RUB_AVECGPS=@g "
+                  + "WHERE RUB_ID=@rub AND DAT_ID=@mjd",
+                    new { e = moyenne, dt = deltaTps, g = avecGps, rub = rubidiumId, mjd = mardiMjd });
+            else
+                await c.ExecuteAsync(
+                    "INSERT INTO TJ_METROLOGO_SUIVIRUBI (RUB_ID, RUB_AVECGPS, DAT_ID, SUV_ECARTF, SUV_DELTATPS) "
+                  + "VALUES (@rub, @g, @mjd, @e, @dt)",
+                    new { rub = rubidiumId, g = avecGps, mjd = mardiMjd, e = moyenne, dt = deltaTps });
+        }
+
+        /// <summary>Nombre de valeurs journalières stockées pour un rubidium.</summary>
+        public static async Task<int> CompterJournalieresAsync(int rubidiumId)
+        {
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+            return await c.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM T_METROLOGO_DATESRUBIS WHERE RUB_ACTIF=@rub", new { rub = rubidiumId });
+        }
+
+        /// <summary>Dernière moyenne hebdo calculée pour un rubidium (la plus récente), ou null.</summary>
+        public static async Task<(double moyenne, int mardiMjd)?> DerniereMoyenneHebdoAsync(int rubidiumId)
+        {
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+            var row = await c.QueryFirstOrDefaultAsync(
+                "SELECT TOP 1 SUV_ECARTF, DAT_ID FROM TJ_METROLOGO_SUIVIRUBI WHERE RUB_ID=@rub ORDER BY DAT_ID DESC",
+                new { rub = rubidiumId });
+            if (row == null) return null;
+            return ((double)row.SUV_ECARTF, (int)row.DAT_ID);
+        }
+
+        /// <summary>Valeur journalière stockée pour (rubidium, date julienne), ou null si absente.</summary>
+        public static async Task<double?> LireValeurJournaliereAsync(int rubidiumId, int mjd)
+        {
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+            return await c.ExecuteScalarAsync<double?>(
+                "SELECT DAT_VALEUR FROM T_METROLOGO_DATESRUBIS WHERE DAT_ID=@mjd AND RUB_ACTIF=@rub",
+                new { mjd, rub = rubidiumId });
         }
     }
 }

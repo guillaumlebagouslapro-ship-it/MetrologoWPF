@@ -4,7 +4,7 @@ using Metrologo.Models;
 using Metrologo.Services.Besancon;
 using System;
 using System.Globalization;
-using System.Linq;
+using System.Threading.Tasks;
 
 namespace Metrologo.ViewModels
 {
@@ -37,7 +37,7 @@ namespace Metrologo.ViewModels
         partial void OnDateSelectionneeChanged(DateTime value)
         {
             Recalculer();
-            ChargerValeurExistante();
+            _ = ChargerValeurExistanteAsync();
         }
 
         private void Recalculer()
@@ -45,23 +45,23 @@ namespace Metrologo.ViewModels
             DateJulienne = (int)(DateSelectionnee.Date - MjdEpoch).TotalDays;
         }
 
-        private void ChargerValeurExistante()
+        private async Task ChargerValeurExistanteAsync()
         {
-            // Lit la valeur journalière déjà stockée (suivi partagé besancon-suivi.json) pour le
+            // Lit la valeur journalière déjà stockée en base (T_METROLOGO_DATESRUBIS) pour le
             // rubidium actif + la date julienne sélectionnée. Vide si aucune valeur enregistrée.
             var rub = EtatApplication.RubidiumActif;
             if (rub == null) { ValeurJourTexte = ""; return; }
 
-            var donnees = BesanconStore.Charger();
-            var existante = donnees.Journalieres
-                .FirstOrDefault(x => x.RubidiumId == rub.Id && x.Mjd == DateJulienne);
-            ValeurJourTexte = existante != null
-                ? existante.Valeur.ToString(CultureInfo.InvariantCulture)
-                : "";
+            try
+            {
+                var v = await BesanconStore.LireValeurJournaliereAsync(rub.Id, DateJulienne);
+                ValeurJourTexte = v.HasValue ? v.Value.ToString(CultureInfo.InvariantCulture) : "";
+            }
+            catch { ValeurJourTexte = ""; }
         }
 
         [RelayCommand]
-        private void Valider()
+        private async Task Valider()
         {
             var txt = (ValeurJourTexte ?? "").Trim().Replace(',', '.');
             if (!double.TryParse(txt, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
@@ -83,14 +83,17 @@ namespace Metrologo.ViewModels
             ValeurJourResultat = v;
             DateJulienneResultat = DateJulienne;
 
-            // Persiste la correction dans le suivi partagé (pour le rubidium actif) — ainsi la
-            // valeur saisie/corrigée est consultable et entre dans les moyennes hebdo.
+            // Persiste la correction en base (T_METROLOGO_DATESRUBIS) pour le rubidium actif —
+            // ainsi la valeur saisie/corrigée entre dans les moyennes hebdo.
             var rub = EtatApplication.RubidiumActif;
             if (rub != null)
             {
-                var donnees = BesanconStore.Charger();
-                BesanconStore.UpsertValeurJournaliere(donnees, rub.Id, DateJulienne, v);
-                BesanconStore.Sauvegarder(donnees);
+                try { await BesanconStore.UpsertValeurJournaliereAsync(rub.Id, DateJulienne, v); }
+                catch (Exception ex)
+                {
+                    MessageErreur = $"Enregistrement en base échoué : {ex.Message}";
+                    return;
+                }
             }
 
             CloseAction?.Invoke(true);

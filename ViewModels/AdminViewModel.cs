@@ -219,7 +219,7 @@ namespace Metrologo.ViewModels
                   + $"• Total stocké pour ce rubidium : {r.TotalJournalieres}\n"
                   + $"• Dernière moyenne hebdo : {hebdo}\n\n"
                   + $"Fichier brut (consultable) :\n{r.CheminBrut ?? "⚠ NON ÉCRIT — voir le Journal (partage injoignable ?)"}\n\n"
-                  + $"Suivi JSON :\n{(r.SauvegardeJsonOk ? r.CheminJson : "⚠ NON ÉCRIT — voir le Journal")}",
+                  + $"Enregistrement :\n{(r.EnregistrementOk ? r.Destination : "⚠ ÉCHEC — voir le Journal")}",
                     "Besançon", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)

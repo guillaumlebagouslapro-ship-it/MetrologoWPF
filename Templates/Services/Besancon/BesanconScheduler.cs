@@ -72,7 +72,7 @@ namespace Metrologo.Services.Besancon
         /// </summary>
         public static async Task<ResultatBesancon> ExecuterAsync()
         {
-            var res = new ResultatBesancon { CheminJson = BesanconStore.Chemin };
+            var res = new ResultatBesancon { Destination = "Base SQL BASE_E2M (SVR-OR)" };
             var cfg = BesanconConfig.Charger();
 
             var rub = EtatApplication.RubidiumActif;
@@ -101,46 +101,49 @@ namespace Metrologo.Services.Besancon
             var mesures = BesanconParser.Parser(contenu);
             res.ValeursLues = mesures.Count;
 
-            var donnees = BesanconStore.Charger();
-            int nouvelles = 0;
-            foreach (var m in mesures)
-                if (BesanconStore.UpsertValeurJournaliere(donnees, rub.Id, m.Mjd, m.Valeur)) nouvelles++;
-            res.Nouvelles = nouvelles;
-
-            // Moyennes hebdo : le mardi, on (re)calcule les 3 mardis précédents + le mardi courant
-            // (comme le legacy) ; les autres jours, on tente le dernier mardi passé.
-            var aujourdhui = DateTime.Today;
-            if (aujourdhui.DayOfWeek == DayOfWeek.Tuesday)
+            // Intégration en base SQL (BASE_E2M). Toute erreur SQL est remontée à l'admin.
+            try
             {
-                int mjd = JourJulien.VersMjd(aujourdhui);
-                foreach (int mardi in new[] { mjd - 21, mjd - 14, mjd - 7, mjd })
-                    TenterCalculHebdo(donnees, rub.Id, mardi);
+                int nouvelles = 0;
+                foreach (var m in mesures)
+                    if (await BesanconStore.UpsertValeurJournaliereAsync(rub.Id, m.Mjd, m.Valeur)) nouvelles++;
+                res.Nouvelles = nouvelles;
+
+                // Moyennes hebdo : le mardi, on (re)calcule les 3 mardis précédents + le mardi
+                // courant (comme le legacy) ; les autres jours, on tente le dernier mardi passé.
+                var aujourdhui = DateTime.Today;
+                if (aujourdhui.DayOfWeek == DayOfWeek.Tuesday)
+                {
+                    int mjd = JourJulien.VersMjd(aujourdhui);
+                    foreach (int mardi in new[] { mjd - 21, mjd - 14, mjd - 7, mjd })
+                        await TenterCalculHebdoAsync(rub.Id, rub.AvecGPS, mardi);
+                }
+                else
+                {
+                    int decalDepuisMardi = ((int)aujourdhui.DayOfWeek - (int)DayOfWeek.Tuesday + 7) % 7;
+                    int mjdDernierMardi = JourJulien.VersMjd(aujourdhui.AddDays(-decalDepuisMardi));
+                    await TenterCalculHebdoAsync(rub.Id, rub.AvecGPS, mjdDernierMardi);
+                }
+
+                res.TotalJournalieres = await BesanconStore.CompterJournalieresAsync(rub.Id);
+                var dh = await BesanconStore.DerniereMoyenneHebdoAsync(rub.Id);
+                if (dh.HasValue)
+                {
+                    res.DerniereMoyenneHebdo = dh.Value.moyenne;
+                    res.DerniereMoyenneHebdoMjd = dh.Value.mardiMjd;
+                }
+                res.EnregistrementOk = true;
             }
-            else
+            catch (Exception exDb)
             {
-                int decalDepuisMardi = ((int)aujourdhui.DayOfWeek - (int)DayOfWeek.Tuesday + 7) % 7;
-                int mjdDernierMardi = JourJulien.VersMjd(aujourdhui.AddDays(-decalDepuisMardi));
-                TenterCalculHebdo(donnees, rub.Id, mjdDernierMardi);
-            }
-
-            res.SauvegardeJsonOk = BesanconStore.Sauvegarder(donnees);
-
-            // Synthèse pour la consultation immédiate (stock total + dernière moyenne hebdo).
-            res.TotalJournalieres = donnees.Journalieres.Count(v => v.RubidiumId == rub.Id);
-            var derniereHebdo = donnees.Hebdos
-                .Where(h => h.RubidiumId == rub.Id)
-                .OrderByDescending(h => h.MardiMjd)
-                .FirstOrDefault();
-            if (derniereHebdo != null)
-            {
-                res.DerniereMoyenneHebdo = derniereHebdo.Moyenne;
-                res.DerniereMoyenneHebdoMjd = derniereHebdo.MardiMjd;
+                res.Erreur = $"Écriture en base SQL échouée (SVR-OR / BASE_E2M) : {exDb.Message}";
+                Journal.Journal.Erreur(CategorieLog.Systeme, "BESANCON_DB_KO", res.Erreur);
+                return res;
             }
 
             Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_OK",
-                $"Besançon intégré : {mesures.Count} valeur(s) lue(s), {nouvelles} nouvelle(s) "
-              + $"pour le rubidium « {rub.Designation} » (#{rub.Id}). "
-              + $"Brut : {res.CheminBrut ?? "NON ÉCRIT"} · JSON : {(res.SauvegardeJsonOk ? res.CheminJson : "NON ÉCRIT")}.");
+                $"Besançon intégré en base : {mesures.Count} valeur(s) lue(s), {res.Nouvelles} nouvelle(s) "
+              + $"pour le rubidium « {rub.Designation} » (#{rub.Id}). Brut : {res.CheminBrut ?? "NON ÉCRIT"}.");
 
             if (cfg.SupprimerApresTelechargement)
                 await BesanconFtpService.SupprimerDistantAsync(cfg);
@@ -148,14 +151,15 @@ namespace Metrologo.Services.Besancon
             return res;
         }
 
-        private static void TenterCalculHebdo(DonneesBesancon d, int rubId, int mardiMjd)
+        private static async Task TenterCalculHebdoAsync(int rubId, bool avecGps, int mardiMjd)
         {
-            if (BesanconStore.CalculerMoyenneHebdo(d, rubId, mardiMjd, out double moyenne, out double delta))
+            var r = await BesanconStore.CalculerMoyenneHebdoAsync(rubId, mardiMjd);
+            if (r.HasValue)
             {
-                BesanconStore.UpsertMoyenneHebdo(d, rubId, mardiMjd, moyenne, delta);
+                await BesanconStore.UpsertMoyenneHebdoAsync(rubId, avecGps, mardiMjd, r.Value.moyenne, r.Value.deltaTps);
                 Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_HEBDO",
-                    $"Moyenne hebdo rubidium #{rubId} (mardi MJD {mardiMjd}) : {moyenne:G9} "
-                  + $"(delta {delta:G9} s/jour).");
+                    $"Moyenne hebdo rubidium #{rubId} (mardi MJD {mardiMjd}) : {r.Value.moyenne:G9} "
+                  + $"(delta {r.Value.deltaTps:G9} s/jour).");
             }
         }
 
@@ -195,8 +199,10 @@ namespace Metrologo.Services.Besancon
     {
         public bool Telecharge { get; set; }
         public string? CheminBrut { get; set; }
-        public string CheminJson { get; set; } = "";
-        public bool SauvegardeJsonOk { get; set; }
+        /// <summary>Où le suivi est enregistré (ex. « Base SQL BASE_E2M »).</summary>
+        public string Destination { get; set; } = "";
+        /// <summary>Vrai si l'enregistrement en base a réussi.</summary>
+        public bool EnregistrementOk { get; set; }
         public int ValeursLues { get; set; }
         public int Nouvelles { get; set; }
         public int TotalJournalieres { get; set; }
