@@ -104,5 +104,20 @@ namespace Metrologo.Models
             Preferences.Charger();
             _rubidiumActif = Preferences.RubidiumActif;
         }
+
+        /// <summary>
+        /// Force la relecture du rubidium actif depuis les préférences partagées (fichier
+        /// réseau) et notifie l'UI via <see cref="RubidiumActifChange"/>. Sans ça,
+        /// <see cref="AssurerChargement"/> ne s'exécute qu'une fois (au démarrage) et le
+        /// rubidium resterait figé après un changement admin fait depuis un autre poste.
+        /// Appelé par l'actualisation à chaud de la configuration.
+        /// </summary>
+        public static void RechargerRubidiumActif()
+        {
+            Preferences.Charger();
+            _rubidiumActif = Preferences.RubidiumActif;
+            _chargeDepuisPreferences = true;
+            RubidiumActifChange?.Invoke(null, EventArgs.Empty);
+        }
     }
 }

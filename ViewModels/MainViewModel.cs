@@ -103,11 +103,16 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(ResumeChangementsAdmin));
         }
 
+        /// <summary>Vrai quand un rafraîchissement a été demandé pendant une mesure et
+        /// reste en attente de la fin de celle-ci (évite un double-abonnement).</summary>
+        private bool _rafraichissementDiffereArme;
+
         /// <summary>
         /// Clic sur le triangle : affiche le détail des changements et propose de les
-        /// charger tout de suite. « Oui » → recharge la configuration à chaud (sans
-        /// interrompre une mesure) et efface l'indicateur. « Non » → l'indicateur reste
-        /// affiché comme rappel ; les réglages seront pris au prochain démarrage.
+        /// charger tout de suite. « Oui » → relit les fichiers de configuration et applique
+        /// les modifications ; si une mesure est en cours, on attend sa fin avant de relire.
+        /// « Non » → l'indicateur reste affiché comme rappel ; les réglages seront pris au
+        /// prochain démarrage.
         /// </summary>
         [RelayCommand]
         private async Task AcquitterChangementsAdmin()
@@ -127,13 +132,62 @@ namespace Metrologo.ViewModels
             var choix = MessageBox.Show(
                 "Des changements de configuration ont été appliqués depuis un autre poste :\n\n" + liste
               + "\n\nVoulez-vous charger maintenant la dernière configuration ?\n\n"
-              + "• Oui : recharge immédiatement (sans interrompre une mesure en cours).\n"
+              + "• Oui : relit les fichiers et applique les modifications (si une mesure est en\n"
+              + "  cours, l'actualisation est différée jusqu'à la fin de la mesure).\n"
               + "• Non : un rappel reste affiché ; les nouveaux réglages seront pris au prochain démarrage.",
                 "Changements administrateur", MessageBoxButton.YesNo, MessageBoxImage.Information);
 
             if (choix != MessageBoxResult.Yes)
                 return; // « Plus tard » : on garde l'indicateur ⚠ comme rappel persistant.
 
+            // Une mesure est en cours : on ne relit pas le fichier maintenant (on ne veut
+            // pas changer les réglages au milieu d'une acquisition). On arme un
+            // rafraîchissement différé qui s'exécutera dès la fin de la mesure.
+            if (_accueilViewModel.MesureEnCours)
+            {
+                ArmerRafraichissementDiffere();
+                MessageBox.Show(
+                    "Une mesure est en cours.\n\nLa configuration sera actualisée automatiquement "
+                  + "dès la fin de la mesure (le rappel ⚠ reste affiché jusque-là).",
+                    "Actualisation différée", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            await ExecuterRafraichissementAsync();
+        }
+
+        /// <summary>S'abonne (une seule fois) à la fin de la mesure en cours pour relire la
+        /// configuration dès qu'elle se termine.</summary>
+        private void ArmerRafraichissementDiffere()
+        {
+            if (_rafraichissementDiffereArme) return;
+            _rafraichissementDiffereArme = true;
+            _accueilViewModel.PropertyChanged += OnAccueilPropertyChangedPourRafraichissement;
+        }
+
+        private void OnAccueilPropertyChangedPourRafraichissement(object? sender,
+            System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(AccueilViewModel.MesureEnCours)) return;
+            if (_accueilViewModel.MesureEnCours) return; // mesure toujours en cours
+
+            // Fin de mesure : on se désabonne et on applique. La fin de mesure peut survenir
+            // sur un thread de fond → on marshale sur le thread UI avant de toucher aux
+            // bindings (RubidiumActifChange, catalogue…).
+            _accueilViewModel.PropertyChanged -= OnAccueilPropertyChangedPourRafraichissement;
+            _rafraichissementDiffereArme = false;
+
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+                _ = dispatcher.InvokeAsync(async () => await ExecuterRafraichissementAsync());
+            else
+                _ = ExecuterRafraichissementAsync();
+        }
+
+        /// <summary>Relit les fichiers de configuration et applique les changements, puis
+        /// efface l'indicateur. Partagé entre l'actualisation immédiate et différée.</summary>
+        private async Task ExecuterRafraichissementAsync()
+        {
             try
             {
                 await RafraichirConfigurationService.RafraichirAsync();

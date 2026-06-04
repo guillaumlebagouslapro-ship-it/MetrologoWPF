@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Metrologo.Models;
 
 namespace Metrologo.Services
 {
@@ -20,16 +21,27 @@ namespace Metrologo.Services
     {
         public static async Task RafraichirAsync()
         {
-            // 1. Chemins EN PREMIER : les autres services en dérivent (dossier
-            //    Incertitudes, fichier catalogue, étiquettes…). Relit le cache local
-            //    puis le fichier maître serveur si renseigné. Idempotent.
+            // 1. Chemins EN PREMIER : tous les fichiers réseau ci-dessous en dérivent
+            //    (rubidium actif, utilisateurs, catalogues, incertitudes…). Relit le cache
+            //    local puis le fichier maître serveur si renseigné. Idempotent.
             CheminsMetrologo.ChargerConfigChemins();
 
             // 2. Étiquettes Module/Fonction écrites dans les feuilles Excel : vide le
             //    cache, relu au prochain ObtenirPourType().
             MesureConfigService.Recharger();
 
-            // 3. Catalogue d'appareils : singleton en mémoire. ChargerAsync() relit le
+            // 3. Caches mémoire des données partagées : invalidés → relus à la prochaine
+            //    ouverture de leur écran (sélection utilisateur, choix rubidium).
+            Preferences.InvaliderCacheUtilisateurs();
+            Preferences.InvaliderCacheCatalogueRubidiums();
+
+            // 4. Rubidium actif : relit le fichier partagé ET lève RubidiumActifChange.
+            //    L'AccueilViewModel y est abonné → le bandeau se met à jour immédiatement.
+            //    Synchrone et exécuté sur le thread appelant (UI) avant tout await, donc
+            //    la notification de binding part bien du thread UI.
+            EtatApplication.RechargerRubidiumActif();
+
+            // 5. Catalogue d'appareils : singleton en mémoire. ChargerAsync() relit le
             //    JSON réseau et lève CatalogueChange → les écrans bindés se rafraîchissent.
             await Catalogue.CatalogueAppareilsService.Instance.ChargerAsync();
         }

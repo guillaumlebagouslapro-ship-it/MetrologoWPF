@@ -133,8 +133,19 @@ namespace Metrologo.Services
                     Message = $"Initialisation du {appareil.Nom} (GPIB {appareil.Adresse})...",
                 });
 
-                await appareil.InitialiserAsync(_driver, ct);
-                Perf("InitialiserAsync (*RST;*CLS)");
+                if (!mesure.InitManu)
+                {
+                    await appareil.InitialiserAsync(_driver, ct);
+                    Perf("InitialiserAsync (*RST;*CLS)");
+                }
+                else
+                {
+                    // Init manuelle : pas de *RST/*CLS — il remettrait l'appareil aux défauts
+                    // et écraserait la configuration faite manuellement par l'opérateur.
+                    JournalLog.Info(CategorieLog.Mesure, "INIT_MANUELLE",
+                        $"Init manuelle : *RST/*CLS et config non envoyés à {appareil.Nom} " +
+                        "(configuration assurée à la main par l'opérateur).");
+                }
                 await appareil.ConfigurerAsync(_driver, mesure, mux: null, commandesMux: null, ct);
                 Perf("ConfigurerAsync (IFC + ConfEntree + SRQ)");
                 await RejouerScpiPostResetAsync(appareil, mesure, ct);

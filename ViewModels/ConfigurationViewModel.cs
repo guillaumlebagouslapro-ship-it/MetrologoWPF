@@ -429,6 +429,7 @@ namespace Metrologo.ViewModels
             }
 
             OnPropertyChanged(nameof(AReglagesDynamiques));
+            OnPropertyChanged(nameof(ShowReglagesDynamiques));
             OnPropertyChanged(nameof(AReglagesVoieA));
             OnPropertyChanged(nameof(AReglagesVoieB));
             OnPropertyChanged(nameof(AReglagesVoieC));
@@ -543,6 +544,31 @@ namespace Metrologo.ViewModels
         /// </summary>
         public bool InitManuDisponible => MesureConfig.TypeMesure == TypeMesure.Frequence;
 
+        /// <summary>
+        /// État de la case « Initialisation manuelle » (wrapper sur le modèle pour rafraîchir
+        /// l'affichage quand on coche/décoche). Cochée : l'opérateur configure l'appareil à la
+        /// main, l'app n'envoie aucune commande de configuration et masque les réglages.
+        /// </summary>
+        public bool InitManu
+        {
+            get => MesureConfig.InitManu;
+            set
+            {
+                if (MesureConfig.InitManu == value) return;
+                MesureConfig.InitManu = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowReglagesDynamiques));
+            }
+        }
+
+        /// <summary>
+        /// Réglages dynamiques (voie, impédance 50 Ω/1 MΩ, couplage AC/DC, filtre, range,
+        /// trigger) affichés seulement quand l'appareil en propose ET que l'init manuelle
+        /// n'est PAS cochée. En init manuelle ils sont masqués : l'opérateur paramètre
+        /// l'appareil de son côté.
+        /// </summary>
+        public bool ShowReglagesDynamiques => AReglagesDynamiques && !MesureConfig.InitManu;
+
         // Source du signal : visible seulement pour le type "Fréquence"
         public bool ShowSourceMesure => MesureConfig.TypeMesure == TypeMesure.Frequence;
 
@@ -592,6 +618,8 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(IsSourceGenerateur));
             OnPropertyChanged(nameof(IndirectDisponible));
             OnPropertyChanged(nameof(InitManuDisponible));
+            OnPropertyChanged(nameof(InitManu));
+            OnPropertyChanged(nameof(ShowReglagesDynamiques));
         }
 
         public void OnTypeMesureChanged()
@@ -618,6 +646,11 @@ namespace Metrologo.ViewModels
             {
                 MesureConfig.GateIndex = MesureConfig.GateIndices[0]; // setter remet la liste à 1 élément
             }
+
+            // L'init manuelle n'est disponible que pour la Fréquence : on la décoche si on
+            // change de type, sinon une case cochée mais masquée resterait active.
+            if (!InitManuDisponible && MesureConfig.InitManu)
+                MesureConfig.InitManu = false;
 
             // Le filtrage des modules d'incertitude dépend de TypeMesure → relister.
             RebuildModulesIncertitude();
@@ -698,7 +731,19 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            await EnvoyerCommandesScpiAsync();
+            if (MesureConfig.InitManu)
+            {
+                // Init manuelle : l'opérateur a configuré l'appareil à la main (impédance,
+                // couplage, mode…). On n'envoie aucune commande de configuration et on vide
+                // les réglages pour que rien ne soit rejoué après un éventuel *RST (lequel est
+                // de toute façon sauté côté orchestrateur en init manuelle).
+                MesureConfig.CommandesScpiReglages = new List<string>();
+            }
+            else
+            {
+                await EnvoyerCommandesScpiAsync();
+            }
+
             CloseAction?.Invoke(true);
         }
 

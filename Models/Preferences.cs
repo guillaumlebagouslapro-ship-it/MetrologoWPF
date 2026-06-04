@@ -174,6 +174,13 @@ namespace Metrologo.Models
             _cacheCatalogueRubidiums = nouvelleListe;
         }
 
+        /// <summary>
+        /// Invalide le cache mémoire du catalogue des rubidiums : la prochaine lecture de
+        /// <see cref="CatalogueRubidiums"/> relira le fichier réseau. Permet de refléter un
+        /// catalogue modifié depuis un autre poste sans redémarrer l'application.
+        /// </summary>
+        public static void InvaliderCacheCatalogueRubidiums() => _cacheCatalogueRubidiums = null;
+
         // -------- I/O réseau --------
 
         private static T? LireFichierReseau<T>(string chemin) where T : class

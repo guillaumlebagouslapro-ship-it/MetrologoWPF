@@ -378,7 +378,7 @@
                                 Margin="0,0,0,0">
                             <StackPanel>
                                 <CheckBox Content="Initialisation manuelle"
-                                          IsChecked="{Binding MesureConfig.InitManu}"
+                                          IsChecked="{Binding InitManu}"
                                           IsEnabled="{Binding InitManuDisponible}"
                                           Visibility="{Binding InitManuDisponible, Converter={StaticResource BoolToVis}}"
                                           Margin="0,0,0,12"/>
@@ -387,7 +387,7 @@
 
                         <!-- Réglages dynamiques définis dans le catalogue : regroupés par voie + mode
                              pour un rendu structuré. RadioButtons pour les choix binaires, ComboBox sinon. -->
-                        <StackPanel Visibility="{Binding AReglagesDynamiques, Converter={StaticResource BoolToVis}}"
+                        <StackPanel Visibility="{Binding ShowReglagesDynamiques, Converter={StaticResource BoolToVis}}"
                                     Margin="0,12,0,0">
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
