@@ -149,6 +149,11 @@ namespace Metrologo
             Journal.Configurer(new FichierJournalService());
             StartupLap("Journal.Configurer");
 
+            // Diagnostic de la base SQL Metrologo (SVR-OR / MetrologoUser) : journalise le serveur,
+            // le nom réel de la base par défaut et la présence des tables T_METROLOGO_*. Fire-and-
+            // forget : ne bloque pas le démarrage. Le résultat est dans le Journal (Système).
+            _ = Metrologo.Services.MetrologoDbService.DiagnostiquerAsync();
+
             // Ferme les sessions zombies (laissées ouvertes par un crash, taskkill, ou
             // arrêt brutal lors d'un debug). Sans ça, elles s'accumulent et apparaissent
             // perpétuellement « En cours » dans la liste du journal.
