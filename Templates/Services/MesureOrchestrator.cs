@@ -987,19 +987,6 @@ namespace Metrologo.Services
             {
                 result.Erreur = "Mesure annulée par l'utilisateur.";
                 JournalLog.Warn(CategorieLog.Mesure, "Execute", result.Erreur);
-
-                // Mesure stoppée : la feuille créée pour la mesure en cours ne doit pas être
-                // conservée. On ne supprime QUE si la feuille courante est incomplète (sinon, en
-                // balayage stabilité, on effacerait une gate précédente déjà terminée).
-                if (feuilleCouranteIncomplete && !string.IsNullOrEmpty(derniereFeuille))
-                {
-                    try { await ExcelInteropHost.Instance.SupprimerFeuilleMesureAsync(derniereFeuille); }
-                    catch (Exception exSuppr)
-                    {
-                        JournalLog.Warn(CategorieLog.Mesure, "Execute_SupprFeuilleStop",
-                            $"Suppression de la feuille « {derniereFeuille} » après arrêt échouée : {exSuppr.Message}");
-                    }
-                }
             }
             catch (Exception ex)
             {
@@ -1009,6 +996,25 @@ namespace Metrologo.Services
             }
             finally
             {
+                // Mesure stoppée : la feuille créée pour la mesure en cours est incomplète et ne
+                // doit pas être conservée. On déclenche la suppression dès que l'annulation a été
+                // demandée — PEU IMPORTE l'exception remontée : un arrêt via Device Clear interrompt
+                // un :READ? bloquant en levant une exception VISA (et non OperationCanceledException),
+                // qui partait jusqu'ici dans le catch générique sans nettoyer la feuille.
+                // On ne supprime QUE si la feuille courante est incomplète (sinon, en balayage
+                // stabilité, on effacerait une gate précédente déjà terminée).
+                if (ct.IsCancellationRequested
+                    && feuilleCouranteIncomplete
+                    && !string.IsNullOrEmpty(derniereFeuille))
+                {
+                    try { await ExcelInteropHost.Instance.SupprimerFeuilleMesureAsync(derniereFeuille); }
+                    catch (Exception exSuppr)
+                    {
+                        JournalLog.Warn(CategorieLog.Mesure, "Execute_SupprFeuilleStop",
+                            $"Suppression de la feuille « {derniereFeuille} » après arrêt échouée : {exSuppr.Message}");
+                    }
+                }
+
                 Perf("Fin de mesure");
                 _excel.FermerExcel();
 
