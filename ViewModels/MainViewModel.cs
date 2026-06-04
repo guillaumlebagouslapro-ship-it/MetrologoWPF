@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
+using Metrologo.Services;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
 using System.Collections.Generic;
@@ -83,7 +84,9 @@ namespace Metrologo.ViewModels
         public string ResumeChangementsAdmin =>
             _changementsAdmin.Count == 0
                 ? string.Empty
-                : "Changements de configuration récents :\n"
+                : "⚠ Vous n'utilisez pas la dernière configuration.\n"
+                  + "Cliquez pour l'actualiser.\n\n"
+                  + "Changements de configuration récents :\n"
                   + string.Join("\n", _changementsAdmin
                         .Skip(System.Math.Max(0, _changementsAdmin.Count - 8))
                         .Select(e => $"• {e.Horodatage:HH:mm} — {e.ActionLisible}"
@@ -100,24 +103,58 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(ResumeChangementsAdmin));
         }
 
-        /// <summary>Clic sur le triangle : affiche le détail des changements puis efface l'indicateur.</summary>
+        /// <summary>
+        /// Clic sur le triangle : affiche le détail des changements et propose de les
+        /// charger tout de suite. « Oui » → recharge la configuration à chaud (sans
+        /// interrompre une mesure) et efface l'indicateur. « Non » → l'indicateur reste
+        /// affiché comme rappel ; les réglages seront pris au prochain démarrage.
+        /// </summary>
         [RelayCommand]
-        private void AcquitterChangementsAdmin()
+        private async Task AcquitterChangementsAdmin()
         {
-            if (_changementsAdmin.Count > 0)
+            if (_changementsAdmin.Count == 0)
             {
-                string liste = string.Join("\n", _changementsAdmin.Select(e =>
-                    $"• {e.Horodatage:dd/MM HH:mm} — {e.ActionLisible}"
-                  + (string.IsNullOrWhiteSpace(e.Detail) ? "" : $" : {e.Detail}")
-                  + (string.IsNullOrWhiteSpace(e.Utilisateur) ? "" : $"  (par {e.Utilisateur})")));
-                MessageBox.Show(
-                    "Des changements de configuration ont été appliqués depuis un autre poste :\n\n" + liste,
-                    "Changements administrateur", MessageBoxButton.OK, MessageBoxImage.Information);
+                AChangementsAdminEnAttente = false;
+                NbChangementsAdmin = 0;
+                return;
             }
-            _changementsAdmin.Clear();
-            NbChangementsAdmin = 0;
-            AChangementsAdminEnAttente = false;
-            OnPropertyChanged(nameof(ResumeChangementsAdmin));
+
+            string liste = string.Join("\n", _changementsAdmin.Select(e =>
+                $"• {e.Horodatage:dd/MM HH:mm} — {e.ActionLisible}"
+              + (string.IsNullOrWhiteSpace(e.Detail) ? "" : $" : {e.Detail}")
+              + (string.IsNullOrWhiteSpace(e.Utilisateur) ? "" : $"  (par {e.Utilisateur})")));
+
+            var choix = MessageBox.Show(
+                "Des changements de configuration ont été appliqués depuis un autre poste :\n\n" + liste
+              + "\n\nVoulez-vous charger maintenant la dernière configuration ?\n\n"
+              + "• Oui : recharge immédiatement (sans interrompre une mesure en cours).\n"
+              + "• Non : un rappel reste affiché ; les nouveaux réglages seront pris au prochain démarrage.",
+                "Changements administrateur", MessageBoxButton.YesNo, MessageBoxImage.Information);
+
+            if (choix != MessageBoxResult.Yes)
+                return; // « Plus tard » : on garde l'indicateur ⚠ comme rappel persistant.
+
+            try
+            {
+                await RafraichirConfigurationService.RafraichirAsync();
+
+                _changementsAdmin.Clear();
+                NbChangementsAdmin = 0;
+                AChangementsAdminEnAttente = false;
+                OnPropertyChanged(nameof(ResumeChangementsAdmin));
+
+                ToastNotification.Afficher("Configuration à jour",
+                    "Les derniers réglages administrateur ont été chargés.");
+            }
+            catch (System.Exception ex)
+            {
+                // Échec (ex. partage serveur injoignable) : on NE touche pas à l'indicateur
+                // pour que l'utilisateur puisse réessayer plus tard.
+                MessageBox.Show(
+                    "Le rechargement de la configuration a échoué :\n" + ex.Message
+                  + "\n\nLes réglages seront pris en compte au prochain démarrage.",
+                    "Actualisation impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         public MainViewModel()

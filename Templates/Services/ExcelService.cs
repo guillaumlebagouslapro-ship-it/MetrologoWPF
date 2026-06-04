@@ -1597,15 +1597,16 @@ namespace Metrologo.Services
         private string TrouverNomFeuilleUnique(TypeMesure type)
         {
             // Feuilles uniques (1 par classeur) : pas de numérotation.
-            if (type == TypeMesure.FreqAvantInterv) return "avinter";
-            if (type == TypeMesure.FreqFinale) return "fqfinale";
+            if (type == TypeMesure.FreqAvantInterv) return "F_avant_interv";
+            if (type == TypeMesure.FreqFinale) return "F_finale";
 
-            // Préfixes courts demandés par l'utilisateur (feuilles numérotées : freq1, stab1, …).
+            // Préfixes courts (feuilles numérotées : stab1, inter1, …). La fréquence n'a
+            // pas de préfixe → onglets numérotés seuls (1, 2, 3, …).
             // Les formules cross-sheet de la Récap sont écrites dynamiquement (cf. EcrireLigneRecap)
             // avec le nom réel de la feuille — elles s'adaptent automatiquement.
             string prefixe = type switch
             {
-                TypeMesure.Frequence    => "freq",
+                TypeMesure.Frequence    => "",
                 TypeMesure.Stabilite    => "stab",
                 TypeMesure.Interval     => "inter",
                 TypeMesure.TachyOptique => "topti",

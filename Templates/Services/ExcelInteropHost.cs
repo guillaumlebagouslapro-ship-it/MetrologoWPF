@@ -1908,13 +1908,13 @@ namespace Metrologo.Services
 
         private string TrouverNomFeuilleUniqueInterne(TypeMesure type)
         {
-            if (_classeurActif == null) return "Mesure1";
-            if (type == TypeMesure.FreqAvantInterv) return "avinter";
-            if (type == TypeMesure.FreqFinale) return "fqfinale";
+            if (_classeurActif == null) return "1";
+            if (type == TypeMesure.FreqAvantInterv) return "F_avant_interv";
+            if (type == TypeMesure.FreqFinale) return "F_finale";
 
             string prefixe = type switch
             {
-                TypeMesure.Frequence    => "freq",
+                TypeMesure.Frequence    => "",   // fréquence : numéros seuls (1, 2, 3, …)
                 TypeMesure.Stabilite    => "stab",
                 TypeMesure.Interval     => "inter",
                 TypeMesure.TachyOptique => "topti",
