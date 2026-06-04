@@ -37,9 +37,24 @@ namespace Metrologo.Models
         public static Rubidium? RubidiumActif =>
             LireFichierReseau<Rubidium>(CheminsMetrologo.FichierRubidiumActif) ?? _settings.RubidiumActif;
 
+        /// <summary>Chemin par défaut du Metrologo.xla (nouvel emplacement FCT_VBA2016).</summary>
+        private const string CheminMacroParDefaut = @"C:\EXE_SPE\FCT_VBA2016\Metrologo.xla";
+
+        /// <summary>Ancien chemin par défaut — remplacé automatiquement par le nouveau.</summary>
+        private const string CheminMacroLegacy = @"C:\Exe_Spe\Fct_VBA\Metrologo.xla";
+
         public static string CheminMacroXLA
         {
-            get => _settings.CheminMacroXLA ?? @"C:\Exe_Spe\Fct_VBA\Metrologo.xla";
+            get
+            {
+                var c = _settings.CheminMacroXLA;
+                // Aucun réglage, ou ancien chemin par défaut → nouveau chemin par défaut.
+                // Un chemin personnalisé (autre) est conservé tel quel.
+                if (string.IsNullOrWhiteSpace(c)
+                    || string.Equals(c, CheminMacroLegacy, System.StringComparison.OrdinalIgnoreCase))
+                    return CheminMacroParDefaut;
+                return c;
+            }
             set { _settings.CheminMacroXLA = value; SauvegarderLocal(); }
         }
 

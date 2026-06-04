@@ -62,7 +62,7 @@ namespace Metrologo.ViewModels
         {
             var init = File.Exists(MacroXlaChemin)
                 ? Path.GetDirectoryName(MacroXlaChemin) ?? ""
-                : @"C:\Exe_Spe\Fct_VBA";
+                : @"C:\EXE_SPE\FCT_VBA2016";
 
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
