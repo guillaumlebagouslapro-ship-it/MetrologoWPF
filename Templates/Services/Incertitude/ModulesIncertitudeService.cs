@@ -295,6 +295,34 @@ namespace Metrologo.Services.Incertitude
                 $"Module {numModule} copié de {DossierPourType(source)} vers {DossierPourType(cible)}.");
         }
 
+        /// <summary>
+        /// Renomme un module : renomme son fichier CSV de <paramref name="ancienNum"/> vers
+        /// <paramref name="nouveauNum"/> dans le même sous-dossier. No-op si identique. Lève si
+        /// le nouveau nom existe déjà (l'appelant doit gérer/confirmer).
+        /// </summary>
+        public static void Renommer(string ancienNum, string nouveauNum, TypeMesure type)
+        {
+            if (string.IsNullOrWhiteSpace(nouveauNum))
+                throw new ArgumentException("Nouveau numéro de module requis.");
+            if (string.Equals(ancienNum, nouveauNum, StringComparison.Ordinal))
+                return;
+
+            string dossier = DossierComplet(type);
+            string src = Path.Combine(dossier, ancienNum + ".csv");
+            string dst = Path.Combine(dossier, nouveauNum + ".csv");
+
+            if (File.Exists(dst))
+                throw new IOException($"Un module « {nouveauNum} » existe déjà dans cette catégorie.");
+            if (File.Exists(src))
+            {
+                Directory.CreateDirectory(dossier);
+                File.Move(src, dst);
+            }
+
+            JournalLog.Info(CategorieLog.Administration, "INCERT_MODULE_RENOMME",
+                $"Module {ancienNum} renommé en {nouveauNum} ({DossierPourType(type)}).");
+        }
+
         /// <summary>Supprime le fichier CSV d'un module dans le sous-dossier de son type.</summary>
         public static void Supprimer(string numModule, TypeMesure type)
         {

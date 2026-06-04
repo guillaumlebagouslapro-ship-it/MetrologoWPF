@@ -32,9 +32,20 @@ namespace Metrologo.ViewModels
         [NotifyCanExecuteChangedFor(nameof(CopierVersCommand))]
         [NotifyPropertyChangedFor(nameof(InfosFonctions))]
         [NotifyPropertyChangedFor(nameof(LibelleAjouter))]
+        [NotifyPropertyChangedFor(nameof(AModuleSelectionne))]
         private ModuleIncertitude? _moduleSelectionne;
 
+        /// <summary>Vrai si un module est sélectionné (active les champs d'édition nom/commentaire).</summary>
+        public bool AModuleSelectionne => ModuleSelectionne != null;
+
         [ObservableProperty] private string _statut = "Prêt.";
+
+        /// <summary>NumModule du module au moment de sa sélection — pour détecter un renommage
+        /// (et renommer le fichier CSV en conséquence) lors de l'enregistrement.</summary>
+        private string _numModuleOriginal = string.Empty;
+
+        partial void OnModuleSelectionneChanged(ModuleIncertitude? value)
+            => _numModuleOriginal = value?.NumModule ?? string.Empty;
 
         // ------- Catégorie (sous-dossier) actuellement consultée -------
 
@@ -170,6 +181,31 @@ namespace Metrologo.ViewModels
             if (ModuleSelectionne == null) return;
             try
             {
+                string nouveauNum = (ModuleSelectionne.NumModule ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(nouveauNum))
+                {
+                    MessageBox.Show("Le numéro de module ne peut pas être vide.",
+                        "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                ModuleSelectionne.NumModule = nouveauNum;
+
+                // Renommage éventuel : si le N° module a changé, on renomme d'abord le fichier CSV
+                // (refus si un autre module porte déjà ce nom), puis on sauvegarde le contenu.
+                if (!string.IsNullOrEmpty(_numModuleOriginal)
+                    && !string.Equals(_numModuleOriginal, nouveauNum, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Modules.Any(m => !ReferenceEquals(m, ModuleSelectionne)
+                            && string.Equals(m.NumModule, nouveauNum, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        MessageBox.Show($"Un module « {nouveauNum} » existe déjà dans la catégorie « {LibelleCategorie} ».",
+                            "Doublon", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    ModulesIncertitudeService.Renommer(_numModuleOriginal, nouveauNum, TypeMesureSelectionne);
+                    _numModuleOriginal = nouveauNum;
+                }
+
                 ModulesIncertitudeService.Sauvegarder(ModuleSelectionne, TypeMesureSelectionne);
                 Statut = $"Module {ModuleSelectionne.NumModule} enregistré ({ModuleSelectionne.Lignes.Count} lignes).";
                 OnPropertyChanged(nameof(InfosFonctions));

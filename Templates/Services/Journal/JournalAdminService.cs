@@ -46,7 +46,7 @@ namespace Metrologo.Services.Journal
             // Rubidium
             "SELECTION_RUBIDIUM", "CATALOGUE_RUBIDIUMS_MAJ",
             // Modules d'incertitude
-            "INCERT_MODULE_SAUVE", "INCERT_MODULE_COPIE", "INCERT_MODULE_SUPPR",
+            "INCERT_MODULE_SAUVE", "INCERT_MODULE_COPIE", "INCERT_MODULE_SUPPR", "INCERT_MODULE_RENOMME",
             // Catalogue appareils
             "CATALOGUE_MODIF", "CATALOGUE_SUPPR", "CATALOGUE_IMPORT", "CATALOGUE_IMPORT_UI",
             // Utilisateurs / comptes
@@ -117,6 +117,7 @@ namespace Metrologo.Services.Journal
             "INCERT_MODULE_SAUVE"     => "Module d'incertitude enregistré",
             "INCERT_MODULE_COPIE"     => "Module d'incertitude dupliqué",
             "INCERT_MODULE_SUPPR"     => "Module d'incertitude supprimé",
+            "INCERT_MODULE_RENOMME"   => "Module d'incertitude renommé",
             "CATALOGUE_MODIF"         => "Appareil ajouté / modifié au catalogue",
             "CATALOGUE_SUPPR"         => "Appareil supprimé du catalogue",
             "CATALOGUE_IMPORT"        => "Catalogue appareils importé",

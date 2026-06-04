@@ -252,12 +252,33 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock FontSize="20" FontWeight="Bold" Foreground="{StaticResource AsertiNavyBrush}">
-                                <Run Text="{Binding ModuleSelectionne.NumModule, FallbackValue='Aucun module'}"/>
-                            </TextBlock>
-                            <TextBlock FontSize="12" Margin="0,2,0,0"
+                            <!-- N° module et désignation/commentaire ÉDITABLES. Le renommage du
+                                 N° module renomme le fichier CSV à l'enregistrement. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                    <TextBlock Text="N° MODULE" FontSize="9" FontWeight="Bold"
+                                               Foreground="{StaticResource AsertiOrangeBrush}"/>
+                                    <ui:TextBox MinWidth="160"
+                                                FontSize="16" FontWeight="Bold"
+                                                IsEnabled="{Binding AModuleSelectionne}"
+                                                Text="{Binding ModuleSelectionne.NumModule, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                PlaceholderText="Aucun module"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="DÉSIGNATION / COMMENTAIRE" FontSize="9" FontWeight="Bold"
+                                               Foreground="{StaticResource AsertiOrangeBrush}"/>
+                                    <ui:TextBox IsEnabled="{Binding AModuleSelectionne}"
+                                                Text="{Binding ModuleSelectionne.NomAffichage, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                PlaceholderText="ex. Compteur de fréquence ou Tachymètre"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock FontSize="10" Margin="0,4,0,0"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                       Text="{Binding ModuleSelectionne.NomAffichage}"/>
+                                       Text="Modifie le N° ou la désignation puis clique « Enregistrer » (le renommage renomme le fichier CSV)."/>
                         </StackPanel>
                     </Grid>
                     <TextBlock Grid.Row="1" Text="{Binding InfosFonctions}"

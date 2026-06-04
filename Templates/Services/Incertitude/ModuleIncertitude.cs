@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -14,13 +15,18 @@ namespace Metrologo.Services.Incertitude
     /// avec différentes valeurs de <c>Fonction</c>, le module est utilisable pour ces
     /// types de mesure. C'est le filtre du ComboBox dans la fenêtre Configuration.
     /// </summary>
-    public class ModuleIncertitude
+    public partial class ModuleIncertitude : ObservableObject
     {
-        /// <summary>Identifiant du module (= nom du fichier CSV sans extension). Ex: "MF51901A".</summary>
-        public string NumModule { get; set; } = string.Empty;
+        /// <summary>Identifiant du module (= nom du fichier CSV sans extension). Ex: "MF51901A".
+        /// Éditable dans la gestion des modules (un renommage = renommage du fichier CSV).</summary>
+        [ObservableProperty] private string _numModule = string.Empty;
 
-        /// <summary>Nom lisible affiché dans les listes UI. Optionnel — fallback sur NumModule.</summary>
-        public string NomAffichage { get; set; } = string.Empty;
+        /// <summary>Nom/commentaire lisible affiché dans les listes UI (ex. « Compteur de fréquence
+        /// ou Tachymètre »). Optionnel — fallback sur NumModule. Éditable.</summary>
+        [ObservableProperty] private string _nomAffichage = string.Empty;
+
+        partial void OnNumModuleChanged(string value) => OnPropertyChanged(nameof(LibelleAffiche));
+        partial void OnNomAffichageChanged(string value) => OnPropertyChanged(nameof(LibelleAffiche));
 
         /// <summary>
         /// Faux pour les modules dont l'incertitude ne dépend pas d'une porte temporelle —
