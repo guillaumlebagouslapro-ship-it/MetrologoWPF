@@ -16,8 +16,12 @@
 
         // Affiche directement le nom choisi dans le catalogue (réglage manuel à part).
         public string NomAffichage => EstReglageManuel
-            ? $"Réglage manuel ({FrequenceMoyenne} Hz)"
+            ? $"Réglage manuel ({Services.SaisieHelper.FormaterFrequence(FrequenceMoyenne)} Hz)"
             : Designation;
+
+        /// <summary>Fréquence formatée pour l'affichage : groupée par milliers, précision exacte
+        /// (« 10 000 000 » / « 10 000 000,1234 »). Pour les listes/onglets rubidium.</summary>
+        public string FrequenceAffichee => Services.SaisieHelper.FormaterFrequence(FrequenceMoyenne);
 
         /// <summary>
         /// Libellé écrit dans la feuille de mesure (zone <c>ZNRubidium</c>). On affiche

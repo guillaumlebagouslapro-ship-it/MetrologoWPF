@@ -71,11 +71,11 @@ namespace Metrologo.Models
                 AssurerChargement();
                 if (_rubidiumActif == null) return "Rubidium : non défini";
 
-                // Valeur EXACTE de la fréquence de référence : toute la précision du double
-                // (jusqu'à ~8-9 décimales utiles), sans troncature à 2 décimales. C'est cette
-                // valeur que ZNFreqRef reprend telle quelle dans le rapport Excel.
-                string freq = _rubidiumActif.FrequenceMoyenne.ToString(
-                    CultureInfo.GetCultureInfo("fr-FR"));
+                // Valeur EXACTE de la fréquence de référence (toute la précision du double),
+                // mais groupée par milliers pour la lisibilité (« 10 000 000 » au lieu de
+                // « 10000000 » collé). C'est cette valeur que ZNFreqRef reprend dans Excel.
+                string freq = Metrologo.Services.SaisieHelper.FormaterFrequence(
+                    _rubidiumActif.FrequenceMoyenne);
                 string libelle = _rubidiumActif.EstReglageManuel
                     ? "Réglage manuel"
                     : _rubidiumActif.Designation;

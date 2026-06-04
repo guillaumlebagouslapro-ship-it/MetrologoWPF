@@ -10,6 +10,41 @@ namespace Metrologo.Services
     public static class SaisieHelper
     {
         /// <summary>
+        /// Formate une fréquence (Hz) pour AFFICHAGE : partie entière groupée par milliers
+        /// (« 10 000 000 ») tout en conservant la valeur EXACTE (toute la précision du double,
+        /// sans bruit flottant ni troncature). Combine lisibilité et exactitude.
+        /// </summary>
+        public static string FormaterFrequence(double hz)
+        {
+            // Représentation exacte la plus courte (pas de bruit), culture neutre.
+            string brut = hz.ToString(CultureInfo.InvariantCulture);
+
+            // Cas notation scientifique (valeurs extrêmes) : repli simple groupé.
+            if (brut.IndexOf('E') >= 0 || brut.IndexOf('e') >= 0)
+                return hz.ToString("#,##0.######", CultureInfo.GetCultureInfo("fr-FR"));
+
+            bool negatif = brut.StartsWith("-", System.StringComparison.Ordinal);
+            if (negatif) brut = brut.Substring(1);
+
+            string partieEntiere = brut;
+            string partieFrac = string.Empty;
+            int pt = brut.IndexOf('.');
+            if (pt >= 0)
+            {
+                partieEntiere = brut.Substring(0, pt);
+                partieFrac = brut.Substring(pt + 1);
+            }
+
+            // Groupe la partie entière par paquets de 3 (espace), via fr-FR.
+            if (long.TryParse(partieEntiere, NumberStyles.None, CultureInfo.InvariantCulture, out long ent))
+                partieEntiere = ent.ToString("#,##0", CultureInfo.GetCultureInfo("fr-FR"));
+
+            return (negatif ? "-" : string.Empty)
+                 + partieEntiere
+                 + (partieFrac.Length > 0 ? "," + partieFrac : string.Empty);
+        }
+
+        /// <summary>
         /// Parse un texte saisi en <see cref="double"/>. Accepte la virgule ou le
         /// point comme séparateur décimal, ignore les espaces de bord, et utilise
         /// <see cref="CultureInfo.InvariantCulture"/> pour un résultat indépendant

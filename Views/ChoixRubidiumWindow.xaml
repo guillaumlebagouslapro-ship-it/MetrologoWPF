@@ -268,7 +268,8 @@
                                             <TextBlock FontSize="11"
                                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}">
                                                 <Run Text="F moyenne : "/>
-                                                <Run Text="{Binding FrequenceMoyenne, StringFormat={}{0:N2} Hz}"/>
+                                                <Run Text="{Binding FrequenceAffichee, Mode=OneWay}"/>
+                                                <Run Text=" Hz"/>
                                             </TextBlock>
                                         </StackPanel>
 
