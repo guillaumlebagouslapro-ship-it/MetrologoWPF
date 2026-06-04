@@ -147,6 +147,24 @@
                 <!-- Utilisateur connecté (en gros) + bouton Quitter, à droite — à l'opposé de la
                      navigation (Accueil / Administration…). -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Indicateur persistant : changements admin reçus d'un autre poste.
+                         Reste affiché jusqu'au clic (qui montre le détail et l'efface). -->
+                    <Button Command="{Binding AcquitterChangementsAdminCommand}"
+                            Visibility="{Binding AChangementsAdminEnAttente, Converter={StaticResource BoolToVisibilityConverter}}"
+                            ToolTip="{Binding ResumeChangementsAdmin}"
+                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                            Margin="0,0,18,0" Padding="2" VerticalAlignment="Center">
+                        <Grid>
+                            <ui:SymbolIcon Symbol="Warning24" FontSize="26" Foreground="#FFFBBF24"/>
+                            <Border Background="#FFDC2626" CornerRadius="8" MinWidth="16" Height="16"
+                                    Padding="3,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Margin="0,-6,-8,0">
+                                <TextBlock Text="{Binding NbChangementsAdmin}" Foreground="White"
+                                           FontSize="9" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                    </Button>
                     <ui:SymbolIcon Symbol="Person24" FontSize="22"
                                    Foreground="White"
                                    VerticalAlignment="Center" Margin="0,0,10,0"/>

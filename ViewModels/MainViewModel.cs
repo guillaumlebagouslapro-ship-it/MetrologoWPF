@@ -1,7 +1,10 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
+using Metrologo.Services.Journal;
 using Metrologo.Views;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -66,8 +69,61 @@ namespace Metrologo.ViewModels
         }
         public string RubidiumActifTexte => _accueilViewModel.RubidiumActifTexte;
 
+        // ---- Changements admin reçus depuis un AUTRE poste (indicateur persistant ⚠) ----
+        private readonly List<EntreeJournalAdmin> _changementsAdmin = new();
+
+        /// <summary>Vrai dès qu'au moins un changement admin a été reçu et pas encore acquitté
+        /// (affiche le triangle d'alerte dans le bandeau ; disparaît au clic).</summary>
+        [ObservableProperty] private bool _aChangementsAdminEnAttente;
+
+        /// <summary>Nombre de changements non acquittés (badge sur le triangle).</summary>
+        [ObservableProperty] private int _nbChangementsAdmin;
+
+        /// <summary>Résumé pour l'infobulle du triangle.</summary>
+        public string ResumeChangementsAdmin =>
+            _changementsAdmin.Count == 0
+                ? string.Empty
+                : "Changements de configuration récents :\n"
+                  + string.Join("\n", _changementsAdmin
+                        .Skip(System.Math.Max(0, _changementsAdmin.Count - 8))
+                        .Select(e => $"• {e.Horodatage:HH:mm} — {e.ActionLisible}"
+                                   + (string.IsNullOrWhiteSpace(e.Utilisateur) ? "" : $" (par {e.Utilisateur})")));
+
+        private void OnChangementsAdminRecus(IReadOnlyList<EntreeJournalAdmin> nouveaux)
+        {
+            _changementsAdmin.AddRange(nouveaux);
+            if (_changementsAdmin.Count > 100)
+                _changementsAdmin.RemoveRange(0, _changementsAdmin.Count - 100);
+
+            NbChangementsAdmin = _changementsAdmin.Count;
+            AChangementsAdminEnAttente = true;
+            OnPropertyChanged(nameof(ResumeChangementsAdmin));
+        }
+
+        /// <summary>Clic sur le triangle : affiche le détail des changements puis efface l'indicateur.</summary>
+        [RelayCommand]
+        private void AcquitterChangementsAdmin()
+        {
+            if (_changementsAdmin.Count > 0)
+            {
+                string liste = string.Join("\n", _changementsAdmin.Select(e =>
+                    $"• {e.Horodatage:dd/MM HH:mm} — {e.ActionLisible}"
+                  + (string.IsNullOrWhiteSpace(e.Detail) ? "" : $" : {e.Detail}")
+                  + (string.IsNullOrWhiteSpace(e.Utilisateur) ? "" : $"  (par {e.Utilisateur})")));
+                MessageBox.Show(
+                    "Des changements de configuration ont été appliqués depuis un autre poste :\n\n" + liste,
+                    "Changements administrateur", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            _changementsAdmin.Clear();
+            NbChangementsAdmin = 0;
+            AChangementsAdminEnAttente = false;
+            OnPropertyChanged(nameof(ResumeChangementsAdmin));
+        }
+
         public MainViewModel()
         {
+            NotificationsAdminWatcher.ChangementsRecus += OnChangementsAdminRecus;
+
             // Étape 1 : sélection de l'utilisateur dans le menu déroulant.
             VueActuelle = _selectionUtilisateurViewModel;
 

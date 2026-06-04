@@ -18,6 +18,12 @@ namespace Metrologo.Services.Journal
         private static long _position;
         private static readonly string _machine = Environment.MachineName;
 
+        /// <summary>
+        /// Levé (sur le thread UI) à chaque lot de changements admin reçus depuis un AUTRE poste.
+        /// Permet à la barre de navigation d'afficher un indicateur persistant (triangle ⚠).
+        /// </summary>
+        public static event Action<IReadOnlyList<EntreeJournalAdmin>>? ChangementsRecus;
+
         public static void Demarrer()
         {
             if (_timer != null) return;
@@ -45,6 +51,9 @@ namespace Metrologo.Services.Journal
                 .Where(e => !e.Action.StartsWith("ACCES_ADMIN", StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (autres.Count == 0) return;
+
+            // Indicateur persistant dans le bandeau (en plus du toast éphémère).
+            try { ChangementsRecus?.Invoke(autres); } catch { }
 
             if (autres.Count == 1)
             {
