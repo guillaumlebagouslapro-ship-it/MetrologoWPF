@@ -102,6 +102,9 @@ namespace Metrologo.Services
             // Sert à savoir, en cas d'arrêt utilisateur, si la feuille courante est incomplète
             // (à supprimer) ou s'il s'agit d'une gate déjà terminée (à conserver).
             bool feuilleCouranteIncomplete = false;
+            // Chemin du fichier .xlsx de la mesure — déclaré AVANT le try pour rester visible
+            // dans le finally (suppression sur disque de la feuille d'une mesure stoppée).
+            string? cheminFichier = null;
 
             try
             {
@@ -167,8 +170,6 @@ namespace Metrologo.Services
                 int nbIterations = gates.Count;
                 int totalEtapes = nbIterations * (mesure.NbMesures + 3);
                 int etape = 0;
-
-                string? cheminFichier = null;
 
                 bool bulkDejaEchoue = false;
 
@@ -1007,11 +1008,26 @@ namespace Metrologo.Services
                     && feuilleCouranteIncomplete
                     && !string.IsNullOrEmpty(derniereFeuille))
                 {
+                    // 1. Tentative COM (utile si Excel est encore vivant — ex. arrêt sans kill).
                     try { await ExcelInteropHost.Instance.SupprimerFeuilleMesureAsync(derniereFeuille); }
                     catch (Exception exSuppr)
                     {
                         JournalLog.Warn(CategorieLog.Mesure, "Execute_SupprFeuilleStop",
-                            $"Suppression de la feuille « {derniereFeuille} » après arrêt échouée : {exSuppr.Message}");
+                            $"Suppression COM de la feuille « {derniereFeuille} » après arrêt échouée : {exSuppr.Message}");
+                    }
+
+                    // 2. Suppression SUR DISQUE via ClosedXML : le bouton STOP tue le process Excel
+                    //    (TuerProcessExcelAsync), donc la suppression COM ci-dessus est un no-op. Le
+                    //    fichier .xlsx sur disque contient déjà la feuille sauvegardée → on le nettoie
+                    //    directement, sans Excel. C'est le chemin réellement efficace après un STOP.
+                    if (!string.IsNullOrEmpty(cheminFichier))
+                    {
+                        try { _excel.SupprimerFeuilleSurDisque(cheminFichier!, derniereFeuille!); }
+                        catch (Exception exDisque)
+                        {
+                            JournalLog.Warn(CategorieLog.Mesure, "Execute_SupprFeuilleStopDisque",
+                                $"Suppression sur disque de « {derniereFeuille} » après arrêt échouée : {exDisque.Message}");
+                        }
                     }
                 }
 

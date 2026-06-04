@@ -52,6 +52,16 @@ namespace Metrologo.Services
         string CalculerCheminFichierAttendu(Mesure mesure);
 
         /// <summary>
+        /// Supprime une feuille de mesure (et ses lignes de Récap.) directement dans le fichier
+        /// .xlsx sur DISQUE via ClosedXML, sans Excel. Utilisé quand une mesure est stoppée :
+        /// le process Excel ayant été tué (TuerProcessExcelAsync), la suppression COM est
+        /// impossible — seul le fichier sur disque, qui contient la feuille déjà sauvegardée,
+        /// peut être nettoyé. Best-effort avec quelques tentatives (le kill d'Excel libère le
+        /// verrou fichier de manière asynchrone). Ne lève jamais.
+        /// </summary>
+        void SupprimerFeuilleSurDisque(string cheminFichier, string nomFeuille);
+
+        /// <summary>
         /// Écrit la moyenne et la variance dans les zones nommées — à appeler après la boucle
         /// de mesures, pour que le Récap. cross-sheet fonctionne.
         /// </summary>
@@ -1578,6 +1588,68 @@ namespace Metrologo.Services
 
             // 2. Supprime la feuille elle-même.
             try { feuille.Delete(); } catch { /* best-effort */ }
+        }
+
+        /// <inheritdoc/>
+        public void SupprimerFeuilleSurDisque(string cheminFichier, string nomFeuille)
+        {
+            if (string.IsNullOrWhiteSpace(cheminFichier) || string.IsNullOrWhiteSpace(nomFeuille))
+                return;
+
+            // Le STOP tue Excel de façon asynchrone : le verrou du fichier peut n'être libéré
+            // qu'après un court délai. On réessaie quelques fois avant d'abandonner.
+            const int maxTentatives = 6;
+            for (int tentative = 1; tentative <= maxTentatives; tentative++)
+            {
+                if (!File.Exists(cheminFichier)) return;
+                try
+                {
+                    using var wb = new XLWorkbook(cheminFichier);
+
+                    var feuille = wb.Worksheets
+                        .FirstOrDefault(w => string.Equals(w.Name, nomFeuille, StringComparison.OrdinalIgnoreCase));
+                    if (feuille == null) return; // déjà absente (rien à faire)
+
+                    // 1. Retire les lignes de la Récap. qui référencent cette feuille.
+                    try
+                    {
+                        if (wb.Worksheets.Any(w => w.Name == NOM_RECAP))
+                        {
+                            var recap = wb.Worksheet(NOM_RECAP);
+                            int derniere = recap.LastRowUsed()?.RowNumber() ?? LIGNE_ENTETE_RECAP;
+                            for (int row = derniere; row > LIGNE_ENTETE_RECAP; row--)
+                            {
+                                if (LigneRefereFeuille(recap, row, nomFeuille))
+                                    recap.Row(row).Delete();
+                            }
+                        }
+                    }
+                    catch { /* best-effort : la suppression de la feuille reste prioritaire */ }
+
+                    // 2. Supprime la feuille et sauvegarde le fichier.
+                    feuille.Delete();
+                    wb.Save();
+
+                    JournalLog.Info(CategorieLog.Excel, "EXCEL_FEUILLE_STOP_SUPPRIMEE_DISQUE",
+                        $"Feuille « {nomFeuille} » supprimée sur disque suite à l'arrêt de la mesure.");
+                    return;
+                }
+                catch (IOException)
+                {
+                    // Fichier encore verrouillé (Excel pas tout à fait mort) → on attend et on réessaie.
+                    if (tentative < maxTentatives)
+                        System.Threading.Thread.Sleep(400);
+                }
+                catch (Exception ex)
+                {
+                    JournalLog.Warn(CategorieLog.Excel, "EXCEL_SUPPR_FEUILLE_DISQUE_KO",
+                        $"Suppression sur disque de « {nomFeuille} » échouée : {ex.Message}");
+                    return;
+                }
+            }
+
+            JournalLog.Warn(CategorieLog.Excel, "EXCEL_SUPPR_FEUILLE_DISQUE_VERROU",
+                $"Suppression sur disque de « {nomFeuille} » abandonnée : fichier resté verrouillé.");
         }
 
         /// <summary>Vrai si une cellule de la ligne contient une formule référençant la feuille donnée.</summary>
