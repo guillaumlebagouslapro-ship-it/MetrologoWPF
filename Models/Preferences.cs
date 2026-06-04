@@ -28,7 +28,14 @@ namespace Metrologo.Models
 
         // -------- LOCAL : rubidium actif + macro --------
 
-        public static Rubidium? RubidiumActif => _settings.RubidiumActif;
+        /// <summary>
+        /// Rubidium actif. Lu en priorité depuis le fichier PARTAGÉ
+        /// (<see cref="CheminsMetrologo.FichierRubidiumActif"/>) pour que tous les postes
+        /// reprennent le même rubidium de référence (au démarrage). Repli sur le réglage local
+        /// si le partage est absent/injoignable.
+        /// </summary>
+        public static Rubidium? RubidiumActif =>
+            LireFichierReseau<Rubidium>(CheminsMetrologo.FichierRubidiumActif) ?? _settings.RubidiumActif;
 
         public static string CheminMacroXLA
         {
@@ -60,6 +67,13 @@ namespace Metrologo.Models
 
         public static void SauvegarderRubidium(Rubidium? rubi)
         {
+            // PARTAGÉ : tous les postes reprennent ce rubidium de référence au prochain
+            // démarrage (lecture dans le getter ci-dessus). Sans ça, le changement restait
+            // local au poste qui l'a fait.
+            if (rubi != null)
+                EcrireFichierReseau(CheminsMetrologo.FichierRubidiumActif, rubi);
+
+            // LOCAL : repli si le partage est injoignable (poste hors réseau).
             _settings.RubidiumActif = rubi;
             SauvegarderLocal();
         }

@@ -356,6 +356,11 @@ namespace Metrologo.Services
         public static string FichierCatalogueRubidiums =>
             Path.Combine(Rubidiums, "catalogue.json");
 
+        /// <summary>Fichier JSON du rubidium ACTIF partagé entre tous les postes (référence
+        /// commune). Lu au démarrage pour que chaque poste reprenne le rubidium sélectionné.</summary>
+        public static string FichierRubidiumActif =>
+            Path.Combine(Rubidiums, "rubidium-actif.json");
+
         /// <summary>Fichier JSON-lines des sessions de journal.</summary>
         public static string FichierJournalSessions =>
             Path.Combine(Logs, "sessions.jsonl");
