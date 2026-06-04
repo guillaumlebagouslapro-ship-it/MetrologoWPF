@@ -71,8 +71,12 @@
                            Stretch="Uniform"/>
                 </Border>
 
-                <!-- Navigation -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Navigation — dans un ScrollViewer horizontal : sur un petit écran la barre
+                     défile au lieu de déborder et chevaucher la zone utilisateur à droite. -->
+                <ScrollViewer Grid.Column="1" VerticalAlignment="Center"
+                              VerticalScrollBarVisibility="Disabled"
+                              HorizontalScrollBarVisibility="Auto">
+                <StackPanel Orientation="Horizontal">
                     <Button Command="{Binding AllerAccueilCommand}"
                             Style="{StaticResource NavButtonStyle}"
                             Margin="0,0,6,0">
@@ -143,6 +147,7 @@
                         </StackPanel>
                     </Button>
                 </StackPanel>
+                </ScrollViewer>
 
                 <!-- Utilisateur connecté (en gros) + bouton Quitter, à droite — à l'opposé de la
                      navigation (Accueil / Administration…). -->
@@ -172,6 +177,8 @@
                                Foreground="White"
                                FontSize="18" FontWeight="Bold"
                                VerticalAlignment="Center"
+                               MaxWidth="280" TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding TexteUtilisateurConnecte}"
                                Margin="0,0,20,0"/>
                     <Button Command="{Binding QuitterCommand}"
                             Style="{StaticResource NavAccentButtonStyle}">
