@@ -35,9 +35,24 @@ namespace Metrologo.Services
                 partieFrac = brut.Substring(pt + 1);
             }
 
-            // Groupe la partie entière par paquets de 3 (espace), via fr-FR.
+            var frFr = CultureInfo.GetCultureInfo("fr-FR");
+            string sep = frFr.NumberFormat.NumberGroupSeparator;   // séparateur de milliers fr-FR
+
+            // Groupe la partie entière par paquets de 3 (depuis la virgule vers la gauche).
             if (long.TryParse(partieEntiere, NumberStyles.None, CultureInfo.InvariantCulture, out long ent))
-                partieEntiere = ent.ToString("#,##0", CultureInfo.GetCultureInfo("fr-FR"));
+                partieEntiere = ent.ToString("#,##0", frFr);
+
+            // Groupe AUSSI la partie décimale par paquets de 3 (depuis la virgule vers la droite).
+            if (partieFrac.Length > 3)
+            {
+                var sb = new System.Text.StringBuilder(partieFrac.Length + partieFrac.Length / 3);
+                for (int i = 0; i < partieFrac.Length; i++)
+                {
+                    if (i > 0 && i % 3 == 0) sb.Append(sep);
+                    sb.Append(partieFrac[i]);
+                }
+                partieFrac = sb.ToString();
+            }
 
             return (negatif ? "-" : string.Empty)
                  + partieEntiere
