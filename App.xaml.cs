@@ -263,6 +263,11 @@ namespace Metrologo
             mainWin.Show();
             StartupLap("mainWin.Show");
 
+            // Surveillance des changements admin faits depuis un AUTRE poste → toast non-bloquant
+            // (rubidium, chemins, modules d'incertitude, catalogue, utilisateurs…). Thread UI.
+            try { Metrologo.Services.Journal.NotificationsAdminWatcher.Demarrer(); }
+            catch { /* la notif inter-postes n'est pas critique */ }
+
             // ===== ÉCRITURE DU PROFILING (À RETIRER UNE FOIS L'OPTIMISATION FAITE) =====
             swStartup.Stop();
             try

@@ -10,6 +10,7 @@ namespace Metrologo.Services.Journal
     public sealed class EntreeJournalAdmin
     {
         public DateTime Horodatage { get; set; }
+        public string Machine { get; set; } = string.Empty;
         public string Utilisateur { get; set; } = string.Empty;
         public string Action { get; set; } = string.Empty;
         public string Detail { get; set; } = string.Empty;
@@ -61,7 +62,8 @@ namespace Metrologo.Services.Journal
         public static bool EstActionAudit(string action) =>
             !string.IsNullOrEmpty(action) && _actionsAudit.Contains(action);
 
-        /// <summary>Ajoute une entrée d'audit (best-effort, thread-safe).</summary>
+        /// <summary>Ajoute une entrée d'audit (best-effort, thread-safe). Enregistre aussi le nom
+        /// de la machine — utilisé pour ne pas notifier le poste qui a fait le changement.</summary>
         public static void Ecrire(string action, string detail, string? utilisateur)
         {
             lock (_sync)
@@ -70,17 +72,43 @@ namespace Metrologo.Services.Journal
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(Chemin)!);
                     string ts = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                    string machine = Environment.MachineName;
                     string user = string.IsNullOrWhiteSpace(utilisateur) ? "?" : utilisateur;
-                    // Format parseable ET lisible : ts | user | action | detail
-                    string ligne = ts + Sep + user + Sep + action + Sep + (detail ?? string.Empty).Replace("\r", " ").Replace("\n", " ");
+                    // Format parseable ET lisible : ts | machine | user | action | detail
+                    string d = (detail ?? string.Empty).Replace("\r", " ").Replace("\n", " ");
+                    string ligne = ts + Sep + machine + Sep + user + Sep + action + Sep + d;
                     File.AppendAllText(Chemin, ligne + Environment.NewLine, Encoding.UTF8);
                 }
                 catch { /* best-effort : ne jamais faire échouer une action admin à cause de l'audit */ }
             }
         }
 
-        /// <summary>Lit les entrées d'audit, les plus récentes en premier.</summary>
-        public static List<EntreeJournalAdmin> Lire(int max = 5000)
+        /// <summary>Parse une ligne du journal. Gère le format actuel (5 champs avec machine) et
+        /// l'ancien (4 champs sans machine). Retourne null si la ligne est inexploitable.</summary>
+        private static EntreeJournalAdmin? Parser(string ligne)
+        {
+            if (string.IsNullOrWhiteSpace(ligne)) return null;
+            var p = ligne.Split(new[] { Sep }, 5, StringSplitOptions.None);
+            if (p.Length < 3) return null;
+            DateTime.TryParse(p[0], out var ts);
+
+            if (p.Length >= 5)
+                return new EntreeJournalAdmin
+                {
+                    Horodatage = ts, Machine = p[1].Trim(), Utilisateur = p[2].Trim(),
+                    Action = p[3].Trim(), Detail = p[4].Trim(),
+                };
+
+            // Ancien format : ts | user | action | detail (machine inconnue).
+            return new EntreeJournalAdmin
+            {
+                Horodatage = ts, Machine = string.Empty, Utilisateur = p[1].Trim(),
+                Action = p[2].Trim(), Detail = p.Length >= 4 ? p[3].Trim() : string.Empty,
+            };
+        }
+
+        /// <summary>Toutes les entrées dans l'ordre chronologique (plus ancien → plus récent).</summary>
+        public static List<EntreeJournalAdmin> LireChronologique()
         {
             var liste = new List<EntreeJournalAdmin>();
             lock (_sync)
@@ -90,23 +118,58 @@ namespace Metrologo.Services.Journal
                     if (!File.Exists(Chemin)) return liste;
                     foreach (var ligne in File.ReadLines(Chemin, Encoding.UTF8))
                     {
-                        if (string.IsNullOrWhiteSpace(ligne)) continue;
-                        var p = ligne.Split(new[] { Sep }, 4, StringSplitOptions.None);
-                        if (p.Length < 3) continue;
-                        DateTime.TryParse(p[0], out var ts);
-                        liste.Add(new EntreeJournalAdmin
-                        {
-                            Horodatage = ts,
-                            Utilisateur = p[1].Trim(),
-                            Action = p[2].Trim(),
-                            Detail = p.Length >= 4 ? p[3].Trim() : string.Empty,
-                        });
+                        var e = Parser(ligne);
+                        if (e != null) liste.Add(e);
                     }
                 }
                 catch { /* lecture partielle → on garde ce qu'on a */ }
             }
-            liste.Reverse(); // plus récent en premier
+            return liste;
+        }
+
+        /// <summary>Lit les entrées d'audit, les plus récentes en premier (pour le viewer).</summary>
+        public static List<EntreeJournalAdmin> Lire(int max = 5000)
+        {
+            var liste = LireChronologique();
+            liste.Reverse();
             return liste.Take(max).ToList();
+        }
+
+        /// <summary>Taille actuelle du fichier (octets) — point de départ du watcher.</summary>
+        public static long Position()
+        {
+            try { return File.Exists(Chemin) ? new FileInfo(Chemin).Length : 0; }
+            catch { return 0; }
+        }
+
+        /// <summary>
+        /// Lit les NOUVELLES entrées ajoutées depuis la position <paramref name="position"/>
+        /// (octets). Met à jour <paramref name="position"/> à la fin. Lecture incrémentale
+        /// (seek) pour ne pas relire tout le fichier à chaque scan du watcher.
+        /// </summary>
+        public static List<EntreeJournalAdmin> LireDepuis(ref long position)
+        {
+            var nouvelles = new List<EntreeJournalAdmin>();
+            lock (_sync)
+            {
+                try
+                {
+                    if (!File.Exists(Chemin)) { position = 0; return nouvelles; }
+                    using var fs = new FileStream(Chemin, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    if (fs.Length < position) position = 0; // fichier tronqué/recréé
+                    fs.Seek(position, SeekOrigin.Begin);
+                    using var sr = new StreamReader(fs, Encoding.UTF8);
+                    string? ligne;
+                    while ((ligne = sr.ReadLine()) != null)
+                    {
+                        var e = Parser(ligne);
+                        if (e != null) nouvelles.Add(e);
+                    }
+                    position = fs.Length;
+                }
+                catch { /* best-effort : on réessaiera au prochain scan */ }
+            }
+            return nouvelles;
         }
 
         /// <summary>Libellé français lisible pour un code d'action (fallback = le code brut).</summary>
