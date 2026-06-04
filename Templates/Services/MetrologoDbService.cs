@@ -20,11 +20,10 @@ namespace Metrologo.Services
     /// </summary>
     public static class MetrologoDbService
     {
-        // Pas de "Database=" : on tombe sur la base PAR DÉFAUT du login MetrologoUser
-        // (= la base Metrologo). TrustServerCertificate=true pour les SQL Server anciens
-        // sans certificat valide.
+        // Serveur SVR-OR, base BASE_E2M (contient les tables T_METROLOGO_*).
+        // TrustServerCertificate=true pour les SQL Server anciens sans certificat valide.
         private const string ConnectionString =
-            "Server=SVR-OR;User Id=MetrologoUser;Password=Metro2026;"
+            "Server=SVR-OR;Database=BASE_E2M;User Id=MetrologoUser;Password=Metro2026;"
           + "TrustServerCertificate=true;Encrypt=false;Connect Timeout=6";
 
         /// <summary>Crée une connexion (à utiliser dans un <c>using</c> + Dapper).</summary>
