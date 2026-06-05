@@ -689,18 +689,39 @@ namespace Metrologo.Services
             lock (_sync)
             {
                 if (_feuilleMesure == null) return;
+
+                // En fin de mesure, toutes les feuilles sont protégées
+                // (ProtegerToutesFeuillesActifInterne). Comme cette écriture intervient APRÈS
+                // (saisie post-mesure : résolution / incertitude), il faut déprotéger la feuille
+                // avant d'écrire — sinon Value2 = ... lève sur une feuille protégée et la valeur
+                // n'est jamais enregistrée (bug : résolution/incertitude absentes du rapport).
+                bool etaitProtegee = false;
+                try { etaitProtegee = (bool)_feuilleMesure.ProtectContents; } catch { }
+                if (etaitProtegee)
+                {
+                    try { _feuilleMesure.Unprotect(MotDePasseProtectionFeuille); }
+                    catch { try { _feuilleMesure.Unprotect("metrol"); } catch { try { _feuilleMesure.Unprotect(); } catch { } } }
+                }
+
                 try
                 {
                     // Names(name).RefersToRange.Value2 = valeur — sheet-scope names only.
                     dynamic nom = _feuilleMesure.Names.Item(zoneNom);
-                    nom.RefersToRange.Value2 = valeur;
-                    Marshal.ReleaseComObject(nom);
+                    try { nom.RefersToRange.Value2 = valeur; }
+                    finally { try { Marshal.ReleaseComObject(nom); } catch { } }
                 }
                 catch (Exception ex)
                 {
                     // Zone absente ou erreur COM : on loggue en Warn, pas d'interruption.
                     JournalLog.Warn(CategorieLog.Excel, "EXCEL_ZONE_ECRITURE_ERREUR",
                         $"Impossible d'écrire la zone nommée « {zoneNom} » : {ex.Message}");
+                }
+                finally
+                {
+                    if (etaitProtegee)
+                    {
+                        try { _feuilleMesure.Protect(MotDePasseProtectionFeuille); } catch { }
+                    }
                 }
             }
         });
@@ -1425,12 +1446,14 @@ namespace Metrologo.Services
                             config.FNominale);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNNbMesures",
                             (double)config.NbMesures);
-                        // Résolution = 0 à l'init : seule la saisie post-mesure de l'utilisateur
-                        // peut la renseigner (cf. ExcelService.InitialiserRapportAsync pour le
-                        // raisonnement complet).
+                        // Résolution ET incertitude relative = 0 à l'init : seule la saisie
+                        // post-mesure de l'utilisateur peut les renseigner. NE PAS seeder
+                        // ZNIncertSup depuis config.IncertSupp : config est réutilisé entre
+                        // relances sur une même FI, ce qui faisait réapparaître la valeur saisie
+                        // au fréquencemètre sur une mesure suivante (ex. Générateur) sans popup.
+                        // (cf. ExcelService.InitialiserRapportAsync pour le raisonnement complet.)
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertResol", 0.0);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertSup",
-                            config.IncertSupp);
+                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertSup", 0.0);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqRef",
                             rubidium.FrequenceMoyenne);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNCoeffA", 1e-10);

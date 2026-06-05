@@ -406,15 +406,17 @@ namespace Metrologo.Services
                 SetNamed("ZNCoeffMult", config.IndexMultiplicateur);
                 SetNamed("ZNValFNominale", config.FNominale);
                 SetNamed("ZNNbMesures", config.NbMesures);
-                // Résolution = 0 à l'init du rapport, quels que soient le type et la source.
-                // La valeur définitive est saisie par l'utilisateur via les popups post-mesure
-                // (cf. AcceuilViewModel.SaisiePostMesureFrequenceAsync / SaisiePostMesureTachyAsync)
-                // qui écrasent ZNIncertResol via EcrireZoneNommeeAsync. Pour les types qui n'ont
-                // pas de popup (FreqAvantInterv, FreqFinale, Stabilité, Generateur direct…),
-                // 0 reste — c'est le comportement attendu : ces mesures ne calculent pas
-                // d'incertitude de résolution.
+                // Résolution ET incertitude relative = 0 à l'init du rapport, quels que soient
+                // le type et la source. Les valeurs définitives sont saisies par l'utilisateur
+                // via les popups post-mesure (cf. AcceuilViewModel.SaisiePostMesureFrequenceAsync
+                // / SaisiePostMesureTachyAsync) qui écrasent ZNIncertResol / ZNIncertSup via
+                // EcrireZoneNommeeAsync. Pour les types qui n'ont pas de popup (FreqAvantInterv,
+                // FreqFinale, Stabilité, Generateur…), 0 reste — comportement attendu.
+                // NE PAS seeder depuis config.IncertSupp : config est réutilisé entre relances
+                // sur une même FI, ce qui faisait réapparaître la valeur saisie au fréquencemètre
+                // sur une mesure suivante (ex. Générateur) sans popup.
                 SetNamed("ZNIncertResol", 0.0);
-                SetNamed("ZNIncertSup", config.IncertSupp);
+                SetNamed("ZNIncertSup", 0.0);
                 SetNamed("ZNFreqRef", rubidium.FrequenceMoyenne);
 
                 // Fallback hardcoded : utilisé tel quel si aucun module d'incertitude n'est
