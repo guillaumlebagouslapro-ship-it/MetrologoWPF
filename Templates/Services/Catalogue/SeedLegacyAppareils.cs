@@ -1,5 +1,10 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
 using Metrologo.Models;
+using Metrologo.Services.Journal;
+using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.Services.Catalogue
 {
@@ -26,13 +31,63 @@ namespace Metrologo.Services.Catalogue
             "1 s", "2 s", "5 s", "10 s", "20 s", "50 s", "100 s"
         };
 
-        /// <summary>Ajoute les 3 profils legacy au catalogue s'ils n'y sont pas déjà. Idempotent.</summary>
+        private static readonly JsonSerializerOptions _jsonOpts = new()
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = null   // garde la casse C#, JSON facile à éditer à la main
+        };
+
+        /// <summary>
+        /// Charge les profils legacy depuis le fichier réseau
+        /// (<see cref="CheminsMetrologo.FichierAppareilsLegacy"/>) et les ajoute au catalogue
+        /// (idempotent). Au 1er lancement le fichier n'existe pas : on l'écrit avec les valeurs
+        /// par défaut ci-dessous, puis on le relit aux lancements suivants — l'utilisateur peut
+        /// donc corriger les commandes GPIB dans le JSON sans recompiler.
+        /// Si le réseau est injoignable, on retombe sur les profils par défaut en mémoire.
+        /// </summary>
         public static void EnsureSeeded()
         {
+            var defauts = new List<ModeleAppareil> { Stanford(), Racal(), Eip() };
+            var profils = ChargerOuCreerFichier(defauts);
+
             var svc = CatalogueAppareilsService.Instance;
-            svc.AjouterEnMemoireSiAbsent(Stanford());
-            svc.AjouterEnMemoireSiAbsent(Racal());
-            svc.AjouterEnMemoireSiAbsent(Eip());
+            foreach (var m in profils)
+                svc.AjouterEnMemoireSiAbsent(m);
+        }
+
+        private static List<ModeleAppareil> ChargerOuCreerFichier(List<ModeleAppareil> defauts)
+        {
+            string fichier = CheminsMetrologo.FichierAppareilsLegacy;
+            try
+            {
+                if (File.Exists(fichier))
+                {
+                    string json = File.ReadAllText(fichier);
+                    var charges = JsonSerializer.Deserialize<List<ModeleAppareil>>(json, _jsonOpts);
+                    if (charges != null && charges.Count > 0)
+                    {
+                        JournalLog.Info(CategorieLog.Configuration, "APPAREILS_LEGACY_LOAD",
+                            $"{charges.Count} profil(s) legacy lus depuis {fichier}.");
+                        return charges;
+                    }
+                    JournalLog.Warn(CategorieLog.Configuration, "APPAREILS_LEGACY_VIDE",
+                        $"Fichier legacy vide/illisible ({fichier}) — profils par défaut utilisés.");
+                    return defauts;
+                }
+
+                // 1er lancement : on écrit les profils par défaut pour que l'utilisateur les édite.
+                Directory.CreateDirectory(Path.GetDirectoryName(fichier)!);
+                File.WriteAllText(fichier, JsonSerializer.Serialize(defauts, _jsonOpts));
+                JournalLog.Info(CategorieLog.Configuration, "APPAREILS_LEGACY_CREATE",
+                    $"Fichier profils legacy créé : {fichier}. Éditez-le pour corriger les commandes GPIB.");
+                return defauts;
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Configuration, "APPAREILS_LEGACY_ERR",
+                    $"Fichier legacy inaccessible ({fichier}) : {ex.Message} — profils par défaut en mémoire.");
+                return defauts;
+            }
         }
 
         // ---------------- Helpers ----------------

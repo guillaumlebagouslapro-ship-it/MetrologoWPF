@@ -316,6 +316,14 @@ namespace Metrologo.Services
         public static string Catalogues =>
             AvecOverride(nameof(Catalogues), Path.Combine(Racine, "Catalogues"));
 
+        /// <summary>
+        /// Dossier des profils d'appareils legacy (EIP / Racal / Stanford) — commandes GPIB
+        /// éditables à la main. Sur le réseau par défaut
+        /// (<c>M:\exe_spe\Data_Metrologo\Appareils_Legacy</c>), surchargeable (clé <c>AppareilsLegacy</c>).
+        /// </summary>
+        public static string AppareilsLegacy =>
+            AvecOverride(nameof(AppareilsLegacy), Path.Combine(BaseServeur, "Appareils_Legacy"));
+
         /// <summary>Presets stabilité — surchargeable réseau (clé <c>Presets</c>).</summary>
         public static string Presets =>
             AvecOverride(nameof(Presets), Path.Combine(Racine, "Presets"));
@@ -497,6 +505,14 @@ namespace Metrologo.Services
         /// </summary>
         public static string FichierCatalogueAppareils =>
             Path.Combine(Catalogues, "appareils.json");
+
+        /// <summary>
+        /// Fichier JSON des profils d'appareils legacy (EIP / Racal / Stanford). Créé au 1er
+        /// lancement avec les valeurs par défaut, puis relu à chaque démarrage : permet de
+        /// corriger les commandes GPIB sur le réseau sans recompiler l'application.
+        /// </summary>
+        public static string FichierAppareilsLegacy =>
+            Path.Combine(AppareilsLegacy, "appareils-legacy.json");
 
         // ---------- Migration ----------
 
