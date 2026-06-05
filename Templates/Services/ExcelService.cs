@@ -424,7 +424,12 @@ namespace Metrologo.Services
                 // pouvait retomber sur le scope workbook (cellule de ModFeuille cachée) et la
                 // cellule C21 de la feuille visible restait vide. L'écriture par adresse garantit
                 // que la référence du rubidium apparaît bien sur la feuille de mesure.
-                _feuilleMesure.Cell("C21").SetValue(rubidium.FrequenceMoyenne);
+                var celluleFreqRef = _feuilleMesure.Cell("C21");
+                celluleFreqRef.SetValue(rubidium.FrequenceMoyenne);
+                // Le rubidium peut porter un offset fin (ex. 10 000 000,00000004 Hz). Le format
+                // du template (#,##0.0000000 = 7 décimales) l'arrondissait à l'affichage. On
+                // passe à 9 décimales pour rendre cet écart visible (important en métrologie).
+                celluleFreqRef.Style.NumberFormat.Format = "#,##0.000000000";
                 SetNamed("ZNFreqRef", rubidium.FrequenceMoyenne);
 
                 // Fallback hardcoded : utilisé tel quel si aucun module d'incertitude n'est

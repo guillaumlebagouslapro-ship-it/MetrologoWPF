@@ -1460,6 +1460,15 @@ namespace Metrologo.Services
                         // laisser C21 vide sur la feuille visible. L'écriture par adresse garantit
                         // que la référence du rubidium apparaît bien. (ZNFreqRef pointe sur C21.)
                         EcrireValeurCelluleInterne(nouvelleFeuille, "C21", rubidium.FrequenceMoyenne);
+                        // 9 décimales pour rendre visible l'offset fin du rubidium (ex.
+                        // 10 000 000,00000004) que le format template (7 décimales) arrondissait.
+                        try
+                        {
+                            dynamic cFmt = nouvelleFeuille.Range["C21"];
+                            try { cFmt.NumberFormat = "#,##0.000000000"; }
+                            finally { try { Marshal.ReleaseComObject(cFmt); } catch { } }
+                        }
+                        catch { /* best-effort */ }
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqRef",
                             rubidium.FrequenceMoyenne);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNCoeffA", 1e-10);
