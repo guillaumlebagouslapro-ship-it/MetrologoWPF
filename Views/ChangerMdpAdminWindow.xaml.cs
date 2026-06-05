@@ -7,15 +7,17 @@ namespace Metrologo.Views
 {
     /// <summary>
     /// Permet à l'admin actuellement connecté (<see cref="EtatApplication.AdminConnecte"/>)
-    /// de changer son propre mot de passe. On vérifie l'ancien, on demande deux fois le
-    /// nouveau, puis on enregistre via <see cref="ComptesLocauxService.DefinirMotDePasse"/>.
+    /// de définir son propre mot de passe. L'admin est déjà authentifié (login + mdp) pour
+    /// accéder à la zone admin : on ne redemande donc PAS l'ancien mot de passe (ce qui
+    /// permet aussi de remplacer un mdp auto-généré non mémorisé). Il saisit directement le
+    /// nouveau deux fois, puis on enregistre via <see cref="ComptesLocauxService.DefinirMotDePasse"/>.
     /// </summary>
     public partial class ChangerMdpAdminWindow : FluentWindow
     {
         public ChangerMdpAdminWindow()
         {
             InitializeComponent();
-            Loaded += (_, _) => PbActuel.Focus();
+            Loaded += (_, _) => PbNouveau.Focus();
         }
 
         private void OnValider(object sender, RoutedEventArgs e)
@@ -27,18 +29,8 @@ namespace Metrologo.Views
                 return;
             }
 
-            string actuel = PbActuel.Password ?? string.Empty;
             string nouveau = PbNouveau.Password ?? string.Empty;
             string confirmer = PbConfirmer.Password ?? string.Empty;
-
-            // Vérifie l'ancien mdp contre le hash du compte connecté.
-            if (admin.PasswordHash == null || !PasswordHasher.VerifyPassword(actuel, admin.PasswordHash))
-            {
-                AfficherErreur("Mot de passe actuel incorrect.");
-                PbActuel.Clear();
-                PbActuel.Focus();
-                return;
-            }
 
             if (string.IsNullOrWhiteSpace(nouveau))
             {

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Changer mon mot de passe"
-        Height="460" Width="480"
+        Height="400" Width="480"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowBackdropType="Mica"
@@ -24,15 +24,10 @@
         </ui:TitleBar>
 
         <StackPanel Grid.Row="1" Margin="28,16,28,8">
-            <TextBlock Text="Modifier le mot de passe de ton compte administrateur."
+            <TextBlock Text="Définis un nouveau mot de passe pour ton compte administrateur."
                        FontSize="12" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                        Margin="0,0,0,18"/>
-
-            <TextBlock Text="MOT DE PASSE ACTUEL" FontSize="10" FontWeight="Bold"
-                       Foreground="{StaticResource AsertiOrangeBrush}"
-                       Margin="0,0,0,4"/>
-            <PasswordBox x:Name="PbActuel" FontSize="13" Padding="10,8" Margin="0,0,0,12"/>
 
             <TextBlock Text="NOUVEAU MOT DE PASSE" FontSize="10" FontWeight="Bold"
                        Foreground="{StaticResource AsertiOrangeBrush}"
