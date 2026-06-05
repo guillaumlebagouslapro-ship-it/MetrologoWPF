@@ -937,12 +937,25 @@ namespace Metrologo.ViewModels
         private async Task EnvoyerCommandesScpiAsync()
         {
             var modele = ModeleCatalogueSelectionne();
-            var det = AppareilSelectionne?.Detecte;
-            if (modele == null || det == null || ReglagesDynamiques.Count == 0)
+            if (modele == null || ReglagesDynamiques.Count == 0)
             {
                 MesureConfig.CommandesScpiReglages = new List<string>();
                 return;
             }
+
+            // Adresse cible : appareil détecté sur le bus (scan) OU adresse fixe (appareil legacy
+            // sans *IDN?). Sans cette branche, le mode adresses fixes laissait
+            // CommandesScpiReglages vide → impédance/couplage jamais rejoués par l'orchestrator.
+            var det = AppareilSelectionne?.Detecte;
+            bool estFixe = AppareilSelectionne?.EstFixe == true;
+            if (det == null && !estFixe)
+            {
+                MesureConfig.CommandesScpiReglages = new List<string>();
+                return;
+            }
+            int board = det?.Board ?? 0;
+            int adresse = det?.Adresse ?? AppareilSelectionne!.AdresseFixe;
+            string adresseCourte = det?.AdresseCourte ?? $"GPIB{board}::{adresse}";
 
             // Ne retient que les réglages de la voie active (+ le mode qui est global).
             // Ça évite de modifier les paramètres d'une voie que l'utilisateur n'utilise pas.
@@ -1015,13 +1028,13 @@ namespace Metrologo.ViewModels
             if (commandes.Count == 0) return;
 
             JournalLog.Info(CategorieLog.Configuration, "CONFIG_APPAREIL_DEBUT",
-                $"Envoi de {commandes.Count} commande(s) à {modele.Nom} @ {det.AdresseCourte}.",
-                new { modele.Nom, det.Adresse, Nb = commandes.Count });
+                $"Envoi de {commandes.Count} commande(s) à {modele.Nom} @ {adresseCourte}.",
+                new { modele.Nom, Adresse = adresse, Nb = commandes.Count });
 
             try
             {
-                using var driver = new VisaIeeeDriver(det.Board);
-                await AppareilScpiService.EnvoyerAsync(modele, det.Adresse, commandes, driver);
+                using var driver = new VisaIeeeDriver(board);
+                await AppareilScpiService.EnvoyerAsync(modele, adresse, commandes, driver);
 
                 JournalLog.Info(CategorieLog.Configuration, "CONFIG_APPAREIL_OK",
                     $"Configuration SCPI envoyée avec succès à {modele.Nom}.");
