@@ -16,13 +16,11 @@ namespace Metrologo.ViewModels
 {
     public partial class AccueilViewModel : ObservableObject
     {
-        // Driver IEEE bas niveau.
-        // ⚠️ TEST EN SIMULATION : driver simulé (aucun matériel requis). POUR LE MATÉRIEL RÉEL,
-        //    remettre `new VisaIeeeDriver(gpibBoard: 0)` ci-dessous.
+        // Driver IEEE bas niveau : VISA réel via NI-VISA (matériel branché).
+        // Pour la simulation sans matériel, remplacer par `new SimulationIeeeDriver()`.
         // Pour P/Invoke direct sur ni4882.dll : `new Ni488Driver(0)` — testé, perf identique
         // sur 53131A car la latence est dans l'instrument lui-même, pas dans la stack.
-        private readonly IIeeeDriver _ieeeDriver = new SimulationIeeeDriver();
-        // private readonly IIeeeDriver _ieeeDriver = new VisaIeeeDriver(gpibBoard: 0);
+        private readonly IIeeeDriver _ieeeDriver = new VisaIeeeDriver(gpibBoard: 0);
         // Type concret conservé (au lieu de IExcelService) pour accéder à FallbackTimestampUtilise.
         private readonly ExcelService _excelService = new ExcelService();
         private readonly MesureOrchestrator _orchestrator;
