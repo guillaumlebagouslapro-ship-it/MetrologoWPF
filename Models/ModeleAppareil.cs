@@ -167,5 +167,29 @@ namespace Metrologo.Models
         /// 1 seule transaction GPIB, sans live UI).
         /// </summary>
         public string CommandeBulkInit { get; set; } = string.Empty;
+
+        // ---------------- Appareils legacy (ne répondent pas à *IDN?) ----------------
+
+        /// <summary>
+        /// <c>true</c> = appareil ancien ne répondant pas à <c>*IDN?</c> (EIP 545, Racal-Dana 1996,
+        /// Stanford SR620). Il n'est pas détectable par le scan GPIB : l'orchestrator le résout
+        /// par <see cref="AdresseFixeParDefaut"/> au lieu d'un match IDN sur le bus.
+        /// Défaut <c>false</c> → comportement IDN historique inchangé pour les compteurs modernes.
+        /// </summary>
+        public bool Legacy { get; set; } = false;
+
+        /// <summary>
+        /// Adresse GPIB par défaut d'un appareil legacy / en mode « adresses fixes ». Pré-remplie
+        /// dans l'UI (éditable selon le banc). Ignorée pour les appareils détectés par IDN.
+        /// </summary>
+        public int AdresseFixeParDefaut { get; set; } = 0;
+
+        /// <summary>
+        /// Map slot UI (0=10 ms … 12=100 s) → commande de gate discrète, non templatable par
+        /// <see cref="CommandeGate"/>. Ex Stanford slot 6 → <c>"armm5;size1E0"</c>, Racal slot 6 →
+        /// <c>"GA1E0"</c>, EIP slots 0/3/6 → <c>"R2"/"R1"/"R0"</c>. Quand non vide, prioritaire sur
+        /// <see cref="CommandeGate"/> dans <c>CatalogueAdapter</c>. Vide = comportement template inchangé.
+        /// </summary>
+        public Dictionary<int, string> CommandesGateParSlot { get; set; } = new();
     }
 }

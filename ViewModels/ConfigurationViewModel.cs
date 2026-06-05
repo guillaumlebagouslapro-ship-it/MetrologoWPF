@@ -24,6 +24,34 @@ namespace Metrologo.ViewModels
         [ObservableProperty]
         private bool _estSurBaie = true;
 
+        partial void OnEstSurBaieChanged(bool value)
+        {
+            OnPropertyChanged(nameof(ModeAdressesFixes));
+            RebuildAppareils();
+        }
+
+        /// <summary>
+        /// Vrai en poste Baie + mode « adresses fixes » : pilote l'affichage du champ d'adresse
+        /// GPIB éditable dans la fenêtre Configuration.
+        /// </summary>
+        public bool ModeAdressesFixes => EstSurBaie && Metrologo.Models.EtatApplication.ModeAdressesFixes;
+
+        /// <summary>
+        /// Adresse GPIB saisie pour l'appareil legacy sélectionné (mode adresses fixes). Met à jour
+        /// à la fois l'option et <c>MesureConfig.AdresseFixeForcee</c> pour l'orchestrator.
+        /// </summary>
+        public int AdresseFixeSaisie
+        {
+            get => AppareilSelectionne?.AdresseFixe ?? 0;
+            set
+            {
+                if (AppareilSelectionne == null) return;
+                AppareilSelectionne.AdresseFixe = value;
+                MesureConfig.AdresseFixeForcee = AppareilSelectionne.EstFixe ? value : -1;
+                OnPropertyChanged();
+            }
+        }
+
         /// <summary>
         /// Réglages dynamiques du modèle sélectionné (ex: Impédance, Couplage, Filtre).
         /// Peuplée depuis le catalogue à chaque changement d'appareil — l'UI génère une
@@ -285,6 +313,14 @@ namespace Metrologo.ViewModels
 
         private void RebuildAppareils()
         {
+            // Mode « adresses fixes » (Baie) : on liste les appareils legacy du catalogue plutôt
+            // que les appareils détectés sur le bus (qui n'y figurent pas, faute de *IDN?).
+            if (EstSurBaie && Metrologo.Models.EtatApplication.ModeAdressesFixes)
+            {
+                RebuildAppareilsFixes();
+                return;
+            }
+
             // Mémoriser la sélection courante pour la retrouver après reconstruction de la liste.
             var selFab = _appareilSelectionne?.Detecte?.Fabricant;
             var selMod = _appareilSelectionne?.Detecte?.Modele;
@@ -350,6 +386,44 @@ namespace Metrologo.ViewModels
             RefreshAll();
         }
 
+        /// <summary>
+        /// Construit la liste des appareils en mode « adresses fixes » : tous les modèles legacy
+        /// du catalogue, avec leur adresse GPIB pré-remplie (éditable). L'utilisateur en choisit un
+        /// (EIP / Racal / Stanford) — la collision d'adresse (EIP/Stanford = 16) n'est jamais un
+        /// problème puisqu'un seul appareil est actif à la fois.
+        /// </summary>
+        private void RebuildAppareilsFixes()
+        {
+            string? selId = _appareilSelectionne?.ModeleFixe?.Id ?? MesureConfig?.IdModeleCatalogue;
+
+            Appareils.Clear();
+            foreach (var m in CatalogueAppareilsService.Instance.Modeles.Where(x => x.Parametres.Legacy))
+            {
+                Appareils.Add(new OptionAppareil
+                {
+                    Libelle = $"{m.Nom}  (adresse {m.Parametres.AdresseFixeParDefaut})",
+                    ModeleFixe = m,
+                    AdresseFixe = m.Parametres.AdresseFixeParDefaut
+                });
+            }
+
+            _appareilSelectionne = Appareils.FirstOrDefault(o => o.ModeleFixe?.Id == selId);
+            if (_appareilSelectionne == null && Appareils.Count > 0)
+            {
+                AppareilSelectionne = Appareils[0];   // via setter → renseigne Id + AdresseFixeForcee
+            }
+            else if (_appareilSelectionne != null && MesureConfig != null)
+            {
+                MesureConfig.IdModeleCatalogue = _appareilSelectionne.ModeleFixe?.Id ?? string.Empty;
+                MesureConfig.AdresseFixeForcee = _appareilSelectionne.AdresseFixe;
+            }
+
+            OnPropertyChanged(nameof(AppareilSelectionne));
+            OnPropertyChanged(nameof(AdresseFixeSaisie));
+            RebuildReglagesDynamiques();
+            RefreshAll();
+        }
+
         private OptionAppareil? _appareilSelectionne;
 
         /// <summary>
@@ -375,8 +449,13 @@ namespace Metrologo.ViewModels
                 var modele = ModeleCatalogueSelectionne();
                 MesureConfig.IdModeleCatalogue = modele?.Id ?? string.Empty;
 
+                // Mode adresses fixes : transmet l'adresse forcée à l'orchestrator (sinon -1 = IDN).
+                MesureConfig.AdresseFixeForcee =
+                    _appareilSelectionne?.EstFixe == true ? _appareilSelectionne.AdresseFixe : -1;
+
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(MesureConfig));
+                OnPropertyChanged(nameof(AdresseFixeSaisie));
                 RebuildReglagesDynamiques();
                 RefreshAll();
             }
@@ -454,6 +533,9 @@ namespace Metrologo.ViewModels
         /// </summary>
         private ModeleAppareil? ModeleCatalogueSelectionne()
         {
+            // Mode adresses fixes : le modèle legacy est porté directement par l'option sélectionnée.
+            if (AppareilSelectionne?.ModeleFixe != null) return AppareilSelectionne.ModeleFixe;
+
             var det = AppareilSelectionne?.Detecte;
             if (det == null) return null;
 

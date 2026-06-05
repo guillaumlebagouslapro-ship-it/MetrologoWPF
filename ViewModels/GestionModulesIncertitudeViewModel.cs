@@ -190,18 +190,38 @@ namespace Metrologo.ViewModels
                 }
                 ModuleSelectionne.NumModule = nouveauNum;
 
-                // Renommage éventuel : si le N° module a changé, on renomme d'abord le fichier CSV
-                // (refus si un autre module porte déjà ce nom), puis on sauvegarde le contenu.
+                // Renommage éventuel : si le N° module a changé, on renomme le fichier CSV
+                // puis on sauvegarde le contenu. Si un autre module porte déjà ce nom, on
+                // demande confirmation avant d'écraser (sinon on rétablit le nom d'origine).
                 if (!string.IsNullOrEmpty(_numModuleOriginal)
                     && !string.Equals(_numModuleOriginal, nouveauNum, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Modules.Any(m => !ReferenceEquals(m, ModuleSelectionne)
-                            && string.Equals(m.NumModule, nouveauNum, StringComparison.OrdinalIgnoreCase)))
+                    var existant = Modules.FirstOrDefault(m => !ReferenceEquals(m, ModuleSelectionne)
+                            && string.Equals(m.NumModule, nouveauNum, StringComparison.OrdinalIgnoreCase));
+                    if (existant != null)
                     {
-                        MessageBox.Show($"Un module « {nouveauNum} » existe déjà dans la catégorie « {LibelleCategorie} ».",
-                            "Doublon", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
+                        var conf = MessageBox.Show(
+                            $"Un module « {nouveauNum} » existe déjà dans la catégorie « {LibelleCategorie} ».\n\n"
+                          + "Voulez-vous le remplacer par le module en cours d'édition ?\n\n"
+                          + $"• Oui : le module existant « {nouveauNum} » est écrasé.\n"
+                          + "• Non : le renommage est annulé (le nom d'origine est conservé).",
+                            "Module déjà existant", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+                        if (conf != MessageBoxResult.Yes)
+                        {
+                            // Refus : on rétablit le nom d'origine, sinon le champ et la liste
+                            // garderaient le doublon alors que rien n'a été enregistré.
+                            ModuleSelectionne.NumModule = _numModuleOriginal;
+                            Statut = $"Renommage annulé : « {nouveauNum} » est déjà utilisé.";
+                            return;
+                        }
+
+                        // Remplacement confirmé : on supprime le module existant (fichier + liste)
+                        // avant de renommer le fichier courant vers ce nom.
+                        ModulesIncertitudeService.Supprimer(nouveauNum, TypeMesureSelectionne);
+                        Modules.Remove(existant);
                     }
+
                     ModulesIncertitudeService.Renommer(_numModuleOriginal, nouveauNum, TypeMesureSelectionne);
                     _numModuleOriginal = nouveauNum;
                 }

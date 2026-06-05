@@ -22,6 +22,7 @@ namespace Metrologo.ViewModels
         [NotifyPropertyChangedFor(nameof(EstEnModeAdmin))]
         [NotifyPropertyChangedFor(nameof(EstEnSelectionUtilisateur))]
         [NotifyPropertyChangedFor(nameof(EstEnSelectionPoste))]
+        [NotifyPropertyChangedFor(nameof(EstEnSelectionScanMode))]
         [NotifyPropertyChangedFor(nameof(NavigationActive))]
         [NotifyPropertyChangedFor(nameof(TexteMode))]
         [NotifyPropertyChangedFor(nameof(TexteUtilisateurConnecte))]
@@ -43,10 +44,12 @@ namespace Metrologo.ViewModels
         public AccueilViewModel Accueil => _accueilViewModel;
         private readonly AdminViewModel _adminViewModel = new();
         private readonly SelectionPosteViewModel _selectionPosteViewModel = new();
+        private readonly SelectionScanModeViewModel _selectionScanModeViewModel = new();
         private readonly SelectionUtilisateurViewModel _selectionUtilisateurViewModel = new();
 
         public bool EstEnModeAdmin => VueActuelle is AdminViewModel;
         public bool EstEnSelectionPoste => VueActuelle is SelectionPosteViewModel;
+        public bool EstEnSelectionScanMode => VueActuelle is SelectionScanModeViewModel;
         public bool EstEnSelectionUtilisateur => VueActuelle is SelectionUtilisateurViewModel;
 
         /// <summary>
@@ -54,7 +57,7 @@ namespace Metrologo.ViewModels
         /// de navigation et la barre de statut sont alors masquées pour éviter qu'on
         /// contourne ces étapes en cliquant sur « Accueil ».
         /// </summary>
-        public bool NavigationActive => !EstEnSelectionPoste && !EstEnSelectionUtilisateur;
+        public bool NavigationActive => !EstEnSelectionPoste && !EstEnSelectionScanMode && !EstEnSelectionUtilisateur;
 
         public string TexteMode => EstEnModeAdmin ? "Mode : Administration" : "Mode : Exploitation";
 
@@ -232,10 +235,28 @@ namespace Metrologo.ViewModels
                 EstSurBaie = choixBaie;
                 _accueilViewModel.EstSurBaie = choixBaie;
                 OnPropertyChanged(nameof(TexteUtilisateurConnecte));
-                // Étape 3 : accueil.
-                VueActuelle = _accueilViewModel;
                 _ = Metrologo.Services.Journal.Journal.DefinirPosteAsync(choixBaie ? "Baie" : "Paillasse");
+
+                if (choixBaie)
+                {
+                    // Baie : étape supplémentaire pour choisir Scan GPIB ou Adresses fixes.
+                    VueActuelle = _selectionScanModeViewModel;
+                }
+                else
+                {
+                    // Paillasse : scan automatique, pas d'adresses fixes — on va direct à l'accueil.
+                    EtatApplication.ModeAdressesFixes = false;
+                    VueActuelle = _accueilViewModel;
+                }
             };
+
+            // Baie : choix Scan GPIB (true) ou Adresses fixes (false) → puis accueil.
+            _selectionScanModeViewModel.OnModeChoisi = (estScan) =>
+            {
+                EtatApplication.ModeAdressesFixes = !estScan;
+                VueActuelle = _accueilViewModel;
+            };
+            _selectionScanModeViewModel.OnRetour = () => VueActuelle = _selectionPosteViewModel;
 
             // Retour depuis la sélection du poste vers l'écran de connexion (mauvais
             // utilisateur choisi au démarrage) — sans redémarrer l'application.

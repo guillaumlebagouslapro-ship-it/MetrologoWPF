@@ -16,6 +16,22 @@ namespace Metrologo.Models
         public bool EstConnu => Detecte?.ModeleReconnu != null;
         public string AdresseAffiche => Detecte?.AdresseCourte ?? "non connecté";
 
+        // ---------------- Mode « adresses fixes » (appareils legacy non détectés) ----------------
+
+        /// <summary>
+        /// Modèle catalogue legacy associé à cette option en mode « adresses fixes » (l'appareil
+        /// n'est pas sur le bus, on le pilote à une adresse saisie). Null en mode scan.
+        /// </summary>
+        public ModeleAppareil? ModeleFixe { get; init; }
+
+        public bool EstFixe => ModeleFixe != null;
+
+        /// <summary>
+        /// Adresse GPIB éditable (mode adresses fixes), pré-remplie depuis le profil. Settable :
+        /// liée en TwoWay à un TextBox dans la fenêtre Configuration.
+        /// </summary>
+        public int AdresseFixe { get; set; }
+
         public override string ToString() => Libelle;
     }
 }

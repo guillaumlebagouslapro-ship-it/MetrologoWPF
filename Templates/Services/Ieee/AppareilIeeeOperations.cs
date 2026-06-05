@@ -306,6 +306,10 @@ namespace Metrologo.Services.Ieee
         private static async Task<string> EcrireEtLireAsync(
             AppareilIEEE appareil, IIeeeDriver driver, string commande, CancellationToken ct)
         {
+            JournalLog.Info(CategorieLog.Mesure, "MESURE_ENVOI",
+                $"GPIB0::{appareil.Adresse} ← {commande}",
+                new { Nom = appareil.Nom, Adresse = appareil.Adresse, Commande = commande });
+
             await driver.EcrireAsync(appareil.Adresse, commande, appareil.WriteTerm, ct);
 
             if (appareil.GereSRQ)

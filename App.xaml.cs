@@ -169,6 +169,11 @@ namespace Metrologo
             await CatalogueAppareilsService.Instance.ChargerAsync();
             StartupLap("CatalogueAppareilsService.ChargerAsync");
 
+            // Seed des fréquencemètres legacy (EIP / Racal / Stanford) qui ne répondent pas à
+            // *IDN? : injectés en mémoire (idempotent) pour la sélection en « adresses fixes ».
+            Metrologo.Services.Catalogue.SeedLegacyAppareils.EnsureSeeded();
+            StartupLap("SeedLegacyAppareils.EnsureSeeded");
+
             // Chargement des presets de balayage de stabilité (séédés au 1er démarrage).
             await PresetsStabiliteService.Instance.ChargerAsync();
             StartupLap("PresetsStabiliteService.ChargerAsync");

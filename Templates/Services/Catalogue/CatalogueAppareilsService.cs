@@ -95,6 +95,21 @@ namespace Metrologo.Services.Catalogue
         // CRUD
         // -------------------------------------------------------------------------
 
+        /// <summary>
+        /// Ajoute un modèle <b>en mémoire uniquement</b> (aucune écriture sur le partage réseau)
+        /// s'il n'existe pas déjà (comparaison par <c>Id</c>). Utilisé pour seeder les profils
+        /// legacy au démarrage : ils sont définis dans le code et toujours présents, sans polluer
+        /// le catalogue réseau partagé ni dépendre de la disponibilité de <c>M:\</c>.
+        /// Retourne <c>true</c> si le modèle a été ajouté, <c>false</c> s'il était déjà présent.
+        /// </summary>
+        public bool AjouterEnMemoireSiAbsent(ModeleAppareil modele)
+        {
+            if (Modeles.Any(m => m.Id == modele.Id)) return false;
+            Modeles.Add(modele);
+            NotifierChange();
+            return true;
+        }
+
         public async Task AjouterAsync(ModeleAppareil modele)
         {
             if (string.IsNullOrEmpty(modele.Id)) modele.Id = GenererId(modele.Nom);

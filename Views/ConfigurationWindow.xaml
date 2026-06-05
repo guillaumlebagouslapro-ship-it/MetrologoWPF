@@ -362,6 +362,19 @@
                                    TextWrapping="Wrap"
                                    Margin="0,0,0,14"/>
 
+                        <!-- Adresse GPIB éditable (mode « adresses fixes » : appareils legacy) -->
+                        <StackPanel Visibility="{Binding ModeAdressesFixes, Converter={StaticResource BoolToVis}}"
+                                    Margin="0,0,0,14">
+                            <TextBlock Text="ADRESSE GPIB" Style="{StaticResource FormLabelStyle}"/>
+                            <ui:TextBox Text="{Binding AdresseFixeSaisie, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        Padding="10,6"/>
+                            <TextBlock Text="Appareil ancien sélectionné manuellement — vérifiez l'adresse réglée sur l'instrument (EIP/Stanford = 16, Racal = 15 par défaut)."
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+
                         <!-- Paramètres de mesure (gate) -->
                         <StackPanel Visibility="{Binding ShowGateSettings, Converter={StaticResource BoolToVis}}"
                                     Margin="0,0,0,14">

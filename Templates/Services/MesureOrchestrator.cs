@@ -123,7 +123,7 @@ namespace Metrologo.Services
                     return result;
                 }
 
-                var (appareil, erreur) = ResolverDepuisCatalogue(mesure.IdModeleCatalogue);
+                var (appareil, erreur) = ResolverDepuisCatalogue(mesure.IdModeleCatalogue, mesure);
                 if (appareil == null)
                 {
                     result.Erreur = erreur;
@@ -1086,7 +1086,7 @@ namespace Metrologo.Services
         /// Retrouve le modèle catalogue + l'adresse GPIB détectée sur le bus, et construit
         /// un <see cref="AppareilIEEE"/> via <see cref="CatalogueAdapter"/>.
         /// </summary>
-        private static (AppareilIEEE?, string?) ResolverDepuisCatalogue(string idModele)
+        private static (AppareilIEEE?, string?) ResolverDepuisCatalogue(string idModele, Mesure mesure)
         {
             var modele = CatalogueAppareilsService.Instance.Modeles
                 .FirstOrDefault(m => m.Id == idModele);
@@ -1096,6 +1096,17 @@ namespace Metrologo.Services
                     + "Le catalogue a peut-être été modifié — rouvrez la Configuration.");
             }
 
+            // Mode « adresses fixes » : adresse explicitement forcée sur la mesure, ou appareil
+            // legacy (sans *IDN?) avec son adresse par défaut. On court-circuite alors la détection
+            // sur le bus (ces appareils n'apparaissent jamais dans AppareilsDetectes).
+            int adresseFixe = mesure.AdresseFixeForcee >= 0
+                ? mesure.AdresseFixeForcee
+                : (modele.Parametres.Legacy ? modele.Parametres.AdresseFixeParDefaut : -1);
+
+            if (adresseFixe >= 0)
+                return (CatalogueAdapter.VersAppareilIEEE(modele, adresseFixe), null);
+
+            // Chemin historique : appareil moderne détecté par IDN sur le bus.
             var detecte = EtatApplication.AppareilsDetectes
                 .FirstOrDefault(d => modele.Correspond(d.Fabricant, d.Modele));
             if (detecte == null)

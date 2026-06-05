@@ -46,7 +46,7 @@ namespace Metrologo.Services.Catalogue
                 VerifArmingActive = p.VerifArmingActive,
                 ModeRapideActif = p.ModeRapideActif,
                 CommandeBulkInit = p.CommandeBulkInit ?? string.Empty,
-                Gates = ConstruireGates(modele.Gates, p.CommandeGate)
+                Gates = ConstruireGates(modele.Gates, p.CommandeGate, p.CommandesGateParSlot)
             };
 
             return appareil;
@@ -73,7 +73,8 @@ namespace Metrologo.Services.Catalogue
         /// programmation — cas Racal en mode Interval par ex.).
         /// </summary>
         private static Dictionary<int, GateConfig> ConstruireGates(
-            List<string> libellesGates, string templateCommande)
+            List<string> libellesGates, string templateCommande,
+            Dictionary<int, string>? commandesParSlot = null)
         {
             var dict = new Dictionary<int, GateConfig>();
             foreach (var libelle in libellesGates)
@@ -82,9 +83,16 @@ namespace Metrologo.Services.Catalogue
                 int slot = TrouverSlotUi(secondes);
                 if (slot < 0) continue;  // Valeur non-standard, pas mappable sur l'UI.
 
-                string commande = string.IsNullOrWhiteSpace(templateCommande)
-                    ? string.Empty
-                    : string.Format(CultureInfo.InvariantCulture, templateCommande, secondes);
+                // Appareils legacy : commande de gate discrète par slot (non templatable),
+                // prioritaire sur le template {0}. Sinon fallback sur le template (modernes).
+                string commande;
+                if (commandesParSlot != null && commandesParSlot.TryGetValue(slot, out var cmdLegacy)
+                    && !string.IsNullOrWhiteSpace(cmdLegacy))
+                    commande = cmdLegacy;
+                else if (!string.IsNullOrWhiteSpace(templateCommande))
+                    commande = string.Format(CultureInfo.InvariantCulture, templateCommande, secondes);
+                else
+                    commande = string.Empty;
 
                 dict[slot] = new GateConfig
                 {

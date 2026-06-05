@@ -44,6 +44,13 @@ namespace Metrologo.Models
         /// <summary>Levé après chaque mise à jour de <see cref="AppareilsDetectes"/>.</summary>
         public static event EventHandler? AppareilsDetectesChange;
 
+        /// <summary>
+        /// Mode « adresses fixes » actif (choisi sur le poste Baie). Quand <c>true</c>, la fenêtre
+        /// Configuration propose les appareils legacy du catalogue à une adresse GPIB éditable au
+        /// lieu de la liste des appareils détectés par scan. Toujours <c>false</c> en Paillasse.
+        /// </summary>
+        public static bool ModeAdressesFixes { get; set; }
+
         public static void NotifierAppareilsDetectesChange()
             => AppareilsDetectesChange?.Invoke(null, EventArgs.Empty);
 

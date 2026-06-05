@@ -14,6 +14,13 @@ namespace Metrologo.Models
         public string IdModeleCatalogue { get; set; } = string.Empty;
 
         /// <summary>
+        /// Adresse GPIB forcée pour le mode « adresses fixes » (appareils legacy sans <c>*IDN?</c> :
+        /// EIP/Racal/Stanford). Quand &gt;= 0, l'orchestrator résout l'appareil à cette adresse au
+        /// lieu de chercher un device détecté par IDN sur le bus. <c>-1</c> = résolution IDN normale.
+        /// </summary>
+        public int AdresseFixeForcee { get; set; } = -1;
+
+        /// <summary>
         /// Commandes SCPI correspondant aux réglages choisis dans la fenêtre Configuration
         /// (Impédance, Couplage, Filtre, Trigger, Mode). L'orchestrator les rejoue après le
         /// <c>*RST</c> pour que l'appareil retrouve l'état configuré avant la boucle de mesures.
