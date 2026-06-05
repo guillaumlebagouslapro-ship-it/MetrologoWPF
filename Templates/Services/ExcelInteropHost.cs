@@ -1454,6 +1454,12 @@ namespace Metrologo.Services
                         // (cf. ExcelService.InitialiserRapportAsync pour le raisonnement complet.)
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertResol", 0.0);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertSup", 0.0);
+                        // Valeur de référence (= fréquence du rubidium actif) : écrite DIRECTEMENT
+                        // en cellule C21 de la feuille de mesure. La résolution par zone nommée
+                        // pouvait retomber sur le scope workbook (cellule de ModFeuille cachée) et
+                        // laisser C21 vide sur la feuille visible. L'écriture par adresse garantit
+                        // que la référence du rubidium apparaît bien. (ZNFreqRef pointe sur C21.)
+                        EcrireValeurCelluleInterne(nouvelleFeuille, "C21", rubidium.FrequenceMoyenne);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqRef",
                             rubidium.FrequenceMoyenne);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNCoeffA", 1e-10);

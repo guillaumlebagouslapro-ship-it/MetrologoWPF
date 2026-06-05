@@ -417,6 +417,14 @@ namespace Metrologo.Services
                 // sur une mesure suivante (ex. Générateur) sans popup.
                 SetNamed("ZNIncertResol", 0.0);
                 SetNamed("ZNIncertSup", 0.0);
+
+                // Valeur de référence (= fréquence du rubidium actif) : écrite DIRECTEMENT
+                // dans la cellule C21 (zone ZNFreqRef). On n'utilise pas SetNamed ici : sur une
+                // feuille fraîchement copiée de ModFeuille, la résolution de la zone nommée
+                // pouvait retomber sur le scope workbook (cellule de ModFeuille cachée) et la
+                // cellule C21 de la feuille visible restait vide. L'écriture par adresse garantit
+                // que la référence du rubidium apparaît bien sur la feuille de mesure.
+                _feuilleMesure.Cell("C21").SetValue(rubidium.FrequenceMoyenne);
                 SetNamed("ZNFreqRef", rubidium.FrequenceMoyenne);
 
                 // Fallback hardcoded : utilisé tel quel si aucun module d'incertitude n'est
