@@ -80,8 +80,13 @@ namespace Metrologo.Services.Catalogue
             },
             Reglages = new List<ReglageAppareil>
             {
+                // Voie A (canal 1) et Voie B (canal 2) : memes parametres, l'indice de canal
+                // change dans la commande (term1/tcpl1 -> term2/tcpl2). A confirmer au manuel SR620
+                // avant le materiel reel.
                 Choix("Impédance Voie A", ("50 Ω", "term1,0"), ("1 MΩ", "term1,1")),
                 Choix("Couplage Voie A", ("AC", "tcpl1,1"), ("DC", "tcpl1,0")),
+                Choix("Impédance Voie B", ("50 Ω", "term2,0"), ("1 MΩ", "term2,1")),
+                Choix("Couplage Voie B", ("AC", "tcpl2,1"), ("DC", "tcpl2,0")),
                 Choix("Entrée Voie C", ("UHF", "term1,2")),
             }
         };
@@ -92,7 +97,7 @@ namespace Metrologo.Services.Catalogue
         {
             Id = IdRacal,
             Nom = "Racal-Dana 1996 (legacy)",
-            NbVoies = 3,
+            NbVoies = 2,
             Gates = new List<string>(GatesCompletes),
             Parametres = new ParametresIeee
             {
@@ -123,7 +128,9 @@ namespace Metrologo.Services.Catalogue
             {
                 Choix("Impédance Voie A", ("A 50 Ω", "FN2 AZ1"), ("A 1 MΩ", "FN2 AZ0")),
                 Choix("Couplage Voie A", ("AC", "AA1"), ("DC", "AA0")),
-                Choix("Entrée Voie C", ("Voie C", "FN1")),
+                // Voie B = entree HF (FN1) : pas de couplage (comme dans le Delphi qui masque
+                // le couplage sur cette entree).
+                Choix("Entrée Voie B", ("Entrée HF", "FN1")),
             }
         };
 
