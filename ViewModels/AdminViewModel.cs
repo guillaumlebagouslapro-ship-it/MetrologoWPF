@@ -254,6 +254,22 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
+        /// Ouvre la fenêtre d'édition des adresses GPIB des appareils legacy (EIP / Racal /
+        /// Stanford). Réservé à l'admin : permet de fixer une adresse distincte par appareil
+        /// pour les brancher simultanément. Enregistré sur le réseau (appareils-legacy.json).
+        /// </summary>
+        [RelayCommand]
+        private void OuvrirAdressesLegacy()
+        {
+            Journal.Info(CategorieLog.Administration, "OUVERTURE_ADRESSES_LEGACY",
+                "Accès à la configuration des adresses GPIB des appareils fixes.");
+
+            var vm = new GestionAdressesLegacyViewModel();
+            var win = new GestionAdressesLegacyWindow(vm) { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>
         /// Ouvre la fenêtre de configuration des chemins de stockage. Permet à l'admin
         /// de surcharger les emplacements par défaut (locaux) pour pointer vers un partage
         /// réseau commun à tous les postes du site (modules d'incertitude, presets,

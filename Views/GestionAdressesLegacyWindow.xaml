@@ -1,0 +1,77 @@
+<ui:FluentWindow x:Class="Metrologo.Views.GestionAdressesLegacyWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Adresses GPIB des appareils fixes"
+        Height="520" Width="640"
+        WindowStartupLocation="CenterOwner"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Adresses GPIB des appareils fixes">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <StackPanel Grid.Row="1" Margin="24,12,24,0">
+            <TextBlock Text="Emplacement GPIB des appareils legacy"
+                       FontSize="20" FontWeight="Bold"
+                       Foreground="{StaticResource AsertiNavyBrush}"/>
+            <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                Définissez une adresse GPIB (1 à 30) pour chaque appareil. Donnez des adresses
+                distinctes pour pouvoir les brancher simultanément sur le bus. Ces réglages sont
+                enregistrés sur le réseau et utilisés en mode « Adresses fixes ».
+            </TextBlock>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="2" Margin="24,16,24,0" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Lignes}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{DynamicResource LayerFillColorDefaultBrush}"
+                                CornerRadius="8" Padding="16,12" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Nom}" FontSize="15" FontWeight="SemiBold"
+                                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="Adresse GPIB" VerticalAlignment="Center"
+                                               Margin="0,0,10,0"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <ui:TextBox Text="{Binding Adresse, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                Width="120"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="24,16,24,20">
+            <ui:Button Content="Annuler" Appearance="Secondary" Cursor="Hand"
+                       Command="{Binding AnnulerCommand}" Margin="0,0,10,0" MinWidth="110"/>
+            <ui:Button Content="Enregistrer" Appearance="Primary" Cursor="Hand"
+                       Command="{Binding EnregistrerCommand}" MinWidth="130"/>
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

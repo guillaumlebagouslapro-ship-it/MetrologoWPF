@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using Metrologo.Models;
 using Metrologo.Services.Journal;
@@ -53,6 +54,26 @@ namespace Metrologo.Services.Catalogue
             var svc = CatalogueAppareilsService.Instance;
             foreach (var m in profils)
                 svc.AjouterEnMemoireSiAbsent(m);
+        }
+
+        /// <summary>
+        /// Réécrit le fichier réseau des profils legacy avec les modèles legacy actuellement en
+        /// catalogue (notamment leur <c>AdresseFixeParDefaut</c> éditée en Administration).
+        /// Réservé à l'admin. Retourne le chemin écrit, ou lève si le réseau est injoignable.
+        /// </summary>
+        public static string Sauvegarder()
+        {
+            var legacy = CatalogueAppareilsService.Instance.Modeles
+                .Where(m => m.Parametres.Legacy)
+                .ToList();
+
+            string fichier = CheminsMetrologo.FichierAppareilsLegacy;
+            Directory.CreateDirectory(Path.GetDirectoryName(fichier)!);
+            File.WriteAllText(fichier, JsonSerializer.Serialize(legacy, _jsonOpts));
+
+            JournalLog.Info(CategorieLog.Administration, "APPAREILS_LEGACY_SAVE",
+                $"{legacy.Count} profil(s) legacy sauvegardé(s) dans {fichier}.");
+            return fichier;
         }
 
         private static List<ModeleAppareil> ChargerOuCreerFichier(List<ModeleAppareil> defauts)
