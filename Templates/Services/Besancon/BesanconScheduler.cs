@@ -57,6 +57,27 @@ namespace Metrologo.Services.Besancon
             Programmer(cfg);
         }
 
+        /// <summary>Arrête la planification quotidienne (dispose le timer s'il tourne).</summary>
+        public static void Arreter()
+        {
+            lock (_sync)
+            {
+                _timer?.Dispose();
+                _timer = null;
+            }
+        }
+
+        /// <summary>
+        /// Relit la configuration et l'applique immédiatement : (re)programme la tâche si
+        /// <see cref="BesanconConfig.Active"/>, sinon l'arrête. À appeler après modification des
+        /// paramètres depuis l'écran Admin pour que le changement prenne effet sans redémarrage.
+        /// </summary>
+        public static void Reconfigurer()
+        {
+            Arreter();
+            Demarrer();
+        }
+
         private static void Programmer(BesanconConfig cfg)
         {
             var heure = cfg.HeureParsee();

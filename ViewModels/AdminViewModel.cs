@@ -224,6 +224,16 @@ namespace Metrologo.ViewModels
         }
 
 
+        /// <summary>Ouvre les paramètres de la récupération automatique Besançon (Active, heure, FTP).</summary>
+        [RelayCommand]
+        private void OuvrirParametresBesancon()
+        {
+            Journal.Info(CategorieLog.Administration, "OUVERTURE_PARAMETRES_BESANCON",
+                "Accès aux paramètres de la récupération automatique Besançon.");
+            var win = new BesanconParametresWindow { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
         [RelayCommand]
         private void OuvrirGestionModules()
         {

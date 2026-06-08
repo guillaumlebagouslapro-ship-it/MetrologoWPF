@@ -1,0 +1,160 @@
+<ui:FluentWindow x:Class="Metrologo.Views.BesanconParametresWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Paramètres Besançon"
+        Height="640" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True"
+        Icon="/Resources/logo.ico">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Paramètres Besançon" ShowMaximize="False">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Resources/logo.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <Border Grid.Row="1" Padding="24,12,24,16">
+            <StackPanel Orientation="Horizontal">
+                <Border Width="44" Height="44" CornerRadius="10"
+                        Background="{StaticResource AsertiNavyBrush}"
+                        Margin="0,0,14,0">
+                    <ui:SymbolIcon Symbol="CloudArrowDown24" FontSize="22"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Récupération automatique Besançon"
+                               FontSize="18" FontWeight="Bold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="Téléchargement FTP quotidien du fichier ef_utcop vers le fichier txt cumulatif"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="24,0,24,16">
+            <StackPanel>
+                <!-- Tâche automatique -->
+                <Border Style="{StaticResource FormSectionStyle}">
+                    <StackPanel>
+                        <TextBlock Text="TÂCHE AUTOMATIQUE" Style="{StaticResource FormLabelStyle}"/>
+                        <CheckBox Content="Activer la récupération quotidienne sur ce poste"
+                                  IsChecked="{Binding Active, Mode=TwoWay}"
+                                  Margin="0,0,0,12"/>
+                        <TextBlock Text="HEURE DE DÉCLENCHEMENT (HH:mm)" Style="{StaticResource FormLabelStyle}"/>
+                        <ui:TextBox Text="{Binding HeureTexte, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="09:38"
+                                    FontFamily="Cascadia Mono, Consolas"
+                                    Padding="10,8">
+                            <ui:TextBox.Icon>
+                                <ui:SymbolIcon Symbol="Clock24"/>
+                            </ui:TextBox.Icon>
+                        </ui:TextBox>
+                        <TextBlock Text="Tous les postes peuvent rester actifs : un marqueur partagé fait que seul le premier télécharge réellement chaque jour."
+                                   FontSize="11" Margin="0,6,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Identifiants FTP -->
+                <Border Style="{StaticResource FormSectionStyle}">
+                    <StackPanel>
+                        <TextBlock Text="SERVEUR FTP" Style="{StaticResource FormLabelStyle}"/>
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <ui:TextBox Grid.Column="0"
+                                        Text="{Binding FtpHote, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ftp.exemple.com"
+                                        Padding="10,8"/>
+                            <ui:TextBox Grid.Column="2"
+                                        Text="{Binding FtpPort, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="21"
+                                        Padding="10,8"/>
+                        </Grid>
+
+                        <TextBlock Text="UTILISATEUR" Style="{StaticResource FormLabelStyle}"/>
+                        <ui:TextBox Text="{Binding FtpUtilisateur, UpdateSourceTrigger=PropertyChanged}"
+                                    Padding="10,8" Margin="0,0,0,12"/>
+
+                        <TextBlock Text="MOT DE PASSE" Style="{StaticResource FormLabelStyle}"/>
+                        <ui:TextBox Text="{Binding FtpMotDePasse, UpdateSourceTrigger=PropertyChanged}"
+                                    Padding="10,8" Margin="0,0,0,12"/>
+                        <TextBlock Text="⚠ Stocké en clair dans besancon.ftp.json sur le partage (lisible par tous les accès au dossier)."
+                                   FontSize="11" Margin="0,-6,0,12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+
+                        <CheckBox Content="Connexion FTPS (SSL explicite)"
+                                  IsChecked="{Binding FtpSsl, Mode=TwoWay}"
+                                  Margin="0,0,0,12"/>
+
+                        <TextBlock Text="FICHIER DISTANT" Style="{StaticResource FormLabelStyle}"/>
+                        <ui:TextBox Text="{Binding FichierDistant, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="ef_utcop"
+                                    FontFamily="Cascadia Mono, Consolas"
+                                    Padding="10,8"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Message d'erreur -->
+                <Border CornerRadius="6" Padding="12,10"
+                        Background="#FFFEE2E2"
+                        BorderBrush="#FFFCA5A5"
+                        BorderThickness="1"
+                        Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Warning24" FontSize="16"
+                                       Foreground="#FFDC2626"
+                                       Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding MessageErreur}"
+                                   Foreground="#FF7F1D1D"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="3"
+                Padding="24,16"
+                Background="{DynamicResource LayerFillColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Content="Annuler"
+                        Command="{Binding AnnulerCommand}"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Column="2"
+                        Content="Enregistrer"
+                        Command="{Binding EnregistrerCommand}"
+                        IsDefault="True"
+                        Style="{StaticResource PrimaryButtonStyle}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</ui:FluentWindow>
