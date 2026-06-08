@@ -288,56 +288,71 @@ namespace Metrologo.Services.Besancon
             if (double.IsNaN(ecart) || double.IsInfinity(ecart) || Math.Abs(ecart) > 1e-9)
             {
                 Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_REF_IGNOREE",
-                    $"Écart hebdo non plausible ({ecart:G9}) — fréquence de référence de "
-                  + $"« {RubidiumPiloteBesancon} » laissée inchangée.");
+                    $"Écart hebdo non plausible ({ecart:G9}) — fréquence de référence laissée inchangée.");
+                return;
+            }
+
+            var actif = EtatApplication.RubidiumActif;
+            if (actif == null)
+            {
+                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_SANS_RUBIDIUM",
+                    "Aucun rubidium actif — injection de la fréquence de référence Besançon différée.");
+                return;
+            }
+
+            // Le pilotage Besançon ne concerne que le rubidium asservi GPS (cf. legacy bAvecGPS) ou,
+            // à défaut, celui dont le nom correspond au pilote configuré (E10-Y8). Tout autre rubidium
+            // garde sa fréquence saisie manuellement.
+            bool pilote = actif.AvecGPS
+                || string.Equals(actif.Designation?.Trim(), RubidiumPiloteBesancon, StringComparison.OrdinalIgnoreCase);
+            if (!pilote)
+            {
+                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_NON_PILOTE",
+                    $"Rubidium actif « {actif.Designation} » non piloté par Besançon "
+                  + $"(ni « Avec GPS » ni « {RubidiumPiloteBesancon} ») — fréquence de référence inchangée.");
                 return;
             }
 
             double nouvelleFreq = FrequenceNominaleHz * (1.0 + ecart);
-            double? ancienne = null;
-            bool modifie = false;
+            if (Math.Abs(actif.FrequenceMoyenne - nouvelleFreq) <= SeuilHz)
+            {
+                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_INCHANGEE",
+                    $"Fréquence de référence de « {actif.Designation} » déjà à jour ({nouvelleFreq:F9} Hz, écart {ecart:G9}).");
+                return;
+            }
 
-            // 1. Entrée E10-Y8 du catalogue partagé (quelle que soit la sélection active).
+            double ancienne = actif.FrequenceMoyenne;
+
+            // 1. Mise à jour en mémoire (objet == EtatApplication.RubidiumActif) + persistance partagée.
+            actif.FrequenceMoyenne = nouvelleFreq;
+            Models.Preferences.SauvegarderRubidium(actif);
+
+            // 2. Répercute dans l'entrée correspondante du catalogue partagé (survit à une re-sélection).
             try
             {
                 var catalogue = Models.Preferences.CatalogueRubidiums.ToList();
                 var cible = catalogue.FirstOrDefault(r =>
-                    string.Equals(r.Designation?.Trim(), RubidiumPiloteBesancon, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(r.Designation?.Trim(), actif.Designation?.Trim(), StringComparison.OrdinalIgnoreCase));
                 if (cible != null && Math.Abs(cible.FrequenceMoyenne - nouvelleFreq) > SeuilHz)
                 {
-                    ancienne = cible.FrequenceMoyenne;
                     cible.FrequenceMoyenne = nouvelleFreq;
                     Models.Preferences.SauvegarderCatalogueRubidiums(catalogue);
-                    modifie = true;
                 }
             }
             catch (Exception ex)
             {
                 Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_REF_CATALOGUE_KO",
-                    $"Mise à jour du catalogue pour « {RubidiumPiloteBesancon} » échouée : {ex.Message}");
+                    $"Mise à jour du catalogue pour « {actif.Designation} » échouée : {ex.Message}");
             }
 
-            // 2. Rubidium ACTIF si c'est E10-Y8 : mémoire + persistance + notification UI.
-            var actif = EtatApplication.RubidiumActif;
-            if (actif != null
-                && string.Equals(actif.Designation?.Trim(), RubidiumPiloteBesancon, StringComparison.OrdinalIgnoreCase)
-                && Math.Abs(actif.FrequenceMoyenne - nouvelleFreq) > SeuilHz)
-            {
-                ancienne ??= actif.FrequenceMoyenne;
-                actif.FrequenceMoyenne = nouvelleFreq;
-                Models.Preferences.SauvegarderRubidium(actif);
+            // 3. Notifie l'UI (bandeau bas, écrans) sur le thread Dispatcher.
+            var disp = System.Windows.Application.Current?.Dispatcher;
+            if (disp != null)
+                disp.BeginInvoke(new Action(() => EtatApplication.NotifierRubidiumActifChange()));
 
-                var disp = System.Windows.Application.Current?.Dispatcher;
-                if (disp != null)
-                    disp.BeginInvoke(new Action(() => EtatApplication.NotifierRubidiumActifChange()));
-                modifie = true;
-            }
-
-            if (modifie)
-                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_INJECTEE",
-                    $"Fréquence de référence de « {RubidiumPiloteBesancon} » mise à jour depuis l'écart "
-                  + $"hebdo Besançon ({ecart:G9}) : {(ancienne.HasValue ? ancienne.Value.ToString("F9") : "?")} Hz → "
-                  + $"{nouvelleFreq.ToString("F9")} Hz.");
+            Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_INJECTEE",
+                $"Fréquence de référence de « {actif.Designation} » mise à jour depuis l'écart hebdo "
+              + $"Besançon ({ecart:G9}) : {ancienne:F9} Hz → {nouvelleFreq:F9} Hz.");
         }
 
         /// <summary>
