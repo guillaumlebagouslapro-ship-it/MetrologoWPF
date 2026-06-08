@@ -28,8 +28,13 @@ namespace Metrologo.Services.Besancon
         /// </summary>
         private const string RubidiumPiloteBesancon = "E10-Y8";
 
-        /// <summary>Nombre de semaines écoulées contrôlées lors du rattrapage des moyennes manquantes.</summary>
-        private const int NbSemainesRattrapage = 6;
+        /// <summary>Fréquence nominale du rubidium piloté (10 MHz) — base de la fréquence de
+        /// référence : <c>FrequenceMoyenne = FrequenceNominaleHz × (1 + écart hebdo)</c>.</summary>
+        private const double FrequenceNominaleHz = 10_000_000.0;
+
+        /// <summary>Seuil (Hz) en dessous duquel on considère la fréquence de référence inchangée
+        /// (évite des réécritures inutiles ; bien plus fin que les offsets hebdo ~1e-7 Hz).</summary>
+        private const double SeuilHz = 1e-9;
 
         /// <summary>
         /// Levé après chaque mise à jour du suivi Besançon (récupération quotidienne, rattrapage
@@ -173,6 +178,20 @@ namespace Metrologo.Services.Besancon
             // Marqueur partagé : signale aux autres postes que c'est fait pour aujourd'hui.
             EcrireMarqueur(maxMjd);
 
+            // Injecte la fréquence de référence du rubidium piloté E10-Y8 à partir de l'écart de la
+            // dernière semaine COMPLÈTE mardi→lundi : 10 MHz × (1 + écart). Recalculé à chaque
+            // récupération quotidienne ; ne change effectivement que le mardi (rotation de semaine).
+            try
+            {
+                var ecartHebdo = await BesanconSuiviService.EcartHebdoCompletAsync(DateTime.Today);
+                if (ecartHebdo.HasValue) InjecterReferenceE10(ecartHebdo.Value);
+            }
+            catch (Exception exRef)
+            {
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_REF_KO",
+                    $"Injection de la fréquence de référence E10-Y8 échouée : {exRef.Message}");
+            }
+
             // Notifie l'écran d'accueil (singleton, abonné à StatutChange) pour qu'il relise le
             // fichier txt et rafraîchisse le voyant + le rapport sans attendre un redémarrage.
             NotifierStatutChange();
@@ -251,161 +270,74 @@ namespace Metrologo.Services.Besancon
             }
         }
 
-        private static async Task TenterCalculHebdoAsync(int rubId, bool avecGps, int mardiMjd)
-        {
-            var r = await BesanconStore.CalculerMoyenneHebdoAsync(rubId, mardiMjd);
-            if (r.HasValue)
-            {
-                await BesanconStore.UpsertMoyenneHebdoAsync(rubId, avecGps, mardiMjd, r.Value.moyenne, r.Value.deltaTps);
-                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_HEBDO",
-                    $"Moyenne hebdo rubidium #{rubId} (mardi MJD {mardiMjd}) : {r.Value.moyenne:G9} "
-                  + $"(delta {r.Value.deltaTps:G9} s/jour).");
-            }
-        }
-
         /// <summary>
-        /// Vérifie les dernières semaines écoulées et calcule à la volée toute moyenne hebdo
-        /// manquante DONT les 7 valeurs journalières sont déjà disponibles — typiquement au
-        /// démarrage de l'app (« est-ce que le calcul de la semaine passée a été fait ? sinon
-        /// fais-le tout de suite »). Si les 7 jours ne sont pas encore là (ex. on est lundi),
-        /// rien n'est calculé : la tâche quotidienne le fera dès que les valeurs arriveront.
+        /// Injecte l'écart hebdomadaire Besançon comme fréquence de référence du rubidium piloté
+        /// <see cref="RubidiumPiloteBesancon"/> (« E10-Y8 ») :
+        /// <c>FrequenceMoyenne = <see cref="FrequenceNominaleHz"/> × (1 + écart)</c>. L'écart étant
+        /// SIGNÉ, la référence passe naturellement au-dessus de 10 MHz (écart positif) ou en dessous
+        /// (écart négatif). Aucun autre rubidium n'est touché.
         ///
-        /// <para/>Idempotent (n'écrase pas une moyenne existante) et sans coût FTP — pur calcul
-        /// SQL. Réinjecte la dernière moyenne dans le rubidium piloté (E10-Y8) si une semaine
-        /// vient d'être rattrapée, puis notifie l'écran principal.
+        /// <para/>Met à jour l'entrée E10-Y8 du catalogue partagé (valeur correcte même quand E10-Y8
+        /// n'est pas le rubidium actif) et, si E10-Y8 EST le rubidium actif, l'objet en mémoire +
+        /// <c>rubidium-actif.json</c>, puis notifie l'UI (Dispatcher).
         /// </summary>
-        public static async Task AssurerCalculsHebdoManquantsAsync()
+        private static void InjecterReferenceE10(double ecart)
         {
-            try
-            {
-                var rub = EtatApplication.RubidiumActif;
-                if (rub == null) return;
-
-                var today = Aujourdhui;
-                int todayMjd = JourJulien.VersMjd(today);
-                DateTime mardi = DernierMardiInclus(today);
-                bool rattrape = false;
-
-                for (int k = 0; k < NbSemainesRattrapage; k++)
-                {
-                    int mardiMjd = JourJulien.VersMjd(mardi);
-                    int fin = mardiMjd - 1;
-                    // Semaine entièrement écoulée et moyenne absente → on tente le calcul.
-                    if (fin < todayMjd && !await BesanconStore.MoyenneHebdoExisteAsync(rub.Id, mardiMjd))
-                    {
-                        await TenterCalculHebdoAsync(rub.Id, rub.AvecGPS, mardiMjd);
-                        if (await BesanconStore.MoyenneHebdoExisteAsync(rub.Id, mardiMjd))
-                            rattrape = true;
-                    }
-                    mardi = mardi.AddDays(-7);
-                }
-
-                // Réinjecte la dernière moyenne disponible (utile si une semaine a été rattrapée).
-                var dh = await BesanconStore.DerniereMoyenneHebdoAsync(rub.Id);
-                if (dh.HasValue)
-                    InjecterReferenceDansRubidiumActif(rub, dh.Value.moyenne);
-
-                if (rattrape)
-                {
-                    Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_RATTRAPAGE",
-                        "Moyenne(s) hebdomadaire(s) manquante(s) recalculée(s) au démarrage.");
-                    await GenererRapportEtNotifierAsync(rub);
-                }
-            }
-            catch (Exception ex)
-            {
-                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_RATTRAPAGE_KO",
-                    $"Rattrapage des moyennes hebdo échoué : {ex.Message}");
-            }
-        }
-
-        /// <summary>Régénère le rapport texte de suivi puis lève <see cref="StatutChange"/> (sur le Dispatcher si UI présente).</summary>
-        private static async Task GenererRapportEtNotifierAsync(Rubidium rub)
-        {
-            try { await BesanconSuiviService.EvaluerAsync(rub, Aujourdhui); }
-            catch { /* best-effort : le panneau réévaluera de son côté */ }
-
-            var disp = System.Windows.Application.Current?.Dispatcher;
-            if (disp != null)
-                disp.BeginInvoke(new Action(() => StatutChange?.Invoke(null, EventArgs.Empty)));
-            else
-                StatutChange?.Invoke(null, EventArgs.Empty);
-        }
-
-        /// <summary>Le mardi de la semaine courante (ou aujourd'hui si l'on est un mardi).</summary>
-        private static DateTime DernierMardiInclus(DateTime d)
-        {
-            int diff = ((int)d.DayOfWeek - (int)DayOfWeek.Tuesday + 7) % 7;
-            return d.Date.AddDays(-diff);
-        }
-
-        /// <summary>
-        /// Reporte la moyenne hebdomadaire Besançon comme fréquence de référence du rubidium
-        /// actif — mais SEULEMENT s'il s'agit du rubidium <see cref="RubidiumPiloteBesancon"/>
-        /// (« E10-Y8 »). La moyenne (valeurs déjà corrigées du fichier <c>ef_utcop</c>, rapportées
-        /// au 10 MHz) devient directement la <see cref="Rubidium.FrequenceMoyenne"/> utilisée par
-        /// les mesures (zone <c>ZNFreqRef</c> → <c>Cal_freq_corrigee</c>).
-        ///
-        /// <para/>Persiste sur le partage (<c>rubidium-actif.json</c> + catalogue) puis notifie
-        /// l'UI sur le thread Dispatcher (la tâche tourne en arrière-plan via <see cref="Timer"/>,
-        /// on ne lève donc pas l'événement directement sur ce thread).
-        /// </summary>
-        private static void InjecterReferenceDansRubidiumActif(Rubidium rub, double moyenne)
-        {
-            // Cadré sur un seul rubidium : aucune autre référence n'est modifiée.
-            if (!string.Equals(rub.Designation?.Trim(), RubidiumPiloteBesancon,
-                    StringComparison.OrdinalIgnoreCase))
-                return;
-
-            // Garde-fou : on n'écrase jamais la référence par une valeur non plausible
-            // (fichier incomplet, parsing partiel…). La fréquence de référence est ~10 MHz.
-            if (!(moyenne > 0))
+            // Garde-fou : écart fini et plausible (les écarts Besançon sont ~1e-11..1e-14, |v| ≤ 1e-9).
+            // On ACCEPTE les valeurs négatives (référence sous 10 MHz) — seul l'invraisemblable est rejeté.
+            if (double.IsNaN(ecart) || double.IsInfinity(ecart) || Math.Abs(ecart) > 1e-9)
             {
                 Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_REF_IGNOREE",
-                    $"Moyenne hebdo non plausible ({moyenne:G9} Hz) — fréquence de référence de "
-                  + $"« {rub.Designation} » laissée inchangée.");
+                    $"Écart hebdo non plausible ({ecart:G9}) — fréquence de référence de "
+                  + $"« {RubidiumPiloteBesancon} » laissée inchangée.");
                 return;
             }
 
-            double ancienne = rub.FrequenceMoyenne;
-            if (Math.Abs(ancienne - moyenne) < 1e-9) return;   // déjà à jour : rien à faire
+            double nouvelleFreq = FrequenceNominaleHz * (1.0 + ecart);
+            double? ancienne = null;
+            bool modifie = false;
 
-            // 1. Mise à jour en mémoire (rub == EtatApplication.RubidiumActif, même référence)
-            //    → la prochaine mesure lira directement la nouvelle valeur.
-            rub.FrequenceMoyenne = moyenne;
-
-            // 2. Persistance partagée (rubidium-actif.json) + repli local.
-            Models.Preferences.SauvegarderRubidium(rub);
-
-            // 3. Répercute aussi dans le catalogue partagé pour que la valeur survive à une
-            //    re-sélection ultérieure du rubidium depuis la liste.
+            // 1. Entrée E10-Y8 du catalogue partagé (quelle que soit la sélection active).
             try
             {
                 var catalogue = Models.Preferences.CatalogueRubidiums.ToList();
                 var cible = catalogue.FirstOrDefault(r =>
-                    string.Equals(r.Designation?.Trim(), RubidiumPiloteBesancon,
-                        StringComparison.OrdinalIgnoreCase));
-                if (cible != null && Math.Abs(cible.FrequenceMoyenne - moyenne) > 1e-9)
+                    string.Equals(r.Designation?.Trim(), RubidiumPiloteBesancon, StringComparison.OrdinalIgnoreCase));
+                if (cible != null && Math.Abs(cible.FrequenceMoyenne - nouvelleFreq) > SeuilHz)
                 {
-                    cible.FrequenceMoyenne = moyenne;
+                    ancienne = cible.FrequenceMoyenne;
+                    cible.FrequenceMoyenne = nouvelleFreq;
                     Models.Preferences.SauvegarderCatalogueRubidiums(catalogue);
+                    modifie = true;
                 }
             }
             catch (Exception ex)
             {
                 Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_REF_CATALOGUE_KO",
-                    $"Mise à jour du catalogue pour « {rub.Designation} » échouée : {ex.Message}");
+                    $"Mise à jour du catalogue pour « {RubidiumPiloteBesancon} » échouée : {ex.Message}");
             }
 
-            // 4. Notifie l'UI (barre de statut, écrans) sur le thread Dispatcher. En contexte
-            //    headless/test (pas d'Application WPF), la persistance ci-dessus suffit.
-            var disp = System.Windows.Application.Current?.Dispatcher;
-            if (disp != null)
-                disp.BeginInvoke(new Action(() => EtatApplication.NotifierRubidiumActifChange()));
+            // 2. Rubidium ACTIF si c'est E10-Y8 : mémoire + persistance + notification UI.
+            var actif = EtatApplication.RubidiumActif;
+            if (actif != null
+                && string.Equals(actif.Designation?.Trim(), RubidiumPiloteBesancon, StringComparison.OrdinalIgnoreCase)
+                && Math.Abs(actif.FrequenceMoyenne - nouvelleFreq) > SeuilHz)
+            {
+                ancienne ??= actif.FrequenceMoyenne;
+                actif.FrequenceMoyenne = nouvelleFreq;
+                Models.Preferences.SauvegarderRubidium(actif);
 
-            Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_INJECTEE",
-                $"Fréquence de référence de « {rub.Designation} » mise à jour depuis la moyenne "
-              + $"hebdo Besançon : {ancienne:G9} Hz → {moyenne:G9} Hz.");
+                var disp = System.Windows.Application.Current?.Dispatcher;
+                if (disp != null)
+                    disp.BeginInvoke(new Action(() => EtatApplication.NotifierRubidiumActifChange()));
+                modifie = true;
+            }
+
+            if (modifie)
+                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_INJECTEE",
+                    $"Fréquence de référence de « {RubidiumPiloteBesancon} » mise à jour depuis l'écart "
+                  + $"hebdo Besançon ({ecart:G9}) : {(ancienne.HasValue ? ancienne.Value.ToString("F9") : "?")} Hz → "
+                  + $"{nouvelleFreq.ToString("F9")} Hz.");
         }
 
         /// <summary>

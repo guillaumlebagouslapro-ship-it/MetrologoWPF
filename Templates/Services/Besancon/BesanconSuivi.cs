@@ -132,6 +132,19 @@ namespace Metrologo.Services.Besancon
             }
         }
 
+        /// <summary>
+        /// Écart hebdomadaire de référence = moyenne de la dernière semaine mardi→lundi COMPLÈTE
+        /// (exactement 7 valeurs), valeur SIGNÉE. <c>null</c> si aucune semaine complète n'est encore
+        /// disponible. Sert à piloter la fréquence de référence du rubidium E10-Y8 :
+        /// <c>FrequenceMoyenne = 10 MHz × (1 + écart)</c> (cf. <c>BesanconScheduler</c>).
+        /// </summary>
+        public static async Task<double?> EcartHebdoCompletAsync(DateTime aujourdhui)
+        {
+            var valeurs = await BesanconTxtStore.LireAsync();
+            var moys = CalculerMoyennesHebdo(valeurs, aujourdhui, 1);
+            return moys.Count > 0 ? moys[0].moyenne : (double?)null;
+        }
+
         /// <summary>Libellé court de la moyenne hebdo de référence pour le bandeau d'accueil.</summary>
         private static string DecrireReference(ReferenceHebdo? r)
         {
