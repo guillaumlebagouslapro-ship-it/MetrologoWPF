@@ -1003,11 +1003,19 @@ namespace Metrologo.Services
                         bool estClasseurActif = ChemPathEgal(fullName, _cheminClasseurActif);
                         bool estXlaPreCharge = !string.IsNullOrEmpty(_cheminXlaPreCharge)
                             && ChemPathEgal(fullName, _cheminXlaPreCharge);
+                        // On ne ferme QUE les classeurs de mesure Metrologo (freq/stab sous
+                        // l'arborescence Metrologo) : un fichier Excel personnel ouvert par
+                        // l'utilisateur ne doit jamais être refermé (Close(false) = sans sauvegarde).
+                        bool estClasseurMesure = EstClasseurDeMesure(fullName);
                         string action = "skip";
-                        if (!estClasseurActif && !estXlaPreCharge)
+                        if (!estClasseurActif && !estXlaPreCharge && estClasseurMesure)
                         {
                             try { wb.Close(false); action = "FERME"; }
                             catch { action = "ECHEC_CLOSE"; }
+                        }
+                        else if (!estClasseurActif && !estXlaPreCharge && !estClasseurMesure)
+                        {
+                            action = "skip(perso)";
                         }
                         diag.Append($"| WB#{i}=[{fullName}]:{action} ");
                     }
@@ -1024,6 +1032,30 @@ namespace Metrologo.Services
                 JournalLog.Warn(CategorieLog.Excel, "EXCEL_PARASITES_KO",
                     $"Nettoyage des classeurs parasites échoué : {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Vrai si le classeur est un rapport de mesure Metrologo : nom de fichier imposé
+        /// (<c>freq</c> / <c>stab</c>, éventuellement suffixé d'un n° de fallback : freq2, stab3…)
+        /// ET situé dans l'arborescence <c>…\Metrologo\&lt;FI&gt;\</c>. La double condition évite
+        /// de refermer un fichier Excel personnel de l'utilisateur qui porterait un nom proche.
+        /// Sert à ne fermer automatiquement QUE les feuilles de mesure, jamais les autres
+        /// classeurs ouverts par l'utilisateur.
+        /// </summary>
+        private static bool EstClasseurDeMesure(string fullName)
+        {
+            if (string.IsNullOrWhiteSpace(fullName)) return false;
+            try
+            {
+                string nom = Path.GetFileNameWithoutExtension(fullName);
+                bool nomMesure = System.Text.RegularExpressions.Regex.IsMatch(
+                    nom, @"^(freq|stab)\d*$",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                bool dansMetrologo =
+                    fullName.IndexOf(@"\Metrologo\", StringComparison.OrdinalIgnoreCase) >= 0;
+                return nomMesure && dansMetrologo;
+            }
+            catch { return false; }
         }
 
         // ============================================================================
