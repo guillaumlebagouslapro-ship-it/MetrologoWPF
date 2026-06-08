@@ -173,6 +173,10 @@ namespace Metrologo.Services.Besancon
             // Marqueur partagé : signale aux autres postes que c'est fait pour aujourd'hui.
             EcrireMarqueur(maxMjd);
 
+            // Notifie l'écran d'accueil (singleton, abonné à StatutChange) pour qu'il relise le
+            // fichier txt et rafraîchisse le voyant + le rapport sans attendre un redémarrage.
+            NotifierStatutChange();
+
             Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_OK",
                 $"Besançon récupéré : {mesures.Count} valeur(s) lue(s), {res.Nouvelles} nouvelle(s) ajoutée(s) "
               + $"au fichier {BesanconTxtStore.CheminValeurs}. Brut : {res.CheminBrut ?? "NON ÉCRIT"}.");
@@ -181,6 +185,20 @@ namespace Metrologo.Services.Besancon
                 await BesanconFtpService.SupprimerDistantAsync(cfg);
 
             return res;
+        }
+
+        /// <summary>
+        /// Lève <see cref="StatutChange"/> (marshalé sur le Dispatcher si une UI est présente)
+        /// pour que l'écran d'accueil — un singleton créé au démarrage — relise le fichier txt et
+        /// rafraîchisse le voyant + le rapport après une récupération (manuelle ou quotidienne).
+        /// </summary>
+        private static void NotifierStatutChange()
+        {
+            var disp = System.Windows.Application.Current?.Dispatcher;
+            if (disp != null)
+                disp.BeginInvoke(new Action(() => StatutChange?.Invoke(null, EventArgs.Empty)));
+            else
+                StatutChange?.Invoke(null, EventArgs.Empty);
         }
 
         /// <summary>Marqueur PARTAGÉ de la dernière récupération aboutie (date + poste + MJD max).</summary>
