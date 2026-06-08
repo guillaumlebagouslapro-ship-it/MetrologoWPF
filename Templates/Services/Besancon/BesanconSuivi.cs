@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Metrologo.Models;
@@ -46,6 +48,7 @@ namespace Metrologo.Services.Besancon
         private const int SeuilVertMaxJours = 2;     // ≤ 2 j  → vert
         private const int SeuilOrangeMaxJours = 6;   // 3..6 j → orange ; ≥ 7 j → rouge
         private const int NbSemainesControle = 6;    // nombre de semaines écoulées vérifiées
+        private const int NbSemainesMaxRecul = 12;   // recul max pour collecter les moyennes du rapport
 
         /// <summary>Fichier texte de suivi déposé sur le partage (consultable + lu par tous les postes).</summary>
         public static string CheminRapport =>
@@ -66,18 +69,21 @@ namespace Metrologo.Services.Besancon
             try
             {
                 int todayMjd = JourJulien.VersMjd(aujourdhui);
-                int? maxMjd = await BesanconStore.DerniereDateJournaliereAsync(rub.Id);
 
-                if (maxMjd == null)
+                // Source unique : le fichier texte cumulatif (plus aucune lecture SQL).
+                var valeurs = await BesanconTxtStore.LireAsync();
+
+                if (valeurs.Count == 0)
                 {
                     st.Niveau = NiveauSuivi.Rouge;
                     st.Titre = "Suivi Besançon — Aucune donnée";
-                    st.Detail = $"Aucune valeur Besançon enregistrée pour « {rub.Designation} ».";
+                    st.Detail = $"Aucune valeur dans le fichier « {BesanconTxtStore.CheminValeurs} ».";
                     st.RapportTxt = await ConstruireRapportAsync(rub, aujourdhui, null);
                     return st;
                 }
 
-                int age = todayMjd - maxMjd.Value;
+                int maxMjd = valeurs.Keys.Max();
+                int age = todayMjd - maxMjd;
                 st.DerniereDateMjd = maxMjd;
                 st.AgeJours = age;
 
@@ -92,12 +98,10 @@ namespace Metrologo.Services.Besancon
                     int debut = mardiMjd - 7, fin = mardiMjd - 1;
                     if (fin < todayMjd)   // semaine entièrement écoulée
                     {
-                        bool existe = await BesanconStore.MoyenneHebdoExisteAsync(rub.Id, mardiMjd);
-                        if (!existe)
-                        {
-                            int nb = await BesanconStore.CompterJournalieresEntreAsync(rub.Id, debut, fin);
-                            if (nb != 7) { semaineTrou = true; mardiTrou = mardiMjd; break; }
-                        }
+                        // Sans stockage des moyennes, une semaine écoulée est définitivement
+                        // perdue si elle n'a pas ses 7 valeurs (la moyenne hebdo exige 7 jours).
+                        int nb = CompterEntre(valeurs, debut, fin);
+                        if (nb != 7) { semaineTrou = true; mardiTrou = mardiMjd; break; }
                     }
                     mardi = mardi.AddDays(-7);
                 }
@@ -132,8 +136,8 @@ namespace Metrologo.Services.Besancon
             {
                 st.Niveau = NiveauSuivi.Inconnu;
                 st.Titre = "Suivi Besançon — Indisponible";
-                st.Detail = $"Base de suivi injoignable : {ex.Message}";
-                st.RapportTxt = "Impossible de lire le suivi Besançon (base SQL BASE_E2M injoignable).";
+                st.Detail = $"Fichier de suivi illisible : {ex.Message}";
+                st.RapportTxt = "Impossible de lire le fichier de valeurs Besançon (valeurs_besancon.txt).";
                 return st;
             }
         }
@@ -150,7 +154,7 @@ namespace Metrologo.Services.Besancon
             sb.AppendLine($"  SUIVI BESANÇON — Rubidium « {rub.Designation} »");
             sb.AppendLine(filet);
             sb.AppendLine($"  Généré le        : {aujourdhui:dd/MM/yyyy}");
-            sb.AppendLine("  Source           : FTP ef_utcop → base BASE_E2M (SVR-OR)");
+            sb.AppendLine("  Source           : FTP ef_utcop → fichier valeurs_besancon.txt");
             if (maxMjd.HasValue)
             {
                 int age = JourJulien.VersMjd(aujourdhui) - maxMjd.Value;
@@ -166,21 +170,22 @@ namespace Metrologo.Services.Besancon
             try
             {
                 int todayMjd = JourJulien.VersMjd(aujourdhui);
+                var valeurs = await BesanconTxtStore.LireAsync();
 
-                var jours = await BesanconStore.ListerJournalieresAsync(rub.Id, todayMjd - 21, todayMjd);
                 sb.AppendLine("  VALEURS JOURNALIÈRES (21 derniers jours)");
                 sb.AppendLine("  " + new string('-', 50));
                 sb.AppendLine($"  {"MJD",-9}{"Date",-14}Valeur (Hz)");
+                var jours = valeurs.Where(kv => kv.Key >= todayMjd - 21 && kv.Key <= todayMjd).ToList();
                 if (jours.Count == 0)
                     sb.AppendLine("    (aucune)");
                 else
                     foreach (var j in jours)
-                        sb.AppendLine($"  {j.Mjd,-9}{JourJulien.DepuisMjd(j.Mjd):dd/MM/yyyy}  "
-                                    + SaisieHelper.FormaterFrequence(j.Valeur));
+                        sb.AppendLine($"  {j.Key,-9}{JourJulien.DepuisMjd(j.Key):dd/MM/yyyy}  "
+                                    + SaisieHelper.FormaterFrequence(j.Value));
                 sb.AppendLine();
 
-                var moys = await BesanconStore.ListerMoyennesHebdoAsync(rub.Id, 6);
-                sb.AppendLine("  MOYENNES HEBDOMADAIRES (récentes)");
+                var moys = CalculerMoyennesHebdo(valeurs, aujourdhui, 6);
+                sb.AppendLine("  MOYENNES HEBDOMADAIRES (recalculées depuis le fichier)");
                 sb.AppendLine("  " + new string('-', 50));
                 sb.AppendLine($"  {"Mardi MJD",-12}{"Date",-14}Moyenne (Hz)");
                 if (moys.Count == 0)
@@ -210,6 +215,38 @@ namespace Metrologo.Services.Besancon
             }
 
             return rapport;
+        }
+
+        /// <summary>Nombre de valeurs présentes dans [debut ; fin] (bornes incluses).</summary>
+        private static int CompterEntre(SortedDictionary<int, double> valeurs, int debut, int fin) =>
+            valeurs.Keys.Count(mjd => mjd >= debut && mjd <= fin);
+
+        /// <summary>
+        /// Recalcule à la volée les <paramref name="nbVoulu"/> dernières moyennes hebdomadaires
+        /// depuis le fichier txt : moyenne des 7 jours précédant chaque mardi, EXACTEMENT 7
+        /// valeurs requises (comme le legacy <c>GetMoyenneHebdo</c>). De la plus récente à la plus
+        /// ancienne ; on remonte jusqu'à <see cref="NbSemainesMaxRecul"/> mardis pour ignorer les
+        /// semaines incomplètes sans s'arrêter à la première.
+        /// </summary>
+        private static List<(int mardiMjd, double moyenne)> CalculerMoyennesHebdo(
+            SortedDictionary<int, double> valeurs, DateTime aujourdhui, int nbVoulu)
+        {
+            var liste = new List<(int, double)>();
+            int todayMjd = JourJulien.VersMjd(aujourdhui);
+            DateTime mardi = DernierMardiInclus(aujourdhui);
+            for (int k = 0; k < NbSemainesMaxRecul && liste.Count < nbVoulu; k++)
+            {
+                int mardiMjd = JourJulien.VersMjd(mardi);
+                int debut = mardiMjd - 7, fin = mardiMjd - 1;
+                if (fin < todayMjd)   // semaine entièrement écoulée
+                {
+                    var vals = valeurs.Where(kv => kv.Key >= debut && kv.Key <= fin)
+                                      .Select(kv => kv.Value).ToList();
+                    if (vals.Count == 7) liste.Add((mardiMjd, vals.Average()));
+                }
+                mardi = mardi.AddDays(-7);
+            }
+            return liste;
         }
 
         /// <summary>Le mardi de la semaine courante (ou aujourd'hui si l'on est un mardi).</summary>
