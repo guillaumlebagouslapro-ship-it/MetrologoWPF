@@ -11,13 +11,20 @@ namespace Metrologo.Services.Besancon
     /// ⚠ Le mot de passe FTP est donc en clair sur le partage : toute personne ayant accès au
     /// dossier Besançon peut le lire (compromis assumé pour la mutualisation).
     ///
-    /// <para><see cref="Active"/> est <c>false</c> par défaut : la tâche ne doit tourner que sur
-    /// UN SEUL poste (sinon plusieurs postes iraient chercher le même fichier en même temps).
-    /// L'admin l'active sur le poste « maître ».</para>
+    /// <para><see cref="Active"/> est <c>true</c> par défaut : la tâche tourne sur TOUS les postes,
+    /// mais un marqueur partagé (<c>derniere_recuperation.json</c>) fait que seul le premier poste
+    /// télécharge réellement le fichier chaque jour — les autres voient « déjà fait » et passent.
+    /// L'admin peut désactiver la tâche sur un poste en mettant <c>Active=false</c> (ce choix tient,
+    /// la bascule one-shot ne se réapplique pas).</para>
     /// </summary>
     public sealed class BesanconConfig
     {
-        public bool Active { get; set; } = false;
+        public bool Active { get; set; } = true;
+
+        /// <summary>Marque interne : la bascule one-shot « Active sur tous les postes » a déjà été
+        /// appliquée à ce fichier de config. Empêche de ré-activer une tâche que l'admin a
+        /// volontairement remise à <c>Active=false</c> par la suite.</summary>
+        public bool MigrationMultiPosteAppliquee { get; set; } = false;
 
         public string FtpHote { get; set; } = "ftp.aserti-group.com";
         public int FtpPort { get; set; } = 21;
@@ -28,8 +35,9 @@ namespace Metrologo.Services.Besancon
         /// <summary>Nom du fichier à récupérer sur le FTP (legacy : <c>ef_utcop</c>).</summary>
         public string FichierDistant { get; set; } = "ef_utcop";
 
-        /// <summary>Heure de déclenchement quotidien, format <c>HH:mm</c> (legacy : 09h50 / 10h00).</summary>
-        public string HeureDeclenchement { get; set; } = "09:50";
+        /// <summary>Heure de déclenchement quotidien, format <c>HH:mm</c>. Défaut 09h38 : décalé
+        /// après 09h30 pour éviter le bouchon réseau de cet horaire.</summary>
+        public string HeureDeclenchement { get; set; } = "09:38";
 
         /// <summary>Si vrai, supprime le fichier sur le FTP après téléchargement (comportement
         /// legacy). DÉCONSEILLÉ en multi-poste — laissé à false par défaut.</summary>
@@ -44,6 +52,33 @@ namespace Metrologo.Services.Besancon
             Path.Combine(CheminsMetrologo.Configuration, "besancon.ftp.json");
 
         public static BesanconConfig Charger()
+        {
+            var cfg = ChargerBrut();
+            bool modifie = false;
+
+            // Migration heure : l'ancien défaut « 09:50 » (jamais réglable via une UI) est remonté
+            // à « 09:38 » pour éviter le bouchon de 09h30. Idempotent (ne s'applique qu'une fois).
+            if (cfg.HeureDeclenchement == "09:50")
+            {
+                cfg.HeureDeclenchement = "09:38";
+                modifie = true;
+            }
+
+            // Migration multi-poste : bascule ONE-SHOT vers Active=true sur tous les postes (le
+            // marqueur partagé empêche les doublons). Tracée par un flag → l'admin peut ensuite
+            // remettre Active=false sans que ça se réactive tout seul.
+            if (!cfg.MigrationMultiPosteAppliquee)
+            {
+                cfg.Active = true;
+                cfg.MigrationMultiPosteAppliquee = true;
+                modifie = true;
+            }
+
+            if (modifie) cfg.Sauvegarder();
+            return cfg;
+        }
+
+        private static BesanconConfig ChargerBrut()
         {
             // 1. Config partagée déjà valide (identifiants renseignés) → on l'utilise.
             var partagee = LireFichier(Chemin);
@@ -92,13 +127,13 @@ namespace Metrologo.Services.Besancon
             catch { /* best-effort */ }
         }
 
-        /// <summary>Parse <see cref="HeureDeclenchement"/> ; retourne 09:50 par défaut si invalide.</summary>
+        /// <summary>Parse <see cref="HeureDeclenchement"/> ; retourne 09:38 par défaut si invalide.</summary>
         public TimeSpan HeureParsee()
         {
             if (TimeSpan.TryParseExact(HeureDeclenchement, "hh\\:mm",
                     System.Globalization.CultureInfo.InvariantCulture, out var ts))
                 return ts;
-            return new TimeSpan(9, 50, 0);
+            return new TimeSpan(9, 38, 0);
         }
     }
 }

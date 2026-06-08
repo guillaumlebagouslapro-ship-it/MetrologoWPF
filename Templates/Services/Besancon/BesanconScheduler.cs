@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Metrologo.Models;
@@ -91,12 +92,26 @@ namespace Metrologo.Services.Besancon
         /// <summary>
         /// Exécute la tâche une fois : télécharge le fichier FTP, le parse, et ajoute les
         /// valeurs journalières au fichier texte cumulatif (<see cref="BesanconTxtStore"/>) —
-        /// AUCUNE écriture en base SQL. Public pour permettre un déclenchement manuel
-        /// (« Forcer la récupération »).
+        /// AUCUNE écriture en base SQL.
+        ///
+        /// <para/>Si <paramref name="forcer"/> est faux (déclenchement automatique quotidien) et
+        /// qu'une récupération a DÉJÀ abouti aujourd'hui sur n'importe quel poste (marqueur
+        /// partagé), le téléchargement est ignoré — évite que plusieurs postes retéléchargent le
+        /// même fichier. Le déclenchement manuel (« Forcer ») passe <c>true</c> et ignore le garde-fou.
         /// </summary>
-        public static async Task<ResultatBesancon> ExecuterAsync()
+        public static async Task<ResultatBesancon> ExecuterAsync(bool forcer = false)
         {
             var res = new ResultatBesancon { Destination = BesanconTxtStore.CheminValeurs };
+
+            // Garde-fou multi-poste : déjà fait aujourd'hui ? → on n'y retouche pas (sauf « Forcer »).
+            if (!forcer && DejaRecupereAujourdhui())
+            {
+                res.DejaFait = true;
+                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_DEJA_FAIT",
+                    "Récupération Besançon déjà effectuée aujourd'hui (marqueur partagé) — ignorée sur ce poste.");
+                return res;
+            }
+
             var cfg = BesanconConfig.Charger();
 
             var ftp = await BesanconFtpService.TelechargerAsync(cfg);
@@ -118,11 +133,13 @@ namespace Metrologo.Services.Besancon
 
             // Ajout au fichier texte cumulatif (sans doublon de MJD). Toute erreur d'écriture
             // est remontée à l'admin — mais on ne touche plus à aucune base SQL.
+            int maxMjd = 0;
             try
             {
                 res.Nouvelles = await BesanconTxtStore.AjouterAsync(mesures);
                 var toutes = await BesanconTxtStore.LireAsync();
                 res.TotalJournalieres = toutes.Count;
+                if (toutes.Count > 0) maxMjd = toutes.Keys.Max();
                 res.EnregistrementOk = true;
             }
             catch (Exception exTxt)
@@ -132,6 +149,9 @@ namespace Metrologo.Services.Besancon
                 return res;
             }
 
+            // Marqueur partagé : signale aux autres postes que c'est fait pour aujourd'hui.
+            EcrireMarqueur(maxMjd);
+
             Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_OK",
                 $"Besançon récupéré : {mesures.Count} valeur(s) lue(s), {res.Nouvelles} nouvelle(s) ajoutée(s) "
               + $"au fichier {BesanconTxtStore.CheminValeurs}. Brut : {res.CheminBrut ?? "NON ÉCRIT"}.");
@@ -140,6 +160,56 @@ namespace Metrologo.Services.Besancon
                 await BesanconFtpService.SupprimerDistantAsync(cfg);
 
             return res;
+        }
+
+        /// <summary>Marqueur PARTAGÉ de la dernière récupération aboutie (date + poste + MJD max).</summary>
+        private static string CheminMarqueur =>
+            Path.Combine(CheminsMetrologo.Besancon, "derniere_recuperation.json");
+
+        private sealed class MarqueurRecuperation
+        {
+            public string Date { get; set; } = "";        // jour local, format yyyy-MM-dd
+            public string Poste { get; set; } = "";
+            public int MaxMjd { get; set; }
+            public string Horodatage { get; set; } = "";
+        }
+
+        /// <summary>
+        /// Vrai si une récupération a DÉJÀ abouti aujourd'hui (n'importe quel poste), d'après le
+        /// marqueur partagé. Marqueur absent ou illisible → false (on ne bloque pas la récupération).
+        /// </summary>
+        private static bool DejaRecupereAujourdhui()
+        {
+            try
+            {
+                if (!File.Exists(CheminMarqueur)) return false;
+                var m = JsonSerializer.Deserialize<MarqueurRecuperation>(File.ReadAllText(CheminMarqueur));
+                return m != null && m.Date == Aujourdhui.ToString("yyyy-MM-dd");
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Écrit le marqueur partagé (best-effort) après une récupération aboutie.</summary>
+        private static void EcrireMarqueur(int maxMjd)
+        {
+            try
+            {
+                Directory.CreateDirectory(CheminsMetrologo.Besancon);
+                var m = new MarqueurRecuperation
+                {
+                    Date = Aujourdhui.ToString("yyyy-MM-dd"),
+                    Poste = Environment.MachineName,
+                    MaxMjd = maxMjd,
+                    Horodatage = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                };
+                File.WriteAllText(CheminMarqueur,
+                    JsonSerializer.Serialize(m, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_MARQUEUR_KO",
+                    $"Écriture du marqueur de récupération Besançon échouée : {ex.Message}");
+            }
         }
 
         private static async Task TenterCalculHebdoAsync(int rubId, bool avecGps, int mardiMjd)
@@ -334,6 +404,8 @@ namespace Metrologo.Services.Besancon
     public sealed class ResultatBesancon
     {
         public bool Telecharge { get; set; }
+        /// <summary>Vrai si la récupération a été ignorée car déjà faite aujourd'hui (marqueur partagé).</summary>
+        public bool DejaFait { get; set; }
         public string? CheminBrut { get; set; }
         /// <summary>Où le suivi est enregistré (ex. « Base SQL BASE_E2M »).</summary>
         public string Destination { get; set; } = "";

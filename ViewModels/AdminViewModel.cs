@@ -196,7 +196,8 @@ namespace Metrologo.ViewModels
 
             try
             {
-                var r = await Metrologo.Services.Besancon.BesanconScheduler.ExecuterAsync();
+                // Déclenchement manuel → on force (ignore le garde-fou « déjà fait aujourd'hui »).
+                var r = await Metrologo.Services.Besancon.BesanconScheduler.ExecuterAsync(forcer: true);
 
                 if (!r.Succes)
                 {
