@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -136,10 +137,17 @@ namespace Metrologo.Services.Besancon
         {
             if (r == null) return "indisponible";
             return r.Provisoire
-                ? $"{SaisieHelper.FormaterFrequence(r.Moyenne)} (provisoire)"
-                : $"{SaisieHelper.FormaterFrequence(r.Moyenne)} "
+                ? $"{FormaterValeur(r.Moyenne)} (provisoire)"
+                : $"{FormaterValeur(r.Moyenne)} "
                 + $"(semaine du {JourJulien.DepuisMjd(r.MardiMjd - 7):dd/MM} au {JourJulien.DepuisMjd(r.MardiMjd - 1):dd/MM})";
         }
+
+        /// <summary>
+        /// Formate une valeur Besançon (écart de fréquence, de l'ordre de 1e-11 à 1e-13) en
+        /// notation scientifique. <c>SaisieHelper.FormaterFrequence</c> est calibré pour des
+        /// fréquences ~10 MHz et arrondirait ces très petites valeurs à « 0 ».
+        /// </summary>
+        private static string FormaterValeur(double v) => v.ToString("0.000E+00", CultureInfo.InvariantCulture);
 
         /// <summary>
         /// Construit le rapport texte indenté (moyenne de référence en tête + valeurs journalières
@@ -173,10 +181,10 @@ namespace Metrologo.Services.Besancon
             if (reference == null)
                 sb.AppendLine("  Moyenne hebdo    : indisponible (aucune valeur)");
             else if (reference.Provisoire)
-                sb.AppendLine($"  Moyenne hebdo    : {SaisieHelper.FormaterFrequence(reference.Moyenne)}  "
+                sb.AppendLine($"  Moyenne hebdo    : {FormaterValeur(reference.Moyenne)}  "
                             + "[PROVISOIRE — initialisée, sera recalculée sur la 1ʳᵉ semaine mardi→lundi complète]");
             else
-                sb.AppendLine($"  Moyenne hebdo    : {SaisieHelper.FormaterFrequence(reference.Moyenne)}  "
+                sb.AppendLine($"  Moyenne hebdo    : {FormaterValeur(reference.Moyenne)}  "
                             + $"[semaine du mardi {JourJulien.DepuisMjd(reference.MardiMjd - 7):dd/MM} "
                             + $"au lundi {JourJulien.DepuisMjd(reference.MardiMjd - 1):dd/MM/yyyy}]");
             sb.AppendLine();
@@ -192,7 +200,7 @@ namespace Metrologo.Services.Besancon
             else
                 foreach (var j in recentes)
                     sb.AppendLine($"  {j.Key,-9}{JourJulien.DepuisMjd(j.Key):dd/MM/yyyy}  "
-                                + SaisieHelper.FormaterFrequence(j.Value));
+                                + FormaterValeur(j.Value));
             sb.AppendLine();
 
             // Moyennes hebdomadaires COMPLÈTES récentes (peut être vide si les données ont des trous).
@@ -205,7 +213,7 @@ namespace Metrologo.Services.Besancon
             else
                 foreach (var m in moys)
                     sb.AppendLine($"  {m.mardiMjd,-12}{JourJulien.DepuisMjd(m.mardiMjd):dd/MM/yyyy}  "
-                                + SaisieHelper.FormaterFrequence(m.moyenne));
+                                + FormaterValeur(m.moyenne));
 
             string rapport = sb.ToString();
 
