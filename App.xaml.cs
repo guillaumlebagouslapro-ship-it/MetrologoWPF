@@ -149,10 +149,9 @@ namespace Metrologo
             Journal.Configurer(new FichierJournalService());
             StartupLap("Journal.Configurer");
 
-            // Diagnostic de la base SQL Metrologo (SVR-OR / MetrologoUser) : journalise le serveur,
-            // le nom réel de la base par défaut et la présence des tables T_METROLOGO_*. Fire-and-
-            // forget : ne bloque pas le démarrage. Le résultat est dans le Journal (Système).
-            _ = Metrologo.Services.MetrologoDbService.DiagnostiquerAsync();
+            // (Diagnostic SQL Metrologo retiré : le suivi Besançon est désormais 100 % fichier txt,
+            // plus aucune base SQL. Évitait sinon un timeout de connexion de 6 s au démarrage —
+            // visible en debug sous forme de SqlException — quand SVR-OR est injoignable.)
 
             // Ferme les sessions zombies (laissées ouvertes par un crash, taskkill, ou
             // arrêt brutal lors d'un debug). Sans ça, elles s'accumulent et apparaissent
@@ -208,10 +207,9 @@ namespace Metrologo
             // M:\ est toujours indispo, no-op. Fire-and-forget : ne bloque pas le démarrage.
             _ = TransfertReseauService.TenterTransfertsEnAttenteAsync();
 
-            // Tâche quotidienne Besançon : récupération FTP du fichier corrigé + calcul de la
-            // moyenne hebdomadaire du rubidium. No-op si désactivée sur ce poste (la tâche ne
-            // doit tourner que sur UN poste « maître » — cf. besancon.ftp.json : Active=false par
-            // défaut). Fire-and-forget : ne bloque pas le démarrage.
+            // Tâche quotidienne Besançon : récupération FTP du fichier corrigé → fichier txt
+            // cumulatif (valeurs_besancon.txt). Active sur tous les postes par défaut ; un marqueur
+            // partagé évite que plusieurs postes téléchargent le même jour. Fire-and-forget.
             try { Metrologo.Services.Besancon.BesanconScheduler.Demarrer(); }
             catch (Exception exBes)
             {
@@ -219,11 +217,9 @@ namespace Metrologo
                     $"Démarrage de la tâche Besançon échoué : {exBes.Message}");
             }
 
-            // Rattrapage immédiat au démarrage : si la moyenne d'une semaine écoulée n'a pas
-            // encore été calculée mais que ses 7 valeurs journalières sont déjà en base, on la
-            // calcule tout de suite (sinon la tâche quotidienne s'en chargera dès que possible).
-            // Fire-and-forget : ne bloque pas le démarrage.
-            _ = Metrologo.Services.Besancon.BesanconScheduler.AssurerCalculsHebdoManquantsAsync();
+            // (Rattrapage hebdo SQL retiré : les moyennes hebdomadaires Besançon sont désormais
+            // recalculées à la volée depuis le fichier txt — plus aucun accès SQL au démarrage,
+            // donc plus de timeout de 6 s ni de SqlException quand SVR-OR est injoignable.)
 
             // Warm-up ClosedXML : ouvre les 2 templates en arrière-plan pour pré-JIT les
             // assemblies (ClosedXML.dll, DocumentFormat.OpenXml.dll) + déclencher le cache
