@@ -219,6 +219,12 @@ namespace Metrologo
                     $"Démarrage de la tâche Besançon échoué : {exBes.Message}");
             }
 
+            // Rattrapage immédiat au démarrage : si la moyenne d'une semaine écoulée n'a pas
+            // encore été calculée mais que ses 7 valeurs journalières sont déjà en base, on la
+            // calcule tout de suite (sinon la tâche quotidienne s'en chargera dès que possible).
+            // Fire-and-forget : ne bloque pas le démarrage.
+            _ = Metrologo.Services.Besancon.BesanconScheduler.AssurerCalculsHebdoManquantsAsync();
+
             // Warm-up ClosedXML : ouvre les 2 templates en arrière-plan pour pré-JIT les
             // assemblies (ClosedXML.dll, DocumentFormat.OpenXml.dll) + déclencher le cache
             // disque OS du fichier .xlsx. Sans ce warm-up, la 1ère InitialiserRapportAsync

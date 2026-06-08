@@ -20,6 +20,29 @@ namespace Metrologo.Services.Besancon
         private static Timer? _timer;
         private static readonly object _sync = new();
 
+        /// <summary>
+        /// Désignation de l'UNIQUE rubidium dont la fréquence de référence est pilotée
+        /// automatiquement par la moyenne hebdomadaire Besançon. Pour tout autre rubidium,
+        /// la fréquence reste celle saisie manuellement dans le catalogue — on n'y touche pas.
+        /// </summary>
+        private const string RubidiumPiloteBesancon = "E10-Y8";
+
+        /// <summary>Nombre de semaines écoulées contrôlées lors du rattrapage des moyennes manquantes.</summary>
+        private const int NbSemainesRattrapage = 6;
+
+        /// <summary>
+        /// Levé après chaque mise à jour du suivi Besançon (récupération quotidienne, rattrapage
+        /// d'une moyenne manquante) — l'écran principal s'y abonne pour rafraîchir son voyant +
+        /// le rapport texte. Marshalé sur le Dispatcher quand une UI est présente.
+        /// </summary>
+        public static event EventHandler? StatutChange;
+
+        /// <summary>
+        /// Date du jour de référence pour tout le calcul (rattrapage, fenêtres hebdo). Lue sur
+        /// l'horloge locale du poste — source unique pour rester cohérente partout dans la classe.
+        /// </summary>
+        private static DateTime Aujourdhui => DateTime.Today;
+
         /// <summary>Démarre la planification (no-op si la tâche est désactivée sur ce poste).</summary>
         public static void Demarrer()
         {
@@ -131,8 +154,17 @@ namespace Metrologo.Services.Besancon
                 {
                     res.DerniereMoyenneHebdo = dh.Value.moyenne;
                     res.DerniereMoyenneHebdoMjd = dh.Value.mardiMjd;
+
+                    // Injecte la moyenne hebdo comme fréquence de référence active —
+                    // UNIQUEMENT pour le rubidium piloté par Besançon (E10-Y8). Les autres
+                    // rubidiums conservent leur fréquence saisie manuellement au catalogue.
+                    InjecterReferenceDansRubidiumActif(rub, dh.Value.moyenne);
                 }
                 res.EnregistrementOk = true;
+
+                // Rapport texte indenté + notification du voyant écran principal (tous les
+                // postes lisent la base partagée + le fichier suivi_besancon.txt).
+                await GenererRapportEtNotifierAsync(rub);
             }
             catch (Exception exDb)
             {
@@ -161,6 +193,151 @@ namespace Metrologo.Services.Besancon
                     $"Moyenne hebdo rubidium #{rubId} (mardi MJD {mardiMjd}) : {r.Value.moyenne:G9} "
                   + $"(delta {r.Value.deltaTps:G9} s/jour).");
             }
+        }
+
+        /// <summary>
+        /// Vérifie les dernières semaines écoulées et calcule à la volée toute moyenne hebdo
+        /// manquante DONT les 7 valeurs journalières sont déjà disponibles — typiquement au
+        /// démarrage de l'app (« est-ce que le calcul de la semaine passée a été fait ? sinon
+        /// fais-le tout de suite »). Si les 7 jours ne sont pas encore là (ex. on est lundi),
+        /// rien n'est calculé : la tâche quotidienne le fera dès que les valeurs arriveront.
+        ///
+        /// <para/>Idempotent (n'écrase pas une moyenne existante) et sans coût FTP — pur calcul
+        /// SQL. Réinjecte la dernière moyenne dans le rubidium piloté (E10-Y8) si une semaine
+        /// vient d'être rattrapée, puis notifie l'écran principal.
+        /// </summary>
+        public static async Task AssurerCalculsHebdoManquantsAsync()
+        {
+            try
+            {
+                var rub = EtatApplication.RubidiumActif;
+                if (rub == null) return;
+
+                var today = Aujourdhui;
+                int todayMjd = JourJulien.VersMjd(today);
+                DateTime mardi = DernierMardiInclus(today);
+                bool rattrape = false;
+
+                for (int k = 0; k < NbSemainesRattrapage; k++)
+                {
+                    int mardiMjd = JourJulien.VersMjd(mardi);
+                    int fin = mardiMjd - 1;
+                    // Semaine entièrement écoulée et moyenne absente → on tente le calcul.
+                    if (fin < todayMjd && !await BesanconStore.MoyenneHebdoExisteAsync(rub.Id, mardiMjd))
+                    {
+                        await TenterCalculHebdoAsync(rub.Id, rub.AvecGPS, mardiMjd);
+                        if (await BesanconStore.MoyenneHebdoExisteAsync(rub.Id, mardiMjd))
+                            rattrape = true;
+                    }
+                    mardi = mardi.AddDays(-7);
+                }
+
+                // Réinjecte la dernière moyenne disponible (utile si une semaine a été rattrapée).
+                var dh = await BesanconStore.DerniereMoyenneHebdoAsync(rub.Id);
+                if (dh.HasValue)
+                    InjecterReferenceDansRubidiumActif(rub, dh.Value.moyenne);
+
+                if (rattrape)
+                {
+                    Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_RATTRAPAGE",
+                        "Moyenne(s) hebdomadaire(s) manquante(s) recalculée(s) au démarrage.");
+                    await GenererRapportEtNotifierAsync(rub);
+                }
+            }
+            catch (Exception ex)
+            {
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_RATTRAPAGE_KO",
+                    $"Rattrapage des moyennes hebdo échoué : {ex.Message}");
+            }
+        }
+
+        /// <summary>Régénère le rapport texte de suivi puis lève <see cref="StatutChange"/> (sur le Dispatcher si UI présente).</summary>
+        private static async Task GenererRapportEtNotifierAsync(Rubidium rub)
+        {
+            try { await BesanconSuiviService.EvaluerAsync(rub, Aujourdhui); }
+            catch { /* best-effort : le panneau réévaluera de son côté */ }
+
+            var disp = System.Windows.Application.Current?.Dispatcher;
+            if (disp != null)
+                disp.BeginInvoke(new Action(() => StatutChange?.Invoke(null, EventArgs.Empty)));
+            else
+                StatutChange?.Invoke(null, EventArgs.Empty);
+        }
+
+        /// <summary>Le mardi de la semaine courante (ou aujourd'hui si l'on est un mardi).</summary>
+        private static DateTime DernierMardiInclus(DateTime d)
+        {
+            int diff = ((int)d.DayOfWeek - (int)DayOfWeek.Tuesday + 7) % 7;
+            return d.Date.AddDays(-diff);
+        }
+
+        /// <summary>
+        /// Reporte la moyenne hebdomadaire Besançon comme fréquence de référence du rubidium
+        /// actif — mais SEULEMENT s'il s'agit du rubidium <see cref="RubidiumPiloteBesancon"/>
+        /// (« E10-Y8 »). La moyenne (valeurs déjà corrigées du fichier <c>ef_utcop</c>, rapportées
+        /// au 10 MHz) devient directement la <see cref="Rubidium.FrequenceMoyenne"/> utilisée par
+        /// les mesures (zone <c>ZNFreqRef</c> → <c>Cal_freq_corrigee</c>).
+        ///
+        /// <para/>Persiste sur le partage (<c>rubidium-actif.json</c> + catalogue) puis notifie
+        /// l'UI sur le thread Dispatcher (la tâche tourne en arrière-plan via <see cref="Timer"/>,
+        /// on ne lève donc pas l'événement directement sur ce thread).
+        /// </summary>
+        private static void InjecterReferenceDansRubidiumActif(Rubidium rub, double moyenne)
+        {
+            // Cadré sur un seul rubidium : aucune autre référence n'est modifiée.
+            if (!string.Equals(rub.Designation?.Trim(), RubidiumPiloteBesancon,
+                    StringComparison.OrdinalIgnoreCase))
+                return;
+
+            // Garde-fou : on n'écrase jamais la référence par une valeur non plausible
+            // (fichier incomplet, parsing partiel…). La fréquence de référence est ~10 MHz.
+            if (!(moyenne > 0))
+            {
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_REF_IGNOREE",
+                    $"Moyenne hebdo non plausible ({moyenne:G9} Hz) — fréquence de référence de "
+                  + $"« {rub.Designation} » laissée inchangée.");
+                return;
+            }
+
+            double ancienne = rub.FrequenceMoyenne;
+            if (Math.Abs(ancienne - moyenne) < 1e-9) return;   // déjà à jour : rien à faire
+
+            // 1. Mise à jour en mémoire (rub == EtatApplication.RubidiumActif, même référence)
+            //    → la prochaine mesure lira directement la nouvelle valeur.
+            rub.FrequenceMoyenne = moyenne;
+
+            // 2. Persistance partagée (rubidium-actif.json) + repli local.
+            Models.Preferences.SauvegarderRubidium(rub);
+
+            // 3. Répercute aussi dans le catalogue partagé pour que la valeur survive à une
+            //    re-sélection ultérieure du rubidium depuis la liste.
+            try
+            {
+                var catalogue = Models.Preferences.CatalogueRubidiums.ToList();
+                var cible = catalogue.FirstOrDefault(r =>
+                    string.Equals(r.Designation?.Trim(), RubidiumPiloteBesancon,
+                        StringComparison.OrdinalIgnoreCase));
+                if (cible != null && Math.Abs(cible.FrequenceMoyenne - moyenne) > 1e-9)
+                {
+                    cible.FrequenceMoyenne = moyenne;
+                    Models.Preferences.SauvegarderCatalogueRubidiums(catalogue);
+                }
+            }
+            catch (Exception ex)
+            {
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_REF_CATALOGUE_KO",
+                    $"Mise à jour du catalogue pour « {rub.Designation} » échouée : {ex.Message}");
+            }
+
+            // 4. Notifie l'UI (barre de statut, écrans) sur le thread Dispatcher. En contexte
+            //    headless/test (pas d'Application WPF), la persistance ci-dessus suffit.
+            var disp = System.Windows.Application.Current?.Dispatcher;
+            if (disp != null)
+                disp.BeginInvoke(new Action(() => EtatApplication.NotifierRubidiumActifChange()));
+
+            Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_INJECTEE",
+                $"Fréquence de référence de « {rub.Designation} » mise à jour depuis la moyenne "
+              + $"hebdo Besançon : {ancienne:G9} Hz → {moyenne:G9} Hz.");
         }
 
         /// <summary>

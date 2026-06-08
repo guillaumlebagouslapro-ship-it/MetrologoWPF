@@ -10,6 +10,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -303,8 +304,90 @@
 
         </Grid>
 
-        <!-- Panneau Informations Générales -->
+        <!-- Panneau Suivi Besançon — voyant d'état + rapport texte indenté -->
         <Border Grid.Row="3"
+                Visibility="{Binding BesanconVisible, Converter={StaticResource BoolToVis}}"
+                Background="{DynamicResource ApplicationBackgroundBrush}"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Margin="0,0,0,16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- En-tête : voyant + titre/détail + bouton Actualiser -->
+                <Border Grid.Row="0"
+                        Padding="18,12"
+                        CornerRadius="10,10,0,0"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        Background="{DynamicResource LayerFillColorDefaultBrush}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Ellipse Grid.Column="0" Width="16" Height="16"
+                                 Fill="{Binding BesanconVoyant}"
+                                 VerticalAlignment="Center" Margin="0,0,12,0">
+                            <Ellipse.Effect>
+                                <DropShadowEffect BlurRadius="6" ShadowDepth="0" Opacity="0.25"/>
+                            </Ellipse.Effect>
+                        </Ellipse>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding BesanconTitre}"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{StaticResource AsertiNavyBrush}"/>
+                            <TextBlock Text="{Binding BesanconDetail}"
+                                       FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Margin="0,2,0,0"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2"
+                                Command="{Binding RafraichirBesanconCommand}"
+                                ToolTip="Réévaluer le suivi Besançon"
+                                Cursor="Hand"
+                                Padding="10,6"
+                                VerticalAlignment="Center"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Background="White">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="14"
+                                               Foreground="{StaticResource AsertiNavyBrush}"
+                                               Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Actualiser"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{StaticResource AsertiNavyBrush}"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <TextBox Grid.Row="1"
+                         Text="{Binding BesanconRapport}"
+                         IsReadOnly="True"
+                         MaxHeight="200"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Cascadia Mono, Consolas"
+                         FontSize="12"
+                         Padding="18,12"
+                         BorderThickness="0"
+                         Background="Transparent"/>
+            </Grid>
+        </Border>
+
+        <!-- Panneau Informations Générales -->
+        <Border Grid.Row="4"
                 Background="{DynamicResource ApplicationBackgroundBrush}"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                 BorderThickness="1"

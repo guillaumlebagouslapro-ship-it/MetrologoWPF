@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Services;
+using Metrologo.Services.Besancon;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
 using Metrologo.Services.Journal;
@@ -11,6 +12,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 
 namespace Metrologo.ViewModels
 {
@@ -95,6 +97,23 @@ namespace Metrologo.ViewModels
 
         private double? _derniereFNominale;
 
+        // ---- Suivi Besançon (panneau d'état + voyant sur l'écran principal) ----
+
+        /// <summary>Affiche le panneau de suivi Besançon (vrai dès qu'un rubidium actif est défini).</summary>
+        [ObservableProperty] private bool _besanconVisible;
+
+        /// <summary>Titre du panneau (« À jour », « Retard », « Critique »…).</summary>
+        [ObservableProperty] private string _besanconTitre = "Suivi Besançon";
+
+        /// <summary>Message détaillé sous le titre (ancienneté des données, cause d'un problème…).</summary>
+        [ObservableProperty] private string _besanconDetail = "Chargement du suivi…";
+
+        /// <summary>Couleur du voyant : vert / orange / rouge / gris (indéterminé).</summary>
+        [ObservableProperty] private Brush _besanconVoyant = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
+
+        /// <summary>Rapport texte indenté (valeurs journalières + moyennes hebdo) affiché dans le panneau.</summary>
+        [ObservableProperty] private string _besanconRapport = string.Empty;
+
         public AccueilViewModel()
         {
             _orchestrator = new MesureOrchestrator(_ieeeDriver, _excelService);
@@ -103,13 +122,63 @@ namespace Metrologo.ViewModels
             EtatApplication.RubidiumActifChange += (_, _) =>
             {
                 RubidiumActifTexte = EtatApplication.RubidiumActifTexte;
+                _ = RafraichirBesanconAsync();   // le rubidium a changé → réévalue le suivi
             };
 
             // Se met à jour si un scan est relancé depuis Diagnostic GPIB (ajout d'un appareil).
             EtatApplication.AppareilsDetectesChange += (_, _) => RafraichirResumeScan();
 
+            // Rafraîchit le voyant + le rapport quand la tâche Besançon a tourné (récupération
+            // quotidienne ou rattrapage d'une moyenne manquante).
+            BesanconScheduler.StatutChange += (_, _) => _ = RafraichirBesanconAsync();
+
             // Scan GPIB initial en arrière-plan — ne bloque pas l'ouverture de la fenêtre.
             _ = Task.Run(ScannerInitialAsync);
+
+            // État Besançon initial.
+            _ = RafraichirBesanconAsync();
+        }
+
+        /// <summary>
+        /// Réévalue l'état du suivi Besançon (voyant + rapport) depuis la base partagée et
+        /// met à jour le panneau. Appelée au démarrage, sur changement de rubidium, et après
+        /// chaque passage de la tâche Besançon. Marshalé sur le thread UI.
+        /// </summary>
+        [RelayCommand]
+        private async Task RafraichirBesanconAsync()
+        {
+            var rub = EtatApplication.RubidiumActif;
+            BesanconStatut st;
+            try { st = await BesanconSuiviService.EvaluerAsync(rub, DateTime.Today); }
+            catch (Exception ex)
+            {
+                st = new BesanconStatut
+                {
+                    Niveau = NiveauSuivi.Inconnu,
+                    Titre = "Suivi Besançon — Indisponible",
+                    Detail = ex.Message,
+                    RapportTxt = string.Empty
+                };
+            }
+
+            void Appliquer()
+            {
+                BesanconVisible = rub != null;
+                BesanconTitre = st.Titre;
+                BesanconDetail = st.Detail;
+                BesanconRapport = st.RapportTxt;
+                BesanconVoyant = new SolidColorBrush(st.Niveau switch
+                {
+                    NiveauSuivi.Vert   => Color.FromRgb(0x16, 0xA3, 0x4A),
+                    NiveauSuivi.Orange => Color.FromRgb(0xF5, 0x9E, 0x0B),
+                    NiveauSuivi.Rouge  => Color.FromRgb(0xDC, 0x26, 0x26),
+                    _                  => Color.FromRgb(0x9C, 0xA3, 0xAF),
+                });
+            }
+
+            var disp = Application.Current?.Dispatcher;
+            if (disp != null && !disp.CheckAccess()) disp.Invoke(Appliquer);
+            else Appliquer();
         }
 
         /// <summary>

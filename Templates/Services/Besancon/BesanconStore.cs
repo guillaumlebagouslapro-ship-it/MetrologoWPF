@@ -1,5 +1,6 @@
 using Dapper;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Metrologo.Services.Besancon
@@ -118,6 +119,67 @@ namespace Metrologo.Services.Besancon
             return await c.ExecuteScalarAsync<double?>(
                 "SELECT DAT_VALEUR FROM T_METROLOGO_DATESRUBIS WHERE DAT_ID=@mjd AND RUB_ACTIF=@rub",
                 new { mjd, rub = rubidiumId });
+        }
+
+        /// <summary>MJD de la valeur journalière la plus récente pour un rubidium, ou null si aucune.</summary>
+        public static async Task<int?> DerniereDateJournaliereAsync(int rubidiumId)
+        {
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+            return await c.ExecuteScalarAsync<int?>(
+                "SELECT MAX(DAT_ID) FROM T_METROLOGO_DATESRUBIS WHERE RUB_ACTIF=@rub",
+                new { rub = rubidiumId });
+        }
+
+        /// <summary>Vrai si une moyenne hebdo existe déjà pour ce mardi (DAT_ID).</summary>
+        public static async Task<bool> MoyenneHebdoExisteAsync(int rubidiumId, int mardiMjd)
+        {
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+            int n = await c.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM TJ_METROLOGO_SUIVIRUBI WHERE RUB_ID=@rub AND DAT_ID=@mjd",
+                new { rub = rubidiumId, mjd = mardiMjd });
+            return n > 0;
+        }
+
+        /// <summary>Nombre de valeurs journalières présentes dans [debut ; fin] (bornes incluses).</summary>
+        public static async Task<int> CompterJournalieresEntreAsync(int rubidiumId, int debut, int fin)
+        {
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+            return await c.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM T_METROLOGO_DATESRUBIS WHERE RUB_ACTIF=@rub AND DAT_ID BETWEEN @d AND @f",
+                new { rub = rubidiumId, d = debut, f = fin });
+        }
+
+        /// <summary>Valeurs journalières de [debut ; fin], triées par date croissante.</summary>
+        public static async Task<List<MesureBesancon>> ListerJournalieresAsync(int rubidiumId, int debut, int fin)
+        {
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+            var rows = await c.QueryAsync(
+                "SELECT DAT_ID, DAT_VALEUR FROM T_METROLOGO_DATESRUBIS "
+              + "WHERE RUB_ACTIF=@rub AND DAT_ID BETWEEN @d AND @f ORDER BY DAT_ID",
+                new { rub = rubidiumId, d = debut, f = fin });
+            var liste = new List<MesureBesancon>();
+            foreach (var r in rows)
+                liste.Add(new MesureBesancon { Mjd = (int)r.DAT_ID, Valeur = (double)r.DAT_VALEUR });
+            return liste;
+        }
+
+        /// <summary>Les N dernières moyennes hebdo (mardi MJD + moyenne), de la plus récente à la plus ancienne.</summary>
+        public static async Task<List<(int mardiMjd, double moyenne)>> ListerMoyennesHebdoAsync(int rubidiumId, int n)
+        {
+            using var c = MetrologoDbService.CreerConnexion();
+            await c.OpenAsync();
+            var rows = await c.QueryAsync(
+                "SELECT TOP (@n) DAT_ID, SUV_ECARTF FROM TJ_METROLOGO_SUIVIRUBI "
+              + "WHERE RUB_ID=@rub ORDER BY DAT_ID DESC",
+                new { rub = rubidiumId, n });
+            var liste = new List<(int, double)>();
+            foreach (var r in rows)
+                liste.Add(((int)r.DAT_ID, (double)r.SUV_ECARTF));
+            return liste;
         }
     }
 }
