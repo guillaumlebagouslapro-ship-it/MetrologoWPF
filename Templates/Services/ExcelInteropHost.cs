@@ -125,6 +125,91 @@ namespace Metrologo.Services
             return nbFermes;
         }
 
+        [DllImport("ole32.dll")]
+        private static extern int GetRunningObjectTable(int reserved,
+            out System.Runtime.InteropServices.ComTypes.IRunningObjectTable prot);
+
+        [DllImport("ole32.dll")]
+        private static extern int CreateBindCtx(int reserved,
+            out System.Runtime.InteropServices.ComTypes.IBindCtx ppbc);
+
+        /// <summary>
+        /// Ferme — dans TOUTES les instances Excel ouvertes — uniquement les classeurs de MESURE
+        /// (nom <c>freq</c>/<c>stab</c> sous <c>…\Metrologo\</c>), repérés PAR LEUR NOM via la
+        /// Running Object Table, et SANS tuer aucun process Excel. Les autres fichiers ouverts par
+        /// l'utilisateur (même non sauvegardés) restent intacts. Le classeur de mesure actif de
+        /// notre propre instance hôte est épargné. Best-effort. Retourne le nombre de classeurs fermés.
+        /// </summary>
+        public int FermerClasseursMesureOuvertsExternes()
+        {
+            int fermes = 0;
+            System.Runtime.InteropServices.ComTypes.IRunningObjectTable? rot = null;
+            System.Runtime.InteropServices.ComTypes.IEnumMoniker? enumMon = null;
+            try
+            {
+                if (GetRunningObjectTable(0, out rot) != 0 || rot == null) return 0;
+                rot.EnumRunning(out enumMon);
+                enumMon.Reset();
+
+                var monikers = new System.Runtime.InteropServices.ComTypes.IMoniker[1];
+                while (enumMon.Next(1, monikers, IntPtr.Zero) == 0)
+                {
+                    var moniker = monikers[0];
+                    try
+                    {
+                        string? nomAffiche = null;
+                        try
+                        {
+                            CreateBindCtx(0, out var ctx);
+                            moniker.GetDisplayName(ctx, null, out nomAffiche);
+                            Marshal.ReleaseComObject(ctx);
+                        }
+                        catch { /* moniker non nommable → ignoré */ }
+
+                        // Le nom affiché d'un classeur Excel dans la ROT est son chemin complet.
+                        // On ne ferme QUE les fichiers de mesure (freq/stab sous \Metrologo\), et
+                        // jamais le classeur actif de notre instance hôte.
+                        if (string.IsNullOrEmpty(nomAffiche)
+                            || !EstClasseurDeMesure(nomAffiche)
+                            || ChemPathEgal(nomAffiche, _cheminClasseurActif))
+                            continue;
+
+                        object? comObj = null;
+                        try { if (rot.GetObject(moniker, out comObj) != 0) comObj = null; }
+                        catch { comObj = null; }
+                        if (comObj == null) continue;
+
+                        dynamic wb = comObj;
+                        try
+                        {
+                            wb.Close(false);   // pas de sauvegarde : rapport régénéré par la mesure
+                            fermes++;
+                            JournalLog.Info(CategorieLog.Excel, "EXCEL_MESURE_FERME_PARNOM",
+                                $"Classeur de mesure « {nomAffiche} » fermé (par nom) avant la mesure.");
+                        }
+                        catch (Exception exClose)
+                        {
+                            JournalLog.Warn(CategorieLog.Excel, "EXCEL_MESURE_FERME_PARNOM_KO",
+                                $"Fermeture du classeur « {nomAffiche} » échouée : {exClose.Message}");
+                        }
+                        finally { try { Marshal.ReleaseComObject(wb); } catch { } }
+                    }
+                    finally { try { Marshal.ReleaseComObject(moniker); } catch { } }
+                }
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_ROT_KO",
+                    $"Parcours de la Running Object Table échoué : {ex.Message}");
+            }
+            finally
+            {
+                if (enumMon != null) { try { Marshal.ReleaseComObject(enumMon); } catch { } }
+                if (rot != null) { try { Marshal.ReleaseComObject(rot); } catch { } }
+            }
+            return fermes;
+        }
+
         /// <summary>
         /// Classe les EXCEL.EXE externes en deux catégories :
         ///   - <c>visibles</c> : possèdent une fenêtre principale (MainWindowHandle != 0) =

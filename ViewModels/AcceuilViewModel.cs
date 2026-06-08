@@ -568,7 +568,7 @@ namespace Metrologo.ViewModels
             // Vérifie si un Excel externe (autre que notre instance COM cachée) est ouvert :
             // il peut tenir verrouillé le fichier .xlsx de la mesure et faire échouer ClosedXML.
             // On distingue les reliquats COM sans fenêtre (fantômes) des vrais classeurs ouverts.
-            var (excelsVisibles, excelsFantomes) = ExcelInteropHost.Instance.ListerExcelsExternesClasses();
+            var (_, excelsFantomes) = ExcelInteropHost.Instance.ListerExcelsExternesClasses();
 
             // 1. Fantômes (aucune fenêtre = reliquat de pilotage COM, jamais un document
             //    utilisateur) : on les ferme en silence pour libérer un éventuel verrou.
@@ -580,32 +580,18 @@ namespace Metrologo.ViewModels
                   + "automatiquement avant la mesure.");
             }
 
-            // 2. Classeurs réellement ouverts par l'utilisateur (fenêtre visible) : ils
-            //    peuvent contenir un travail non sauvegardé → on demande confirmation.
-            if (excelsVisibles.Count > 0)
+            // 2. Classeurs RÉELLEMENT ouverts par l'utilisateur : on ne tue PLUS l'instance
+            //    Excel (cela fermait aussi ses fichiers persos non sauvegardés). On ferme
+            //    UNIQUEMENT les classeurs de mesure — qui portent toujours le nom freq/stab —
+            //    par leur nom, via la Running Object Table. Tout autre fichier ouvert par
+            //    l'utilisateur reste intact. Ça suffit à libérer le verrou sur le rapport de la FI.
+            int nbMesureFermes = ExcelInteropHost.Instance.FermerClasseursMesureOuvertsExternes();
+            if (nbMesureFermes > 0)
             {
-                int nbVisibles = excelsVisibles.Count;
-                var choix = MessageBox.Show(
-                    $"{nbVisibles} classeur{(nbVisibles > 1 ? "s" : "")} Excel ouvert"
-                  + $"{(nbVisibles > 1 ? "s" : "")} détecté{(nbVisibles > 1 ? "s" : "")} "
-                  + "en plus de Metrologo.\n\n"
-                  + "Si l'un d'eux a ouvert le rapport de cette FI, la mesure risque "
-                  + "d'échouer (fichier verrouillé).\n\n"
-                  + $"Voulez-vous fermer ce{(nbVisibles > 1 ? "s" : "")} classeur"
-                  + $"{(nbVisibles > 1 ? "s" : "")} Excel maintenant ?",
-                    "Excel ouvert détecté",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-
-                if (choix == MessageBoxResult.Yes)
-                {
-                    int nbFermes = ExcelInteropHost.Instance.FermerExcels(excelsVisibles);
-                    Log($"🗑 {nbFermes} classeur(s) Excel fermé(s) avant lancement.");
-                    Journal.Info(CategorieLog.Excel, "EXCELS_EXTERNES_FERMES",
-                        $"{nbFermes} classeur(s) Excel ouvert(s) fermé(s) avant lancement de la mesure.");
-                }
-                // Si Non, on continue sans rien faire (l'utilisateur a vu l'avertissement
-                // et accepte le risque que la mesure échoue si le fichier est verrouillé).
+                Log($"🗑 {nbMesureFermes} classeur(s) de mesure (freq/stab) déjà ouvert(s) fermé(s) avant lancement.");
+                Journal.Info(CategorieLog.Excel, "EXCELS_MESURE_FERMES_PARNOM",
+                    $"{nbMesureFermes} classeur(s) de mesure freq/stab fermé(s) par leur nom avant la mesure "
+                  + "(aucun process Excel tué, fichiers utilisateur préservés).");
             }
 
             _cts = new CancellationTokenSource();
