@@ -147,7 +147,7 @@ namespace Metrologo.Services.Besancon
         /// notation scientifique. <c>SaisieHelper.FormaterFrequence</c> est calibré pour des
         /// fréquences ~10 MHz et arrondirait ces très petites valeurs à « 0 ».
         /// </summary>
-        private static string FormaterValeur(double v) => v.ToString("0.000E+00", CultureInfo.InvariantCulture);
+        private static string FormaterValeur(double v) => v.ToString("0.000000E+00", CultureInfo.InvariantCulture);
 
         /// <summary>
         /// Construit le rapport texte indenté (moyenne de référence en tête + valeurs journalières
