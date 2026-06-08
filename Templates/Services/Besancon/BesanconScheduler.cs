@@ -21,15 +21,8 @@ namespace Metrologo.Services.Besancon
         private static Timer? _timer;
         private static readonly object _sync = new();
 
-        /// <summary>
-        /// Désignation de l'UNIQUE rubidium dont la fréquence de référence est pilotée
-        /// automatiquement par la moyenne hebdomadaire Besançon. Pour tout autre rubidium,
-        /// la fréquence reste celle saisie manuellement dans le catalogue — on n'y touche pas.
-        /// </summary>
-        private const string RubidiumPiloteBesancon = "E10-Y8";
-
-        /// <summary>Fréquence nominale du rubidium piloté (10 MHz) — base de la fréquence de
-        /// référence : <c>FrequenceMoyenne = FrequenceNominaleHz × (1 + écart hebdo)</c>.</summary>
+        /// <summary>Fréquence nominale de référence (10 MHz) — base sur laquelle l'écart hebdo
+        /// Besançon est appliqué : <c>FrequenceMoyenne = FrequenceNominaleHz × (1 + écart hebdo)</c>.</summary>
         private const double FrequenceNominaleHz = 10_000_000.0;
 
         /// <summary>Seuil (Hz) en dessous duquel on considère la fréquence de référence inchangée
@@ -184,7 +177,7 @@ namespace Metrologo.Services.Besancon
             try
             {
                 var ecartHebdo = await BesanconSuiviService.EcartHebdoCompletAsync(DateTime.Today);
-                if (ecartHebdo.HasValue) InjecterReferenceE10(ecartHebdo.Value);
+                if (ecartHebdo.HasValue) InjecterReferenceRubidiumActif(ecartHebdo.Value);
             }
             catch (Exception exRef)
             {
@@ -271,17 +264,16 @@ namespace Metrologo.Services.Besancon
         }
 
         /// <summary>
-        /// Injecte l'écart hebdomadaire Besançon comme fréquence de référence du rubidium piloté
-        /// <see cref="RubidiumPiloteBesancon"/> (« E10-Y8 ») :
-        /// <c>FrequenceMoyenne = <see cref="FrequenceNominaleHz"/> × (1 + écart)</c>. L'écart étant
-        /// SIGNÉ, la référence passe naturellement au-dessus de 10 MHz (écart positif) ou en dessous
-        /// (écart négatif). Aucun autre rubidium n'est touché.
+        /// Applique AUTOMATIQUEMENT l'écart hebdomadaire Besançon comme fréquence de référence du
+        /// rubidium ACTIF : <c>FrequenceMoyenne = <see cref="FrequenceNominaleHz"/> × (1 + écart)</c>.
+        /// Aucun « raccord » ni réglage manuel requis. L'écart étant SIGNÉ, la référence passe
+        /// au-dessus de 10 MHz (écart positif) ou en dessous (écart négatif). Un rubidium en réglage
+        /// MANUEL (fréquence saisie explicitement par l'utilisateur) n'est pas écrasé.
         ///
-        /// <para/>Met à jour l'entrée E10-Y8 du catalogue partagé (valeur correcte même quand E10-Y8
-        /// n'est pas le rubidium actif) et, si E10-Y8 EST le rubidium actif, l'objet en mémoire +
-        /// <c>rubidium-actif.json</c>, puis notifie l'UI (Dispatcher).
+        /// <para/>Met à jour l'objet actif en mémoire + <c>rubidium-actif.json</c> + l'entrée du
+        /// catalogue partagé, puis notifie l'UI (bandeau bas) sur le Dispatcher.
         /// </summary>
-        private static void InjecterReferenceE10(double ecart)
+        private static void InjecterReferenceRubidiumActif(double ecart)
         {
             // Garde-fou : écart fini et plausible (les écarts Besançon sont ~1e-11..1e-14, |v| ≤ 1e-9).
             // On ACCEPTE les valeurs négatives (référence sous 10 MHz) — seul l'invraisemblable est rejeté.
@@ -300,16 +292,12 @@ namespace Metrologo.Services.Besancon
                 return;
             }
 
-            // Le pilotage Besançon ne concerne que le rubidium asservi GPS (cf. legacy bAvecGPS) ou,
-            // à défaut, celui dont le nom correspond au pilote configuré (E10-Y8). Tout autre rubidium
-            // garde sa fréquence saisie manuellement.
-            bool pilote = actif.AvecGPS
-                || string.Equals(actif.Designation?.Trim(), RubidiumPiloteBesancon, StringComparison.OrdinalIgnoreCase);
-            if (!pilote)
+            // Automatique : aucun « raccord » manuel requis. Seul un rubidium en réglage MANUEL
+            // (override explicite de l'utilisateur via la saisie d'une fréquence) n'est pas écrasé.
+            if (actif.EstReglageManuel)
             {
-                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_NON_PILOTE",
-                    $"Rubidium actif « {actif.Designation} » non piloté par Besançon "
-                  + $"(ni « Avec GPS » ni « {RubidiumPiloteBesancon} ») — fréquence de référence inchangée.");
+                Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_MANUEL",
+                    "Rubidium actif en réglage manuel — fréquence de référence laissée inchangée.");
                 return;
             }
 
