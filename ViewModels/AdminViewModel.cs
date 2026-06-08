@@ -179,18 +179,17 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Déclenche manuellement la tâche Besançon (récupération FTP du fichier corrigé +
-        /// intégration des valeurs journalières + recalcul des moyennes hebdo), sans attendre
-        /// l'horaire quotidien. Utile pour tester/forcer. Le détail va dans le Journal (Système).
+        /// Déclenche manuellement la récupération Besançon (téléchargement FTP du fichier
+        /// corrigé + extraction des valeurs + ajout au fichier texte cumulatif), sans attendre
+        /// l'horaire quotidien. Aucune écriture en base SQL. Le détail va dans le Journal (Système).
         /// </summary>
         [RelayCommand]
         private async System.Threading.Tasks.Task RecupererBesanconMaintenantAsync()
         {
             var conf = MessageBox.Show(
-                "Lancer maintenant la récupération du fichier de Besançon sur le FTP, "
-              + "l'intégration des valeurs et le calcul des moyennes hebdomadaires ?\n\n"
-              + "Nécessite : un rubidium actif défini + les identifiants FTP renseignés "
-              + "(fichier besancon.ftp.json).",
+                "Lancer maintenant la récupération du fichier de Besançon sur le FTP "
+              + "et l'ajout des valeurs au fichier texte cumulatif ?\n\n"
+              + "Nécessite : les identifiants FTP renseignés (fichier besancon.ftp.json).",
                 "Récupération Besançon",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (conf != MessageBoxResult.Yes) return;
@@ -207,19 +206,13 @@ namespace Metrologo.ViewModels
                     return;
                 }
 
-                string hebdo = r.DerniereMoyenneHebdo.HasValue
-                    ? $"{r.DerniereMoyenneHebdo.Value:G9} (mardi MJD {r.DerniereMoyenneHebdoMjd})"
-                    : "aucune (il faut 7 jours consécutifs)";
-
                 MessageBox.Show(
                     "Récupération Besançon terminée ✔\n\n"
-                  + $"• Rubidium : {r.RubidiumDesignation}\n"
-                  + $"• Valeurs lues dans le fichier : {r.ValeursLues}\n"
-                  + $"• Nouvelles valeurs intégrées : {r.Nouvelles}\n"
-                  + $"• Total stocké pour ce rubidium : {r.TotalJournalieres}\n"
-                  + $"• Dernière moyenne hebdo : {hebdo}\n\n"
-                  + $"Fichier brut (consultable) :\n{r.CheminBrut ?? "⚠ NON ÉCRIT — voir le Journal (partage injoignable ?)"}\n\n"
-                  + $"Enregistrement :\n{(r.EnregistrementOk ? r.Destination : "⚠ ÉCHEC — voir le Journal")}",
+                  + $"• Valeurs lues dans le fichier FTP : {r.ValeursLues}\n"
+                  + $"• Nouvelles valeurs ajoutées : {r.Nouvelles}\n"
+                  + $"• Total dans le fichier cumulatif : {r.TotalJournalieres}\n\n"
+                  + $"Fichier cumulatif :\n{(r.EnregistrementOk ? r.Destination : "⚠ ÉCHEC — voir le Journal")}\n\n"
+                  + $"Fichier brut (copie datée) :\n{r.CheminBrut ?? "⚠ NON ÉCRIT — voir le Journal (partage injoignable ?)"}",
                     "Besançon", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)

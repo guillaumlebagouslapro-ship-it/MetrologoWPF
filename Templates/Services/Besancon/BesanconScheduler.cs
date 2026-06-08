@@ -89,23 +89,15 @@ namespace Metrologo.Services.Besancon
         }
 
         /// <summary>
-        /// Exécute la tâche une fois : télécharge le fichier FTP, le parse, intègre les valeurs
-        /// journalières pour le rubidium actif, et (le mardi) calcule les moyennes hebdomadaires.
-        /// Public pour permettre un déclenchement manuel (« Forcer la récupération »).
+        /// Exécute la tâche une fois : télécharge le fichier FTP, le parse, et ajoute les
+        /// valeurs journalières au fichier texte cumulatif (<see cref="BesanconTxtStore"/>) —
+        /// AUCUNE écriture en base SQL. Public pour permettre un déclenchement manuel
+        /// (« Forcer la récupération »).
         /// </summary>
         public static async Task<ResultatBesancon> ExecuterAsync()
         {
-            var res = new ResultatBesancon { Destination = "Base SQL BASE_E2M (SVR-OR)" };
+            var res = new ResultatBesancon { Destination = BesanconTxtStore.CheminValeurs };
             var cfg = BesanconConfig.Charger();
-
-            var rub = EtatApplication.RubidiumActif;
-            if (rub == null)
-            {
-                res.Erreur = "Aucun rubidium actif — sélectionne un rubidium avant de récupérer Besançon.";
-                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_PAS_RUBIDIUM", res.Erreur);
-                return res;
-            }
-            res.RubidiumDesignation = rub.Designation;
 
             var ftp = await BesanconFtpService.TelechargerAsync(cfg);
             if (!ftp.Ok)
@@ -124,58 +116,25 @@ namespace Metrologo.Services.Besancon
             var mesures = BesanconParser.Parser(contenu);
             res.ValeursLues = mesures.Count;
 
-            // Intégration en base SQL (BASE_E2M). Toute erreur SQL est remontée à l'admin.
+            // Ajout au fichier texte cumulatif (sans doublon de MJD). Toute erreur d'écriture
+            // est remontée à l'admin — mais on ne touche plus à aucune base SQL.
             try
             {
-                int nouvelles = 0;
-                foreach (var m in mesures)
-                    if (await BesanconStore.UpsertValeurJournaliereAsync(rub.Id, m.Mjd, m.Valeur)) nouvelles++;
-                res.Nouvelles = nouvelles;
-
-                // Moyennes hebdo : le mardi, on (re)calcule les 3 mardis précédents + le mardi
-                // courant (comme le legacy) ; les autres jours, on tente le dernier mardi passé.
-                var aujourdhui = DateTime.Today;
-                if (aujourdhui.DayOfWeek == DayOfWeek.Tuesday)
-                {
-                    int mjd = JourJulien.VersMjd(aujourdhui);
-                    foreach (int mardi in new[] { mjd - 21, mjd - 14, mjd - 7, mjd })
-                        await TenterCalculHebdoAsync(rub.Id, rub.AvecGPS, mardi);
-                }
-                else
-                {
-                    int decalDepuisMardi = ((int)aujourdhui.DayOfWeek - (int)DayOfWeek.Tuesday + 7) % 7;
-                    int mjdDernierMardi = JourJulien.VersMjd(aujourdhui.AddDays(-decalDepuisMardi));
-                    await TenterCalculHebdoAsync(rub.Id, rub.AvecGPS, mjdDernierMardi);
-                }
-
-                res.TotalJournalieres = await BesanconStore.CompterJournalieresAsync(rub.Id);
-                var dh = await BesanconStore.DerniereMoyenneHebdoAsync(rub.Id);
-                if (dh.HasValue)
-                {
-                    res.DerniereMoyenneHebdo = dh.Value.moyenne;
-                    res.DerniereMoyenneHebdoMjd = dh.Value.mardiMjd;
-
-                    // Injecte la moyenne hebdo comme fréquence de référence active —
-                    // UNIQUEMENT pour le rubidium piloté par Besançon (E10-Y8). Les autres
-                    // rubidiums conservent leur fréquence saisie manuellement au catalogue.
-                    InjecterReferenceDansRubidiumActif(rub, dh.Value.moyenne);
-                }
+                res.Nouvelles = await BesanconTxtStore.AjouterAsync(mesures);
+                var toutes = await BesanconTxtStore.LireAsync();
+                res.TotalJournalieres = toutes.Count;
                 res.EnregistrementOk = true;
-
-                // Rapport texte indenté + notification du voyant écran principal (tous les
-                // postes lisent la base partagée + le fichier suivi_besancon.txt).
-                await GenererRapportEtNotifierAsync(rub);
             }
-            catch (Exception exDb)
+            catch (Exception exTxt)
             {
-                res.Erreur = $"Écriture en base SQL échouée (SVR-OR / BASE_E2M) : {exDb.Message}";
-                Journal.Journal.Erreur(CategorieLog.Systeme, "BESANCON_DB_KO", res.Erreur);
+                res.Erreur = $"Écriture du fichier txt cumulatif échouée ({BesanconTxtStore.CheminValeurs}) : {exTxt.Message}";
+                Journal.Journal.Erreur(CategorieLog.Systeme, "BESANCON_TXT_KO", res.Erreur);
                 return res;
             }
 
             Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_OK",
-                $"Besançon intégré en base : {mesures.Count} valeur(s) lue(s), {res.Nouvelles} nouvelle(s) "
-              + $"pour le rubidium « {rub.Designation} » (#{rub.Id}). Brut : {res.CheminBrut ?? "NON ÉCRIT"}.");
+                $"Besançon récupéré : {mesures.Count} valeur(s) lue(s), {res.Nouvelles} nouvelle(s) ajoutée(s) "
+              + $"au fichier {BesanconTxtStore.CheminValeurs}. Brut : {res.CheminBrut ?? "NON ÉCRIT"}.");
 
             if (cfg.SupprimerApresTelechargement)
                 await BesanconFtpService.SupprimerDistantAsync(cfg);
