@@ -54,8 +54,7 @@ namespace Metrologo.Services.Besancon
     {
         private const int SeuilVertMaxJours = 2;     // ≤ 2 j  → vert
         private const int SeuilOrangeMaxJours = 6;   // 3..6 j → orange ; ≥ 7 j → rouge
-        private const int NbJoursAffiches = 14;      // valeurs journalières récentes listées dans le rapport
-        private const int NbSemainesListe = 6;       // moyennes hebdo complètes listées dans le rapport
+        private const int NbSemainesListe = 5;       // moyennes hebdo complètes listées (compact, tient sans scroll)
         private const int NbSemainesMaxScan = 80;    // recul max (semaines) pour retrouver une semaine complète
 
         /// <summary>Fichier texte de suivi déposé sur le partage (consultable + lu par tous les postes).</summary>
@@ -87,7 +86,7 @@ namespace Metrologo.Services.Besancon
                     st.Titre = "Suivi Besançon — Aucune donnée";
                     st.Detail = $"Aucune valeur dans le fichier « {BesanconTxtStore.CheminValeurs} ». "
                               + "Lancez une récupération (Admin → Récupérer Besançon).";
-                    st.RapportTxt = await ConstruireRapportAsync(rub, aujourdhui, valeurs, null);
+                    st.RapportTxt = await ConstruireRapportAsync(aujourdhui, valeurs, null);
                     return st;
                 }
 
@@ -97,29 +96,29 @@ namespace Metrologo.Services.Besancon
                 st.AgeJours = age;
 
                 var reference = CalculerReferenceHebdo(valeurs, aujourdhui);
-                string refTxt = DecrireReference(reference);
 
                 // Voyant basé uniquement sur la fraîcheur de la dernière valeur journalière.
+                // (La moyenne de référence est détaillée dans le corps du rapport, pas répétée ici.)
                 if (age > SeuilOrangeMaxJours)
                 {
                     st.Niveau = NiveauSuivi.Rouge;
                     st.Titre = "Suivi Besançon — Critique";
-                    st.Detail = $"Aucune nouvelle valeur depuis {age} jours. Moyenne hebdo de référence : {refTxt}.";
+                    st.Detail = $"Aucune nouvelle valeur depuis {age} jours.";
                 }
                 else if (age > SeuilVertMaxJours)
                 {
                     st.Niveau = NiveauSuivi.Orange;
                     st.Titre = "Suivi Besançon — Retard";
-                    st.Detail = $"Dernière valeur il y a {age} jours. Moyenne hebdo de référence : {refTxt}.";
+                    st.Detail = $"Dernière valeur il y a {age} jours.";
                 }
                 else
                 {
                     st.Niveau = NiveauSuivi.Vert;
                     st.Titre = "Suivi Besançon — À jour";
-                    st.Detail = $"Données à jour (dernière valeur il y a {age} j). Moyenne hebdo de référence : {refTxt}.";
+                    st.Detail = $"Données à jour — dernière valeur il y a {age} j.";
                 }
 
-                st.RapportTxt = await ConstruireRapportAsync(rub, aujourdhui, valeurs, reference);
+                st.RapportTxt = await ConstruireRapportAsync(aujourdhui, valeurs, reference);
                 return st;
             }
             catch (Exception ex)
@@ -145,16 +144,6 @@ namespace Metrologo.Services.Besancon
             return moys.Count > 0 ? moys[0].moyenne : (double?)null;
         }
 
-        /// <summary>Libellé court de la moyenne hebdo de référence pour le bandeau d'accueil.</summary>
-        private static string DecrireReference(ReferenceHebdo? r)
-        {
-            if (r == null) return "indisponible";
-            return r.Provisoire
-                ? $"{FormaterValeur(r.Moyenne)} (provisoire)"
-                : $"{FormaterValeur(r.Moyenne)} "
-                + $"(semaine du {JourJulien.DepuisMjd(r.MardiMjd - 7):dd/MM} au {JourJulien.DepuisMjd(r.MardiMjd - 1):dd/MM})";
-        }
-
         /// <summary>
         /// Formate une valeur Besançon (écart de fréquence, de l'ordre de 1e-11 à 1e-13) en
         /// notation scientifique. <c>SaisieHelper.FormaterFrequence</c> est calibré pour des
@@ -163,70 +152,42 @@ namespace Metrologo.Services.Besancon
         private static string FormaterValeur(double v) => v.ToString("0.000000E+00", CultureInfo.InvariantCulture);
 
         /// <summary>
-        /// Construit le rapport texte indenté (moyenne de référence en tête + valeurs journalières
-        /// récentes + moyennes hebdo complètes) et l'écrit sur le partage (best-effort). Reçoit les
-        /// valeurs et la référence déjà calculées par <see cref="EvaluerAsync"/>. Retourne le texte.
+        /// Construit un rapport texte COMPACT — référence hebdo, fraîcheur de la dernière valeur, et
+        /// les <see cref="NbSemainesListe"/> dernières moyennes hebdomadaires complètes — affiché sur
+        /// l'écran d'accueil et archivé sur le partage. Volontairement court pour tenir SANS
+        /// défilement ; le détail journalier reste dans <c>valeurs_besancon.txt</c>.
         /// </summary>
         private static async Task<string> ConstruireRapportAsync(
-            Rubidium rub, DateTime aujourdhui, SortedDictionary<int, double> valeurs, ReferenceHebdo? reference)
+            DateTime aujourdhui, SortedDictionary<int, double> valeurs, ReferenceHebdo? reference)
         {
             var sb = new StringBuilder();
-            string filet = new string('=', 64);
-            sb.AppendLine(filet);
-            sb.AppendLine($"  SUIVI BESANÇON — Rubidium « {rub.Designation} »");
-            sb.AppendLine(filet);
-            sb.AppendLine($"  Généré le        : {aujourdhui:dd/MM/yyyy}");
-            sb.AppendLine("  Source           : FTP ef_utcop → fichier valeurs_besancon.txt");
 
+            // Ligne « phare » : la moyenne de référence qui pilote la correction.
+            if (reference == null)
+                sb.AppendLine("Référence hebdo : indisponible (aucune valeur)");
+            else if (reference.Provisoire)
+                sb.AppendLine($"Référence hebdo : {FormaterValeur(reference.Moyenne)}   (provisoire)");
+            else
+                sb.AppendLine($"Référence hebdo : {FormaterValeur(reference.Moyenne)}   "
+                            + $"(semaine {JourJulien.DepuisMjd(reference.MardiMjd - 7):dd/MM} → {JourJulien.DepuisMjd(reference.MardiMjd - 1):dd/MM})");
+
+            // Fraîcheur de la dernière valeur journalière.
             if (valeurs.Count > 0)
             {
                 int maxMjd = valeurs.Keys.Max();
                 int age = JourJulien.VersMjd(aujourdhui) - maxMjd;
-                sb.AppendLine($"  Dernière valeur  : MJD {maxMjd} "
-                            + $"({JourJulien.DepuisMjd(maxMjd):dd/MM/yyyy}) — il y a {age} j");
+                sb.AppendLine($"Dernière valeur : {JourJulien.DepuisMjd(maxMjd):dd/MM/yyyy}   (il y a {age} j)");
             }
-            else
-            {
-                sb.AppendLine("  Dernière valeur  : aucune");
-            }
-
-            // Moyenne hebdomadaire de référence (valeur « phare » qui pilote la correction).
-            if (reference == null)
-                sb.AppendLine("  Moyenne hebdo    : indisponible (aucune valeur)");
-            else if (reference.Provisoire)
-                sb.AppendLine($"  Moyenne hebdo    : {FormaterValeur(reference.Moyenne)}  "
-                            + "[PROVISOIRE — initialisée, sera recalculée sur la 1ʳᵉ semaine mardi→lundi complète]");
-            else
-                sb.AppendLine($"  Moyenne hebdo    : {FormaterValeur(reference.Moyenne)}  "
-                            + $"[semaine du mardi {JourJulien.DepuisMjd(reference.MardiMjd - 7):dd/MM} "
-                            + $"au lundi {JourJulien.DepuisMjd(reference.MardiMjd - 1):dd/MM/yyyy}]");
             sb.AppendLine();
 
-            // Valeurs journalières : les NbJoursAffiches plus récentes présentes (jamais vide si données).
-            sb.AppendLine($"  VALEURS JOURNALIÈRES ({NbJoursAffiches} dernières disponibles)");
-            sb.AppendLine("  " + new string('-', 50));
-            sb.AppendLine($"  {"MJD",-9}{"Date",-14}Valeur (Hz)");
-            var recentes = valeurs.OrderByDescending(kv => kv.Key).Take(NbJoursAffiches)
-                                  .OrderBy(kv => kv.Key).ToList();
-            if (recentes.Count == 0)
-                sb.AppendLine("    (aucune)");
-            else
-                foreach (var j in recentes)
-                    sb.AppendLine($"  {j.Key,-9}{JourJulien.DepuisMjd(j.Key):dd/MM/yyyy}  "
-                                + FormaterValeur(j.Value));
-            sb.AppendLine();
-
-            // Moyennes hebdomadaires COMPLÈTES récentes (peut être vide si les données ont des trous).
+            // Dernières moyennes hebdomadaires complètes (tendance) — la 1ʳᵉ ligne est la référence.
             var moys = CalculerMoyennesHebdo(valeurs, aujourdhui, NbSemainesListe);
-            sb.AppendLine("  MOYENNES HEBDOMADAIRES COMPLÈTES (mardi→lundi, 7 valeurs)");
-            sb.AppendLine("  " + new string('-', 50));
-            sb.AppendLine($"  {"Mardi MJD",-12}{"Date",-14}Moyenne (Hz)");
+            sb.AppendLine("Moyennes hebdomadaires (mardi→lundi)");
             if (moys.Count == 0)
-                sb.AppendLine("    (aucune semaine complète pour l'instant — voir « Moyenne hebdo » ci-dessus)");
+                sb.AppendLine("  (aucune semaine complète pour l'instant)");
             else
                 foreach (var m in moys)
-                    sb.AppendLine($"  {m.mardiMjd,-12}{JourJulien.DepuisMjd(m.mardiMjd):dd/MM/yyyy}  "
-                                + FormaterValeur(m.moyenne));
+                    sb.AppendLine($"  {JourJulien.DepuisMjd(m.mardiMjd - 7):dd/MM} → {JourJulien.DepuisMjd(m.mardiMjd - 1):dd/MM}   {FormaterValeur(m.moyenne)}");
 
             string rapport = sb.ToString();
 
