@@ -217,18 +217,6 @@ namespace Metrologo
                     $"Démarrage de la tâche Besançon échoué : {exBes.Message}");
             }
 
-            // ⚠ SONDE TEMPORAIRE : on ne connaît pas l'heure à laquelle l'observatoire publie une
-            // nouvelle valeur. Cette sonde télécharge le FTP chaque minute et journalise l'heure
-            // exacte d'apparition d'un nouveau MJD (CSV sonde_besancon_detections.csv) — sans rien
-            // intégrer. À RETIRER une fois l'heure connue (régler HeureDeclenchement et supprimer
-            // BesanconSonde.cs + cet appel). Fire-and-forget.
-            try { Metrologo.Services.Besancon.BesanconSonde.Demarrer(); }
-            catch (Exception exSonde)
-            {
-                Journal.Warn(CategorieLog.Systeme, "BESANCON_SONDE_DEMARRAGE_KO",
-                    $"Démarrage de la sonde Besançon échoué : {exSonde.Message}");
-            }
-
             // (Rattrapage hebdo SQL retiré : les moyennes hebdomadaires Besançon sont désormais
             // recalculées à la volée depuis le fichier txt — plus aucun accès SQL au démarrage,
             // donc plus de timeout de 6 s ni de SqlException quand SVR-OR est injoignable.)
