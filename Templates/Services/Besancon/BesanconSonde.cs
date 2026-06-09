@@ -113,9 +113,12 @@ namespace Metrologo.Services.Besancon
                     // Première observation : on fixe la ligne de base sans crier « nouvelle valeur »
                     // (on ne connaît pas l'heure d'apparition de ce MJD-là, déjà présent au lancement).
                     SauvegarderEtat(maxMjd);
+                    // Crée TOUT DE SUITE le CSV (en-tête seul) sur le serveur : preuve visible que la
+                    // sonde tourne et écrit au bon endroit, sans attendre la 1ʳᵉ nouvelle valeur.
+                    AssurerEnteteCsv();
                     Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_SONDE_INIT",
                         $"Sonde Besançon : ligne de base établie au MJD {maxMjd} (déjà présent). "
-                      + "Surveillance de la prochaine nouvelle valeur en cours.");
+                      + $"CSV prêt : {CheminDetections}. Surveillance de la prochaine nouvelle valeur en cours.");
                     return;
                 }
 
@@ -214,6 +217,29 @@ namespace Metrologo.Services.Besancon
             }
         }
 
+        private const string EnteteCsv = "DateDetection;Heure;MJD;MJDPrecedent;Poste;Valeur(Hz)";
+
+        /// <summary>
+        /// Crée le CSV de détection avec son seul en-tête s'il n'existe pas encore — appelé dès la
+        /// ligne de base pour que le fichier soit immédiatement VISIBLE sur le serveur (preuve que
+        /// la sonde écrit au bon endroit), sans attendre la première nouvelle valeur. No-op si le
+        /// fichier existe déjà (on n'écrase aucune détection).
+        /// </summary>
+        private static void AssurerEnteteCsv()
+        {
+            try
+            {
+                Directory.CreateDirectory(CheminsMetrologo.Besancon);
+                if (!File.Exists(CheminDetections))
+                    File.WriteAllText(CheminDetections, EnteteCsv + "\n", Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_SONDE_CSV_KO",
+                    $"Sonde Besançon : création du CSV ({CheminDetections}) échouée — {ex.Message}");
+            }
+        }
+
         /// <summary>Ajoute une ligne au CSV de diagnostic (crée l'en-tête si le fichier n'existe pas).</summary>
         private static void EnregistrerDetection(DateTime quand, int nouveauMjd, int ancienMjd, double valeur)
         {
@@ -223,7 +249,7 @@ namespace Metrologo.Services.Besancon
                 bool nouveau = !File.Exists(CheminDetections);
                 var sb = new StringBuilder();
                 if (nouveau)
-                    sb.AppendLine("DateDetection;Heure;MJD;MJDPrecedent;Poste;Valeur(Hz)");
+                    sb.AppendLine(EnteteCsv);
                 sb.Append(quand.ToString("dd/MM/yyyy")).Append(';')
                   .Append(quand.ToString("HH:mm:ss")).Append(';')
                   .Append(nouveauMjd).Append(';')
