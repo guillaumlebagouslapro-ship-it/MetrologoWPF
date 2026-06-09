@@ -89,23 +89,5 @@ namespace Metrologo.Services
                 return null;   // signal d'erreur connexion — l'appelant décide
             }
         }
-
-        /// <summary>
-        /// Test de connectivité à ASERi (utilisé au démarrage pour diagnostiquer un
-        /// éventuel pb réseau). Léger : ne ramène pas de données, fait juste OpenAsync.
-        /// </summary>
-        public static async Task<bool> EstJoignableAsync()
-        {
-            try
-            {
-                using var conn = new SqlConnection(ConnectionString);
-                await conn.OpenAsync();
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
     }
 }

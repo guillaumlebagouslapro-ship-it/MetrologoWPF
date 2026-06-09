@@ -16,7 +16,6 @@
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Dapper" Version="2.1.72" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
     <PackageReference Include="WPF-UI" Version="3.0.4" />
     <PackageReference Include="NationalInstruments.Visa" Version="25.3.0.11" />
