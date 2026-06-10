@@ -44,11 +44,12 @@
 > et est masqué sur la voie C / UHF.
 >
 > **Modélisation WPF (mise à jour)** : le Stanford SR620 n'a **pas** de Voie C physique —
-> le passage en UHF est la 3e option du sélecteur d'entrée (`term1,2`, cf.
-> `F_ConfigStanford.pas` `AS_INPUT`), exposée dans le réglage « Entrée Voie A »
-> (`NbVoies=2`, plus de `ReglagesVoieC`). Les bandes `B1/B2/B3` de l'EIP 545 ne sont
-> **pas reliées** sur le matériel réel (ne fonctionnent pas) : le sélecteur de bande a été
-> retiré de l'UI ; seule la config d'entrée `B1` est envoyée à l'init, comme dans le legacy.
+> le passage en UHF est la 3e option du sélecteur d'entrée (`term1,2` voie A, `term2,2`
+> voie B, cf. `F_ConfigStanford.pas` `AS_INPUT`), exposée dans les réglages « Entrée
+> Voie A/B » (`NbVoies=2`, plus de `ReglagesVoieC`). L'EIP 545 garde son sélecteur de
+> bande `B1/B2/B3` (équivalent du `rgpGammesF` Delphi) avec les plages de la doc
+> constructeur EIP 545A : Bande 1 = 10 Hz – 100 MHz (1 MΩ, BNC), Bande 2 = 10 MHz – 1 GHz
+> (50 Ω, BNC), Bande 3 = 1 – 18 GHz (50 Ω, type N). `ConfEntree` reste `B1` à l'init.
 
 ---
 

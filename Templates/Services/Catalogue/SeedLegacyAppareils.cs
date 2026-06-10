@@ -242,11 +242,22 @@ namespace Metrologo.Services.Catalogue
                     [0] = "R2", [3] = "R1", [6] = "R0"
                 }
             },
-            // EIP 545 : pas de couplage / impédance / filtre / trigger. Le sélecteur de bande
-            // (B1/B2/B3) a été retiré de l'UI : sur le matériel réel les entrées des bandes
-            // 1, 2 et 3 ne sont pas reliées et ne fonctionnent pas. La config d'entrée reste
-            // « B1 » à l'init (ConfEntree), identique au comportement legacy.
-            Reglages = new List<ReglageAppareil>()
+            // EIP 545 : pas de couplage / impédance / filtre / trigger — seule la bande est
+            // réglable. Sélecteur identique au Delphi (F_ConfigEIP.pas, AS_INPUT = B1/B2/B3,
+            // rgpGammesF « Gammes de fréquence »). Les plages viennent de la doc constructeur
+            // EIP 545A (les libellés du .dfm Delphi n'ont pas été conservés) :
+            //   Bande 1 : 10 Hz – 100 MHz (1 MΩ, BNC)
+            //   Bande 2 : 10 MHz – 1 GHz  (50 Ω, BNC)
+            //   Bande 3 : 1 – 18 GHz      (50 Ω, type N)
+            // L'opérateur choisit la bande correspondant à la fréquence à mesurer ;
+            // ConfEntree reste « B1 » à l'init, identique au legacy.
+            Reglages = new List<ReglageAppareil>
+            {
+                Choix("Bande de fréquence",
+                    ("Bande 1 (10 Hz – 100 MHz)", "B1"),
+                    ("Bande 2 (10 MHz – 1 GHz)", "B2"),
+                    ("Bande 3 (1 – 18 GHz)", "B3")),
+            }
         };
     }
 }
