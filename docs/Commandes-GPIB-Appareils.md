@@ -41,7 +41,14 @@
 
 > ⚠️ Legacy : l'entrée est **un seul sélecteur mutuellement exclusif** (A 50 Ω / A 1 MΩ / C),
 > pas des voies indépendantes. Le couplage (AC/DC) ne vaut **que** pour les options de la voie A
-> et est masqué sur la voie C / UHF. Le modèle WPF gère la Voie C via `NbVoies=3` + `ReglagesVoieC`.
+> et est masqué sur la voie C / UHF.
+>
+> **Modélisation WPF (mise à jour)** : le Stanford SR620 n'a **pas** de Voie C physique —
+> le passage en UHF est la 3e option du sélecteur d'entrée (`term1,2`, cf.
+> `F_ConfigStanford.pas` `AS_INPUT`), exposée dans le réglage « Entrée Voie A »
+> (`NbVoies=2`, plus de `ReglagesVoieC`). Les bandes `B1/B2/B3` de l'EIP 545 ne sont
+> **pas reliées** sur le matériel réel (ne fonctionnent pas) : le sélecteur de bande a été
+> retiré de l'UI ; seule la config d'entrée `B1` est envoyée à l'init, comme dans le legacy.
 
 ---
 

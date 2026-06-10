@@ -127,7 +127,7 @@ namespace Metrologo.Services.Catalogue
         {
             Id = IdStanford,
             Nom = "Stanford SR620 (legacy)",
-            NbVoies = 3,
+            NbVoies = 2,
             Gates = new List<string>(GatesCompletes),
             Parametres = new ParametresIeee
             {
@@ -156,14 +156,17 @@ namespace Metrologo.Services.Catalogue
             },
             Reglages = new List<ReglageAppareil>
             {
-                // Voie A (canal 1) et Voie B (canal 2) : memes parametres, l'indice de canal
-                // change dans la commande (term1/tcpl1 -> term2/tcpl2). A confirmer au manuel SR620
-                // avant le materiel reel.
-                Choix("Impédance Voie A", ("50 Ω", "term1,0"), ("1 MΩ", "term1,1")),
+                // Pas de Voie C physique sur le SR620 : comme dans le Delphi
+                // (F_ConfigStanford.pas, AS_INPUT = term1,0 / term1,1 / term1,2), l'entrée est
+                // un sélecteur unique 50 Ω / 1 MΩ / UHF — le passage en UHF se fait par
+                // « term1,2 », pas par une voie séparée. Dans le legacy le couplage est masqué
+                // quand l'entrée est UHF (le SR620 l'ignore dans ce mode).
+                Choix("Entrée Voie A", ("50 Ω", "term1,0"), ("1 MΩ", "term1,1"), ("UHF", "term1,2")),
                 Choix("Couplage Voie A", ("AC", "tcpl1,1"), ("DC", "tcpl1,0")),
-                Choix("Impédance Voie B", ("50 Ω", "term2,0"), ("1 MΩ", "term2,1")),
+                // Voie B (canal 2) : memes parametres, l'indice de canal change dans la
+                // commande (term1/tcpl1 -> term2/tcpl2), UHF inclus. A confirmer au manuel SR620.
+                Choix("Entrée Voie B", ("50 Ω", "term2,0"), ("1 MΩ", "term2,1"), ("UHF", "term2,2")),
                 Choix("Couplage Voie B", ("AC", "tcpl2,1"), ("DC", "tcpl2,0")),
-                Choix("Entrée Voie C", ("UHF", "term1,2")),
             }
         };
 
@@ -239,11 +242,11 @@ namespace Metrologo.Services.Catalogue
                     [0] = "R2", [3] = "R1", [6] = "R0"
                 }
             },
-            // EIP 545 : pas de couplage / impédance / filtre / trigger — seule la bande est réglable.
-            Reglages = new List<ReglageAppareil>
-            {
-                Choix("Bande de fréquence", ("Bande 1", "B1"), ("Bande 2", "B2"), ("Bande 3", "B3")),
-            }
+            // EIP 545 : pas de couplage / impédance / filtre / trigger. Le sélecteur de bande
+            // (B1/B2/B3) a été retiré de l'UI : sur le matériel réel les entrées des bandes
+            // 1, 2 et 3 ne sont pas reliées et ne fonctionnent pas. La config d'entrée reste
+            // « B1 » à l'init (ConfEntree), identique au comportement legacy.
+            Reglages = new List<ReglageAppareil>()
         };
     }
 }
