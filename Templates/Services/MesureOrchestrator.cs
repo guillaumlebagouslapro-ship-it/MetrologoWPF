@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Metrologo.Models;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
+using Metrologo.Services.Incertitude;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;
 
@@ -105,6 +106,9 @@ namespace Metrologo.Services
             // Chemin du fichier .xlsx de la mesure — déclaré AVANT le try pour rester visible
             // dans le finally (suppression sur disque de la feuille d'une mesure stoppée).
             string? cheminFichier = null;
+            // Vrai si la mesure est interrompue parce que la valeur dépasse le domaine du module
+            // d'incertitude : on supprime alors la feuille courante comme pour un arrêt utilisateur.
+            bool horsModule = false;
 
             try
             {
@@ -892,6 +896,25 @@ namespace Metrologo.Services
                         EtapesTotales = totalEtapes
                     });
 
+                    // Garde-fou « dépassement de module » : si la moyenne de cette gate sort du
+                    // domaine couvert par le module d'incertitude sélectionné, on n'écrit pas la
+                    // feuille — on lève une exception typée. Le finally supprimera la feuille en
+                    // cours (comme un arrêt) et le ViewModel affichera la popup d'erreur.
+                    // (Module introuvable ≠ hors plage : on laisse passer le fallback historique.)
+                    var couvertureGate = IncertitudeCouverture.Verifier(mesure, valeurs, gateSecondes);
+                    if (couvertureGate.EstHorsPlage)
+                    {
+                        string msgUtilisateur =
+                            $"La valeur mesurée ({couvertureGate.ValeurLookup:G6} {couvertureGate.Unite}) "
+                          + $"dépasse le domaine couvert par le module d'incertitude « {mesure.NumModuleIncertitude} ».\n\n"
+                          + "La feuille de cette mesure a été supprimée.\n\n"
+                          + "Vérifiez le module sélectionné, la fréquence nominale ou le temps de porte.";
+                        string msgLog =
+                            $"Valeur {couvertureGate.ValeurLookup:G6} {couvertureGate.Unite} hors plage du module "
+                          + $"{mesure.NumModuleIncertitude} (gate={gateSecondes}s) — feuille « {nomFeuille} » supprimée.";
+                        throw new MesureHorsModuleException(msgUtilisateur, msgLog);
+                    }
+
                     if (!excelInvisible)
                     {
                         // OPTION A : tout en COM, pas de fermeture/réouverture.
@@ -989,6 +1012,14 @@ namespace Metrologo.Services
                 result.Erreur = "Mesure annulée par l'utilisateur.";
                 JournalLog.Warn(CategorieLog.Mesure, "Execute", result.Erreur);
             }
+            catch (MesureHorsModuleException ex)
+            {
+                // Valeur hors du domaine du module : feuille à supprimer (cf. finally), popup
+                // côté ViewModel via result.Erreur. result.Succes reste false.
+                horsModule = true;
+                result.Erreur = ex.MessageUtilisateur;
+                JournalLog.Warn(CategorieLog.Mesure, "MESURE_HORS_MODULE", ex.Message);
+            }
             catch (Exception ex)
             {
                 result.Erreur = ex.Message;
@@ -1004,7 +1035,7 @@ namespace Metrologo.Services
                 // qui partait jusqu'ici dans le catch générique sans nettoyer la feuille.
                 // On ne supprime QUE si la feuille courante est incomplète (sinon, en balayage
                 // stabilité, on effacerait une gate précédente déjà terminée).
-                if (ct.IsCancellationRequested
+                if ((ct.IsCancellationRequested || horsModule)
                     && feuilleCouranteIncomplete
                     && !string.IsNullOrEmpty(derniereFeuille))
                 {

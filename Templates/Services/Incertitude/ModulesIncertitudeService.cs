@@ -32,6 +32,17 @@ namespace Metrologo.Services.Incertitude
     /// L'ancien comportement (CoeffA/B hardcodés dans <see cref="ExcelService"/>) reste
     /// inchangé tant que ce service n'est pas appelé.
     /// </summary>
+    /// <summary>Résultat d'une vérification de couverture d'une valeur par un module.</summary>
+    public enum CouvertureModule
+    {
+        /// <summary>La valeur tombe dans une ligne du module — coefficients disponibles.</summary>
+        Couvert,
+        /// <summary>Le module existe mais aucune ligne ne couvre la valeur (hors domaine).</summary>
+        HorsPlage,
+        /// <summary>Le fichier CSV du module est introuvable.</summary>
+        ModuleIntrouvable
+    }
+
     public static class ModulesIncertitudeService
     {
         public static string DossierModules => CheminsMetrologo.Incertitudes;
@@ -352,6 +363,25 @@ namespace Metrologo.Services.Incertitude
             if (ligne == null) return (0, 0);
 
             return (ligne.IncertRelative, ligne.IncertAbsolue);
+        }
+
+        /// <summary>
+        /// Vérifie si une valeur (fréquence en Hz, ou vitesse en tr/min côté tachy) tombe
+        /// dans une ligne du module. Contrairement à <see cref="ObtenirCoefficients"/> qui
+        /// renvoie (0,0) aussi bien pour « hors plage » que pour « module introuvable »,
+        /// cette méthode distingue les deux cas — utile pour décider d'interrompre une mesure
+        /// dont la valeur dépasse le domaine couvert par le module.
+        /// </summary>
+        public static CouvertureModule VerifierCouverture(
+            string numModule, TypeMesure type, string fonction, double tempsSec, double freqHz)
+        {
+            string chemin = Path.Combine(DossierComplet(type), numModule + ".csv");
+            var module = Charger(chemin);
+            if (module == null) return CouvertureModule.ModuleIntrouvable;
+
+            return module.Trouver(fonction, tempsSec, freqHz) != null
+                ? CouvertureModule.Couvert
+                : CouvertureModule.HorsPlage;
         }
 
         // -------------------------------------------------------------------------
