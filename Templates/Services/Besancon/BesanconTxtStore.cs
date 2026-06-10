@@ -23,13 +23,34 @@ namespace Metrologo.Services.Besancon
 
         private const string EnTete = "MJD\tDate\tValeur(Hz)";
 
+        /// <summary>Une correction détectée : la valeur d'un MJD déjà enregistré a changé à la source.</summary>
+        public readonly struct Correction
+        {
+            public int Mjd { get; init; }
+            public double Ancienne { get; init; }
+            public double Nouvelle { get; init; }
+        }
+
+        /// <summary>Bilan d'un <see cref="AjouterAsync"/> : nouvelles dates + corrections appliquées.</summary>
+        public readonly struct ResultatAjout
+        {
+            public int Nouvelles { get; init; }
+            public IReadOnlyList<Correction> Corrections { get; init; }
+            public bool FichierModifie => Nouvelles > 0 || (Corrections?.Count ?? 0) > 0;
+        }
+
         /// <summary>
-        /// Ajoute au fichier cumulatif les mesures dont le MJD n'y figure pas déjà. Retourne le
-        /// nombre de NOUVELLES lignes écrites. Le fichier est réécrit en entier, trié par MJD
-        /// croissant et précédé d'un en-tête — ce qui garantit l'absence de doublon même si le
-        /// fichier FTP renvoie plusieurs fois les mêmes dates.
+        /// Fusionne les mesures FTP dans le fichier cumulatif :
+        /// <list type="bullet">
+        /// <item>MJD absent → nouvelle ligne (incrément normal du jour) ;</item>
+        /// <item>MJD déjà présent mais valeur DIFFÉRENTE → correction appliquée (rare : Besançon
+        ///       révise parfois une valeur passée) ;</item>
+        /// <item>MJD déjà présent, valeur identique → ignoré (cas courant à chaque récupération).</item>
+        /// </list>
+        /// Le fichier n'est réécrit (trié par MJD croissant, avec en-tête) que s'il y a au moins
+        /// une nouveauté ou une correction. Retourne le bilan détaillé.
         /// </summary>
-        public static async Task<int> AjouterAsync(IEnumerable<MesureBesancon> mesures)
+        public static async Task<ResultatAjout> AjouterAsync(IEnumerable<MesureBesancon> mesures)
         {
             Directory.CreateDirectory(CheminsMetrologo.Besancon);
 
@@ -37,13 +58,25 @@ namespace Metrologo.Services.Besancon
             var parMjd = await LireAsync();
 
             int nouvelles = 0;
+            var corrections = new List<Correction>();
             foreach (var m in mesures)
             {
-                if (parMjd.ContainsKey(m.Mjd)) continue;   // date déjà enregistrée → ignorée
-                parMjd[m.Mjd] = m.Valeur;
+                if (parMjd.TryGetValue(m.Mjd, out double existante))
+                {
+                    // Date déjà connue : on ne réécrit QUE si la source a corrigé la valeur.
+                    if (!MemeValeur(existante, m.Valeur))
+                    {
+                        corrections.Add(new Correction { Mjd = m.Mjd, Ancienne = existante, Nouvelle = m.Valeur });
+                        parMjd[m.Mjd] = m.Valeur;   // applique la correction
+                    }
+                    continue;
+                }
+                parMjd[m.Mjd] = m.Valeur;   // nouvelle date
                 nouvelles++;
             }
-            if (nouvelles == 0) return 0;   // rien de neuf → on ne réécrit pas le fichier
+
+            var res = new ResultatAjout { Nouvelles = nouvelles, Corrections = corrections };
+            if (!res.FichierModifie) return res;   // rien de neuf ni corrigé → pas de réécriture
 
             var sb = new StringBuilder();
             sb.AppendLine(EnTete);
@@ -51,8 +84,16 @@ namespace Metrologo.Services.Besancon
                 sb.AppendLine(FormaterLigne(kv.Key, kv.Value));
 
             await File.WriteAllTextAsync(CheminValeurs, sb.ToString(), Encoding.UTF8);
-            return nouvelles;
+            return res;
         }
+
+        /// <summary>
+        /// Égalité « telle qu'écrite dans le fichier » : on compare la représentation
+        /// round-trippable (InvariantCulture), exactement ce qui serait persisté. Évite tout
+        /// faux positif de bruit flottant tout en détectant la moindre correction réelle.
+        /// </summary>
+        private static bool MemeValeur(double a, double b) =>
+            a.ToString(CultureInfo.InvariantCulture) == b.ToString(CultureInfo.InvariantCulture);
 
         /// <summary>
         /// Relit le fichier cumulatif en dictionnaire <c>MJD -&gt; valeur</c> (trié, vide si le

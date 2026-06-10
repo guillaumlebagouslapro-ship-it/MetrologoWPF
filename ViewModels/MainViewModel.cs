@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Services;
+using Metrologo.Services.Besancon;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
 using System.Collections.Generic;
@@ -94,6 +95,17 @@ namespace Metrologo.ViewModels
                         .Skip(System.Math.Max(0, _changementsAdmin.Count - 8))
                         .Select(e => $"• {e.Horodatage:HH:mm} — {e.ActionLisible}"
                                    + (string.IsNullOrWhiteSpace(e.Utilisateur) ? "" : $" (par {e.Utilisateur})")));
+
+        /// <summary>
+        /// Pop-up rubidium sur CE poste (l'événement est déjà marshalé sur le thread UI par
+        /// <see cref="BesanconScheduler"/>). Information (nouvelle valeur) ou avertissement (sous
+        /// la limite 1e-13).
+        /// </summary>
+        private void OnPopupRubidiumDemandee(string titre, string message, bool avertissement)
+        {
+            MessageBox.Show(message, titre, MessageBoxButton.OK,
+                avertissement ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        }
 
         private void OnChangementsAdminRecus(IReadOnlyList<EntreeJournalAdmin> nouveaux)
         {
@@ -217,6 +229,11 @@ namespace Metrologo.ViewModels
         public MainViewModel()
         {
             NotificationsAdminWatcher.ChangementsRecus += OnChangementsAdminRecus;
+
+            // Pop-up directe sur CE poste quand la valeur du rubidium est mise à jour (écart hebdo
+            // Besançon) ou qu'elle passe sous la limite 1e-13. Le watcher ⚠ ne couvrant que les
+            // AUTRES postes, cet événement assure l'affichage sur le poste qui exécute la tâche.
+            BesanconScheduler.PopupRubidiumDemandee += OnPopupRubidiumDemandee;
 
             // Étape 1 : sélection de l'utilisateur dans le menu déroulant.
             VueActuelle = _selectionUtilisateurViewModel;

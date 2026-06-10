@@ -46,6 +46,8 @@ namespace Metrologo.Services.Journal
         {
             // Rubidium
             "SELECTION_RUBIDIUM", "CATALOGUE_RUBIDIUMS_MAJ",
+            // Rubidium — valeur de référence (écart hebdo Besançon)
+            "RUBIDIUM_VALEUR_MAJ", "RUBIDIUM_HEBDO_SOUS_SEUIL",
             // Modules d'incertitude
             "INCERT_MODULE_SAUVE", "INCERT_MODULE_COPIE", "INCERT_MODULE_SUPPR", "INCERT_MODULE_RENOMME",
             // Catalogue appareils
@@ -175,8 +177,10 @@ namespace Metrologo.Services.Journal
         /// <summary>Libellé français lisible pour un code d'action (fallback = le code brut).</summary>
         public static string LibelleAction(string action) => action switch
         {
-            "SELECTION_RUBIDIUM"      => "Rubidium actif changé",
-            "CATALOGUE_RUBIDIUMS_MAJ" => "Catalogue rubidiums modifié",
+            "SELECTION_RUBIDIUM"        => "Rubidium actif changé",
+            "CATALOGUE_RUBIDIUMS_MAJ"   => "Catalogue rubidiums modifié",
+            "RUBIDIUM_VALEUR_MAJ"       => "Valeur du rubidium mise à jour (écart hebdo)",
+            "RUBIDIUM_HEBDO_SOUS_SEUIL" => "⚠ Écart hebdo rubidium sous la limite",
             "INCERT_MODULE_SAUVE"     => "Module d'incertitude enregistré",
             "INCERT_MODULE_COPIE"     => "Module d'incertitude dupliqué",
             "INCERT_MODULE_SUPPR"     => "Module d'incertitude supprimé",

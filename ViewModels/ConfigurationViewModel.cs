@@ -298,6 +298,16 @@ namespace Metrologo.ViewModels
         /// </summary>
         partial void OnMesureConfigChanged(Mesure value)
         {
+            // Réassignation d'une config persistée (réouverture de la fenêtre) : on repart d'une
+            // sélection vierge pour que l'appareil soit restauré UNIQUEMENT depuis la valeur
+            // persistée (MesureConfig.IdModeleCatalogue), et non depuis un _appareilSelectionne
+            // périmé. En mode baie « adresses fixes », la liste des modèles legacy n'est jamais
+            // vide : le constructeur (RebuildAppareils → RebuildAppareilsFixes) auto-sélectionnait
+            // le 1ᵉʳ modèle, qui masquait ensuite la valeur persistée (cf. RebuildAppareilsFixes
+            // ligne « selId = _appareilSelectionne?... ?? MesureConfig... ») et l'écrasait. En mode
+            // classique la liste détectée est souvent vide à la construction → pas de pollution,
+            // d'où l'asymétrie où seul le mode baie « oubliait » l'appareil après une mesure.
+            _appareilSelectionne = null;
             RebuildAppareils();
             RebuildReglagesDynamiques();
             RebuildModulesIncertitude();
