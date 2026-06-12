@@ -905,7 +905,8 @@ namespace Metrologo.ViewModels
                     if (result.TransfertReseauOk == false)
                     {
                         Log("⚠ Transfert réseau échoué — le dossier FI reste en local.");
-                        MessageBox.Show(
+                        // Premier plan forcé : Excel (rapport) est devant à ce moment-là.
+                        MessageBoxPremierPlan.Afficher(
                             $"Le dossier de la FI {config.NumFI} n'a pas pu être copié sur "
                           + $"le partage réseau ({CheminsMetrologo.MesuresLocal}).\n\n"
                           + "Causes possibles :\n"
@@ -927,7 +928,10 @@ namespace Metrologo.ViewModels
                     Log($"✖ Échec : {result.Erreur}");
                     Journal.Erreur(CategorieLog.Mesure, "MESURE_ECHEC", result.Erreur ?? "Échec inconnu.");
                     JournalFIService.Ecrire("MESURE_ECHEC", result.Erreur ?? "Échec inconnu");
-                    MessageBox.Show(result.Erreur ?? "Erreur inconnue.",
+                    // Premier plan forcé : Excel est souvent devant (ex. valeur hors du
+                    // module d'incertitude) — la pop-up doit passer PAR-DESSUS le rapport
+                    // pour que l'utilisateur comprenne que la mesure n'est pas passée.
+                    MessageBoxPremierPlan.Afficher(result.Erreur ?? "Erreur inconnue.",
                         "Mesure interrompue", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
@@ -936,7 +940,7 @@ namespace Metrologo.ViewModels
                 Log($"✖ Erreur inattendue : {ex.Message}");
                 Journal.Erreur(CategorieLog.Mesure, "MESURE_EXCEPTION", ex.Message, new { ex.StackTrace });
                 JournalFIService.Ecrire("MESURE_ECHEC", $"Exception : {ex.Message}");
-                MessageBox.Show(ex.Message, "Erreur inattendue",
+                MessageBoxPremierPlan.Afficher(ex.Message, "Erreur inattendue",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
