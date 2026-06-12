@@ -25,7 +25,8 @@
         </ui:TitleBar>
 
         <!-- Bandeau -->
-        <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="20,16,20,12">
+        <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="20,16,20,12"
+                Effect="{StaticResource BannerShadow}">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                     <GradientStop Color="#FFB91C1C" Offset="0"/>

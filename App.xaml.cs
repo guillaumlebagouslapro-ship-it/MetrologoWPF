@@ -19,9 +19,8 @@ namespace Metrologo
             base.OnStartup(e);
 
             // ===== PROFILING DÉMARRAGE (À RETIRER UNE FOIS L'OPTIMISATION FAITE) =====
-            // Instrumente chaque grande étape pour identifier les goulots d'étranglement.
-            // Logs écrits à la fin dans le journal + un fichier startup_profiling.txt à
-            // côté de l'exe (facile à lire/copier).
+            // Chronomètre chaque grande étape pour trouver les goulots. Résultat écrit à
+            // la fin dans le journal + startup_profiling.txt à côté de l'exe.
             var swStartup = System.Diagnostics.Stopwatch.StartNew();
             var lapsStartup = new System.Collections.Generic.List<(string Etape, long MsDebut, long MsFin)>();
             long lastLap = 0;
@@ -36,10 +35,18 @@ namespace Metrologo
             Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             StartupLap("ShutdownMode set");
 
-            // Vérification des prérequis système (Excel, NI-VISA, ni4882.dll) AVANT de
-            // toucher au moindre service qui en dépend — sinon on plante silencieusement
-            // sur les postes mal configurés. Si quelque chose manque, on prévient
-            // l'utilisateur et on lui propose de continuer en mode dégradé ou quitter.
+            // Toute fenêtre secondaire ouverte sans Owner explicite reçoit automatiquement
+            // la fenêtre active comme propriétaire. Sans Owner, une fenêtre modale
+            // (ShowDialog) peut passer DERRIÈRE la fenêtre principale (clic, Alt-Tab…) :
+            // la principale est désactivée par la modale devenue invisible → l'app semble
+            // gelée. Avec le lien de propriété, Windows maintient la modale au-dessus de
+            // son propriétaire et la ramène/clignote quand on clique sur la principale.
+            EventManager.RegisterClassHandler(typeof(Window), Window.LoadedEvent,
+                new RoutedEventHandler(AttribuerOwnerAutomatique));
+
+            // Vérif des prérequis (Excel, NI-VISA, ni4882.dll) AVANT de toucher aux services
+            // qui en dépendent, sinon ça plante silencieusement sur les postes mal configurés.
+            // S'il manque quelque chose, on propose de continuer en mode dégradé ou de quitter.
             var prerequisManquants = VerificationPrerequis.VerifierTout();
             StartupLap("VerificationPrerequis.VerifierTout");
             if (prerequisManquants.Count > 0)
@@ -48,18 +55,15 @@ namespace Metrologo
                 bool? choix = dlg.ShowDialog();
                 if (choix != true)
                 {
-                    // L'utilisateur a choisi de quitter — on coupe court.
+                    // l'utilisateur a choisi de quitter
                     Application.Current.Shutdown();
                     return;
                 }
             }
 
-            // Migration silencieuse des fichiers locaux historiques (à plat dans
-            // %LocalAppData%\Metrologo\) vers la nouvelle organisation par sous-dossier
-            // (Configuration\, Presets\, Catalogues\, Cache\). Idempotent — ne fait rien
-            // si la migration a déjà eu lieu. À appeler en TOUT PREMIER pour que les
-            // services qui suivent (DatabaseInitializer, etc.) lisent depuis le nouveau
-            // emplacement.
+            // Migration des anciens fichiers locaux (à plat dans %LocalAppData%\Metrologo\)
+            // vers les sous-dossiers Configuration\, Presets\, Catalogues\, Cache\. Idempotent.
+            // À appeler en TOUT PREMIER pour que les services suivants lisent au bon endroit.
             CheminsMetrologo.MigrerAnciensFichiers();
             StartupLap("MigrerAnciensFichiers");
 
@@ -69,6 +73,26 @@ namespace Metrologo
             // déplacement), retombe sur les chemins locaux par défaut.
             bool serveurDispo = CheminsMetrologo.AssurerStructureServeur();
             StartupLap("AssurerStructureServeur (M:\\)");
+
+            // Partage réseau inaccessible → pop-up bloquante : l'utilisateur peut
+            // « Rafraîchir » (relance le test d'accès, ex. après avoir rebranché le
+            // câble / reconnecté le VPN) ou fermer l'application. Le dialogue ne se
+            // ferme en succès que lorsque le partage redevient joignable.
+            if (!serveurDispo)
+            {
+                var dlgReseau = new ReseauIndisponibleDialog(
+                    CheminsMetrologo.BaseServeur,
+                    CheminsMetrologo.AssurerStructureServeur);
+                bool? choixReseau = dlgReseau.ShowDialog();
+                if (choixReseau != true)
+                {
+                    // L'utilisateur a choisi de fermer l'application.
+                    Application.Current.Shutdown();
+                    return;
+                }
+                serveurDispo = true;
+                StartupLap("ReseauIndisponibleDialog (rafraîchi)");
+            }
 
             // Charge les overrides de chemins. Si le poste n'a pas encore de config locale,
             // l'app auto-adopte le fichier maître serveur (bootstrap silencieux d'un poste
@@ -313,6 +337,73 @@ namespace Metrologo
             }
             // ========================================================================
         }
+
+        /// <summary>
+        /// Handler de classe appelé au Loaded de CHAQUE Window de l'app. Si la fenêtre
+        /// n'a pas d'Owner (cas de tous les ShowDialog historiques du code), on lui
+        /// attribue la fenêtre actuellement active — typiquement celle depuis laquelle
+        /// l'utilisateur vient d'ouvrir le dialogue (gère aussi les dialogues imbriqués :
+        /// l'actif est alors le dialogue parent, pas la MainWindow). Best-effort : si
+        /// l'attribution échoue (fenêtre propriétaire en cours de fermeture, cycle…),
+        /// on retombe sur le comportement d'avant, sans casser l'ouverture.
+        /// </summary>
+        private static void AttribuerOwnerAutomatique(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Window fenetre) return;
+            if (fenetre == Application.Current.MainWindow) return;
+            if (fenetre.Owner != null) return;
+            // Les fenêtres Topmost (toasts, bouton stop flottant, saisies post-mesure) ne
+            // peuvent pas se perdre derrière — et un Owner les fermerait avec la fenêtre
+            // qui les a ouvertes, ce qu'on ne veut pas pour un toast.
+            if (fenetre.Topmost) return;
+
+            try
+            {
+                Window? proprietaire = null;
+                foreach (Window w in Application.Current.Windows)
+                {
+                    if (w != fenetre && w.IsActive && w.IsVisible) { proprietaire = w; break; }
+                }
+                proprietaire ??= Application.Current.MainWindow;
+
+                if (proprietaire == null || proprietaire == fenetre
+                    || !proprietaire.IsVisible || proprietaire.Owner == fenetre)
+                    return;
+
+                try
+                {
+                    fenetre.Owner = proprietaire;
+                }
+                catch (InvalidOperationException)
+                {
+                    // Fenêtre déjà affichée via ShowDialog : WPF interdit de définir Owner
+                    // à ce stade. On pose alors le propriétaire directement au niveau Win32
+                    // (GWLP_HWNDPARENT) — même effet sur le z-order : la modale reste
+                    // au-dessus de son propriétaire et clignote si on clique dessous.
+                    nint hwnd = new System.Windows.Interop.WindowInteropHelper(fenetre).Handle;
+                    nint hOwner = new System.Windows.Interop.WindowInteropHelper(proprietaire).Handle;
+                    if (hwnd != 0 && hOwner != 0)
+                        SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, hOwner);
+                }
+            }
+            catch
+            {
+                // Best-effort : sans Owner la fenêtre s'ouvre quand même, comme avant.
+            }
+        }
+
+        private const int GWLP_HWNDPARENT = -8;
+
+        private static nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong) =>
+            nint.Size == 8
+                ? SetWindowLongPtr64(hWnd, nIndex, dwNewLong)
+                : SetWindowLong32(hWnd, nIndex, (int)dwNewLong);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+        private static extern nint SetWindowLongPtr64(nint hWnd, int nIndex, nint dwNewLong);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
+        private static extern int SetWindowLong32(nint hWnd, int nIndex, int dwNewLong);
 
         protected override void OnExit(ExitEventArgs e)
         {

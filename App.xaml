@@ -32,6 +32,21 @@
                 <GradientStop Color="{StaticResource AsertiNavyLightColor}" Offset="1"/>
             </LinearGradientBrush>
 
+            <!-- Ombres portées partagées — teintées navy plutôt que noir pur pour rester
+                 dans la palette ASERTI. Posées sur un calque DERRIÈRE le contenu dans les
+                 templates (jamais sur un élément contenant du texte : l'effet dégraderait
+                 le rendu ClearType de tout le sous-arbre). -->
+            <DropShadowEffect x:Key="CardShadow" BlurRadius="14" ShadowDepth="2" Direction="270"
+                              Color="{StaticResource AsertiNavyColor}" Opacity="0.10"/>
+            <DropShadowEffect x:Key="CardShadowHover" BlurRadius="22" ShadowDepth="5" Direction="270"
+                              Color="{StaticResource AsertiNavyColor}" Opacity="0.20"/>
+            <DropShadowEffect x:Key="AccentShadow" BlurRadius="12" ShadowDepth="2" Direction="270"
+                              Color="{StaticResource AsertiOrangeColor}" Opacity="0.35"/>
+            <DropShadowEffect x:Key="AccentShadowHover" BlurRadius="18" ShadowDepth="3" Direction="270"
+                              Color="{StaticResource AsertiOrangeColor}" Opacity="0.50"/>
+            <DropShadowEffect x:Key="BannerShadow" BlurRadius="20" ShadowDepth="4" Direction="270"
+                              Color="{StaticResource AsertiNavyColor}" Opacity="0.25"/>
+
             <!-- Bouton de navigation (fond transparent sur navy) -->
             <Style x:Key="NavButtonStyle" TargetType="Button">
                 <Setter Property="Foreground" Value="White"/>
@@ -116,21 +131,37 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="b"
-                                    CornerRadius="10"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Stretch"/>
-                            </Border>
+                            <!-- Calque d'ombre séparé derrière le contenu : l'effet ne touche
+                                 pas le texte (préserve le rendu ClearType) et permet une
+                                 élévation au survol sans re-layouter le contenu. -->
+                            <Grid x:Name="root" RenderTransformOrigin="0.5,0.5">
+                                <Border x:Name="shadow"
+                                        CornerRadius="10"
+                                        Background="White"
+                                        Effect="{StaticResource CardShadow}"/>
+                                <Border x:Name="b"
+                                        CornerRadius="10"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Stretch"/>
+                                </Border>
+                            </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource AsertiOrangeBrush}"/>
                                     <Setter TargetName="b" Property="BorderThickness" Value="2"/>
+                                    <Setter TargetName="shadow" Property="Effect" Value="{StaticResource CardShadowHover}"/>
+                                    <Setter TargetName="root" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <TranslateTransform Y="-2"/>
+                                        </Setter.Value>
+                                    </Setter>
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Opacity" Value="0.5"/>
+                                    <Setter TargetName="shadow" Property="Effect" Value="{x:Null}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -138,13 +169,21 @@
                 </Setter>
             </Style>
 
-            <!-- Carte feature (Admin, non-cliquable) -->
+            <!-- Carte feature (Admin, non-cliquable). L'ombre est posée directement sur la
+                 bordure (pas de template ici) : volontairement très douce pour limiter
+                 l'impact sur le rendu du texte contenu. -->
             <Style x:Key="FeatureCardStyle" TargetType="Border">
                 <Setter Property="Background" Value="White"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="CornerRadius" Value="10"/>
                 <Setter Property="Padding" Value="18"/>
+                <Setter Property="Effect">
+                    <Setter.Value>
+                        <DropShadowEffect BlurRadius="10" ShadowDepth="1" Direction="270"
+                                          Color="{StaticResource AsertiNavyColor}" Opacity="0.08"/>
+                    </Setter.Value>
+                </Setter>
             </Style>
 
             <!-- Section de formulaire (ConfigurationWindow) -->
@@ -155,6 +194,12 @@
                 <Setter Property="CornerRadius" Value="10"/>
                 <Setter Property="Padding" Value="18"/>
                 <Setter Property="Margin" Value="0,0,0,14"/>
+                <Setter Property="Effect">
+                    <Setter.Value>
+                        <DropShadowEffect BlurRadius="10" ShadowDepth="1" Direction="270"
+                                          Color="{StaticResource AsertiNavyColor}" Opacity="0.08"/>
+                    </Setter.Value>
+                </Setter>
             </Style>
 
             <!-- Label de formulaire -->
@@ -185,18 +230,30 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="b"
-                                    Background="{TemplateBinding Background}"
-                                    CornerRadius="6"
-                                    Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
+                            <Grid>
+                                <!-- Calque d'ombre séparé : ne touche pas le texte du bouton. -->
+                                <Border x:Name="shadow"
+                                        CornerRadius="6"
+                                        Background="{TemplateBinding Background}"
+                                        Effect="{StaticResource AccentShadow}"/>
+                                <Border x:Name="b"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="6"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="b" Property="Background" Value="{StaticResource AsertiOrangeDarkBrush}"/>
+                                    <Setter TargetName="shadow" Property="Effect" Value="{StaticResource AccentShadowHover}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="shadow" Property="Effect" Value="{x:Null}"/>
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Opacity" Value="0.5"/>
+                                    <Setter TargetName="shadow" Property="Effect" Value="{x:Null}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
