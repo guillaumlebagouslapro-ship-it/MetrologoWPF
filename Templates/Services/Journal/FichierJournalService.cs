@@ -11,23 +11,15 @@ using Metrologo.Services;
 namespace Metrologo.Services.Journal
 {
     /// <summary>
-    /// Journal centralisé sur fichiers JSON dans le dossier partagé
-    /// <see cref="CheminsMetrologo.Logs"/> (par défaut <c>M:\exe_spe\Data_Metrologo\Logs\</c>).
-    ///
-    /// Stockage :
-    ///   • <c>sessions.json</c> — tableau JSON complet des sessions (lecture-modification-
-    ///     réécriture atomique). Une session = un ouverture d'app sur un poste.
-    ///   • <c>entries-YYYY-MM.jsonl</c> — fichiers JSON-lines append-only, un par mois.
-    ///     Chaque ligne = une entrée de log. Plus performant en écriture qu'un gros
-    ///     tableau, et permet l'archivage manuel des vieux mois.
-    ///
-    /// Multi-postes : les sessions ont des IDs unique (Guid) — pas de collision entre
-    /// postes. Les entries sont append-only avec <c>FileShare.Read</c> → plusieurs
-    /// postes peuvent écrire en parallèle sans bloquer la lecture.
-    ///
-    /// Remplace l'ancien <c>SqlServerJournalService</c>. Si le partage M:\ est indisponible,
-    /// les écritures échouent silencieusement (best-effort) — l'app reste utilisable.
+    /// Journal centralisé sur fichiers JSON dans CheminsMetrologo.Logs (par défaut
+    /// M:\exe_spe\Data_Metrologo\Logs\). Remplace l'ancien SqlServerJournalService.
     /// </summary>
+    // Stockage : sessions.json (tableau complet relu/réécrit en bloc, une session = une
+    // ouverture d'app sur un poste) + entries-YYYY-MM.jsonl (JSON-lines append-only, un
+    // fichier par mois : plus rapide en écriture et archivable mois par mois).
+    // Multi-postes : sessions identifiées par Guid (pas de collision), entries en append
+    // avec FileShare.Read donc plusieurs postes écrivent en parallèle sans bloquer la lecture.
+    // Si le partage M:\ est HS, les écritures échouent en silence et l'app reste utilisable.
     public class FichierJournalService : IJournalService
     {
         private readonly SemaphoreSlim _semaSessions = new(1, 1);
@@ -41,9 +33,7 @@ namespace Metrologo.Services.Journal
             PropertyNamingPolicy = null
         };
 
-        // -------------------------------------------------------------------------
-        // Sessions
-        // -------------------------------------------------------------------------
+        // ---- Sessions ----
 
         public async Task DemarrerSessionAsync(string utilisateur)
         {
@@ -97,17 +87,12 @@ namespace Metrologo.Services.Journal
 
         public async Task NettoyerSessionsZombiesAsync()
         {
-            // Stratégie en 2 niveaux :
-            //   1. Pour CETTE machine : si aucune autre instance Metrologo ne tourne
-            //      actuellement (en dehors de nous), toutes les sessions sans Fin
-            //      sur cette machine sont forcément zombies (l'utilisateur a fermé
-            //      les instances précédentes, peut-être brutalement).
-            //   2. Pour les AUTRES machines : on ne peut pas savoir si Metrologo y
-            //      tourne. On utilise un seuil temporel généreux (24 h) pour ne pas
-            //      fermer prématurément une session active ailleurs.
-            //
-            // Pour chaque zombie détecté, on fixe Fin = max(Timestamp des entrées)
-            // ou Debut si la session n'a aucune entrée.
+            // Deux cas :
+            // - cette machine : si on est la seule instance Metrologo qui tourne, toute
+            //   session locale sans Fin est forcément zombie (fermeture brutale).
+            // - autres machines : impossible de savoir si l'app y tourne encore, donc
+            //   seuil généreux de 24h avant de fermer.
+            // Pour chaque zombie, Fin = dernier Timestamp d'entrée, ou Debut si aucune entrée.
 
             string maMachine = Environment.MachineName;
             int monPid = System.Diagnostics.Process.GetCurrentProcess().Id;

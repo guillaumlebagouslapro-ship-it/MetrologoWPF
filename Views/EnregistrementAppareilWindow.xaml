@@ -57,8 +57,8 @@
                     </TextBlock>
                 </StackPanel>
 
-                <!-- Bouton d'aide : cercle bleu vif avec un point d'interrogation, ouvre une
-                     fenêtre dédiée qui explique chaque champ de saisie + des exemples 53131A/53230A. -->
+                <!-- Bouton "?" : ouvre la fenêtre d'aide sur les champs de saisie -->
+
                 <Button Grid.Column="1"
                         Click="OnOuvrirAide"
                         VerticalAlignment="Top"
@@ -117,8 +117,8 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Commandes de base : init, mesure, gate. Les valeurs par défaut conviennent à la
-                     majorité des fréquencemètres SCPI modernes. À adapter pour un appareil exotique. -->
+                <!-- Commandes de base (init, mesure, gate), valeurs par défaut OK pour la plupart des appareils SCPI -->
+
                 <Border Style="{StaticResource FormSectionStyle}">
                     <StackPanel>
                         <TextBlock Text="Commandes de base"

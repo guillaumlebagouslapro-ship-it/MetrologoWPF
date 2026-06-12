@@ -35,25 +35,20 @@ namespace Metrologo.Services.Besancon
     }
 
     /// <summary>
-    /// Évalue l'état du suivi Besançon (voyant vert/orange/rouge) et produit un rapport texte
-    /// indenté à afficher sur l'écran principal, à partir du fichier cumulatif
-    /// <see cref="BesanconTxtStore"/> (plus aucune lecture SQL).
-    ///
-    /// <para/>Voyant basé sur l'ancienneté (en jours) de la dernière valeur journalière :
-    /// ≤ 2 j = vert ; 3–6 j = orange ; ≥ 7 j = rouge.
-    ///
-    /// <para/>Moyenne hebdomadaire de référence (règle métier) : moyenne des 7 valeurs d'une
-    /// semaine <b>mardi → lundi</b> entièrement écoulée (exactement 7 valeurs). On retient la
-    /// dernière semaine complète disponible ; si la semaine en cours n'est pas calculable, on
-    /// conserve cette dernière valeur valide. Si aucune semaine complète n'existe encore (première
-    /// fois / données éparses), une valeur PROVISOIRE est initialisée avec les valeurs disponibles —
-    /// elle sera remplacée dès qu'une semaine complète pourra être calculée. Voir
-    /// <see cref="CalculerReferenceHebdo"/>.
+    /// Évalue l'état du suivi Besançon (voyant vert/orange/rouge) et produit le rapport texte de
+    /// l'écran principal, à partir du fichier txt cumulatif (plus aucune lecture SQL).
+    /// Voyant selon l'âge de la dernière valeur journalière : 2 j max = vert, 3 à 6 j = orange,
+    /// 7 j et plus = rouge.
+    /// Règle métier de la moyenne hebdo de référence : moyenne des 7 valeurs d'une semaine
+    /// mardi->lundi entièrement écoulée. On retient la dernière semaine complète disponible ; si la
+    /// semaine en cours n'est pas calculable on garde la dernière valide. Tant qu'aucune semaine
+    /// complète n'existe (première fois, données éparses), une valeur provisoire est calculée avec
+    /// les valeurs disponibles. Voir CalculerReferenceHebdo.
     /// </summary>
     public static class BesanconSuiviService
     {
-        private const int SeuilVertMaxJours = 2;     // ≤ 2 j  → vert
-        private const int SeuilOrangeMaxJours = 6;   // 3..6 j → orange ; ≥ 7 j → rouge
+        private const int SeuilVertMaxJours = 2;     // jusqu'à 2 j : vert
+        private const int SeuilOrangeMaxJours = 6;   // 3..6 j : orange ; au-delà : rouge
         private const int NbSemainesListe = 5;       // moyennes hebdo complètes listées (compact, tient sans scroll)
         private const int NbSemainesMaxScan = 80;    // recul max (semaines) pour retrouver une semaine complète
 
@@ -131,12 +126,9 @@ namespace Metrologo.Services.Besancon
             }
         }
 
-        /// <summary>
-        /// Écart hebdomadaire de référence = moyenne de la dernière semaine mardi→lundi COMPLÈTE
-        /// (exactement 7 valeurs), valeur SIGNÉE. <c>null</c> si aucune semaine complète n'est encore
-        /// disponible. Sert à piloter la fréquence de référence du rubidium E10-Y8 :
-        /// <c>FrequenceMoyenne = 10 MHz × (1 + écart)</c> (cf. <c>BesanconScheduler</c>).
-        /// </summary>
+        /// <summary>Écart hebdo de référence (signé) = moyenne de la dernière semaine mardi->lundi
+        /// complète (7 valeurs exactement), null si aucune. Pilote la fréquence de référence du
+        /// rubidium E10-Y8 : 10 MHz x (1 + écart), cf. BesanconScheduler.</summary>
         public static async Task<double?> EcartHebdoCompletAsync(DateTime aujourdhui)
         {
             var valeurs = await BesanconTxtStore.LireAsync();
@@ -144,25 +136,19 @@ namespace Metrologo.Services.Besancon
             return moys.Count > 0 ? moys[0].moyenne : (double?)null;
         }
 
-        /// <summary>
-        /// Formate une valeur Besançon (écart de fréquence, de l'ordre de 1e-11 à 1e-13) en
-        /// notation scientifique. <c>SaisieHelper.FormaterFrequence</c> est calibré pour des
-        /// fréquences ~10 MHz et arrondirait ces très petites valeurs à « 0 ».
-        /// </summary>
+        /// <summary>Formate un écart Besançon (~1e-11 à 1e-13) en notation scientifique.
+        /// SaisieHelper.FormaterFrequence, calibré pour ~10 MHz, arrondirait ces valeurs à 0.</summary>
         private static string FormaterValeur(double v) => v.ToString("0.000000E+00", CultureInfo.InvariantCulture);
 
-        /// <summary>
-        /// Construit un rapport texte COMPACT — référence hebdo, fraîcheur de la dernière valeur, et
-        /// les <see cref="NbSemainesListe"/> dernières moyennes hebdomadaires complètes — affiché sur
-        /// l'écran d'accueil et archivé sur le partage. Volontairement court pour tenir SANS
-        /// défilement ; le détail journalier reste dans <c>valeurs_besancon.txt</c>.
-        /// </summary>
+        /// <summary>Construit le rapport compact (référence hebdo, fraîcheur, dernières moyennes
+        /// hebdo complètes), affiché sur l'écran d'accueil et archivé sur le partage. Volontairement
+        /// court pour tenir sans scroll ; le détail journalier reste dans valeurs_besancon.txt.</summary>
         private static async Task<string> ConstruireRapportAsync(
             DateTime aujourdhui, SortedDictionary<int, double> valeurs, ReferenceHebdo? reference)
         {
             var sb = new StringBuilder();
 
-            // Ligne « phare » : la moyenne de référence qui pilote la correction.
+            // ligne principale : la moyenne de référence qui pilote la correction
             if (reference == null)
                 sb.AppendLine("Référence hebdo : indisponible (aucune valeur)");
             else if (reference.Provisoire)
@@ -180,7 +166,7 @@ namespace Metrologo.Services.Besancon
             }
             sb.AppendLine();
 
-            // Dernières moyennes hebdomadaires complètes (tendance) — la 1ʳᵉ ligne est la référence.
+            // dernières moyennes hebdo complètes (tendance) ; la 1re ligne est la référence
             var moys = CalculerMoyennesHebdo(valeurs, aujourdhui, NbSemainesListe);
             sb.AppendLine("Moyennes hebdomadaires (mardi→lundi)");
             if (moys.Count == 0)
@@ -217,14 +203,10 @@ namespace Metrologo.Services.Besancon
         }
 
         /// <summary>
-        /// Détermine la moyenne hebdomadaire de référence :
-        ///  1. la plus récente semaine mardi→lundi entièrement écoulée avec EXACTEMENT 7 valeurs —
-        ///     c'est la « dernière valeur valide » : si la semaine en cours n'est pas complète, on
-        ///     retombe automatiquement sur la dernière qui l'était ;
-        ///  2. à défaut (aucune semaine complète : première fois ou données trop éparses), une
-        ///     valeur PROVISOIRE = moyenne des 7 valeurs les plus récentes disponibles, remplacée
-        ///     dès qu'une semaine complète pourra être calculée.
-        /// Retourne null uniquement s'il n'y a aucune valeur.
+        /// Moyenne hebdo de référence : la plus récente semaine mardi->lundi écoulée avec exactement
+        /// 7 valeurs (si la semaine en cours est incomplète, on retombe sur la dernière qui l'était).
+        /// À défaut, valeur provisoire = moyenne des 7 valeurs les plus récentes, remplacée dès
+        /// qu'une semaine complète existe. Null uniquement s'il n'y a aucune valeur.
         /// </summary>
         private static ReferenceHebdo? CalculerReferenceHebdo(
             SortedDictionary<int, double> valeurs, DateTime aujourdhui)
@@ -257,11 +239,8 @@ namespace Metrologo.Services.Besancon
             };
         }
 
-        /// <summary>
-        /// Liste des <paramref name="nbVoulu"/> dernières moyennes hebdomadaires COMPLÈTES (semaine
-        /// mardi→lundi avec exactement 7 valeurs), de la plus récente à la plus ancienne. Peut être
-        /// vide si les données présentent des trous.
-        /// </summary>
+        /// <summary>Les nbVoulu dernières moyennes hebdo complètes (mardi->lundi, 7 valeurs
+        /// exactement), de la plus récente à la plus ancienne. Peut être vide s'il y a des trous.</summary>
         private static List<(int mardiMjd, double moyenne)> CalculerMoyennesHebdo(
             SortedDictionary<int, double> valeurs, DateTime aujourdhui, int nbVoulu)
         {

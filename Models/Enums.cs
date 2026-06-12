@@ -31,10 +31,8 @@ namespace Metrologo.Models
         Validation
     }
 
-    /// <summary>
-    /// Voie active sur laquelle porte la mesure. Seuls les réglages (impédance, couplage, filtre, trigger)
-    /// de cette voie seront appliqués à l'appareil — les autres voies restent intactes.
-    /// </summary>
+    /// <summary>Voie sur laquelle porte la mesure. Seuls les réglages de cette voie
+    /// (impédance, couplage, filtre, trigger) sont envoyés à l'appareil.</summary>
     public enum VoieActive
     {
         A,

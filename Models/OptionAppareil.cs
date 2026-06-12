@@ -16,11 +16,11 @@ namespace Metrologo.Models
         public bool EstConnu => Detecte?.ModeleReconnu != null;
         public string AdresseAffiche => Detecte?.AdresseCourte ?? "non connecté";
 
-        // ---------------- Mode « adresses fixes » (appareils legacy non détectés) ----------------
+        // ---------------- mode adresses fixes (appareils legacy non détectés) ----------------
 
         /// <summary>
-        /// Modèle catalogue legacy associé à cette option en mode « adresses fixes » (l'appareil
-        /// n'est pas sur le bus, on le pilote à une adresse saisie). Null en mode scan.
+        /// Modèle catalogue legacy associé en mode adresses fixes (l'appareil n'est pas sur le bus,
+        /// on le pilote à une adresse saisie). Null en mode scan.
         /// </summary>
         public ModeleAppareil? ModeleFixe { get; init; }
 

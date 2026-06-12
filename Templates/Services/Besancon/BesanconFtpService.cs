@@ -7,9 +7,9 @@ using Metrologo.Services.Journal;
 namespace Metrologo.Services.Besancon
 {
     /// <summary>
-    /// Récupération du fichier de l'observatoire de Besançon sur le FTP (équivalent de la
-    /// récupération Indy <c>ftpe2m</c> du legacy). Utilise <c>FtpWebRequest</c> (intégré .NET,
-    /// pas de dépendance externe) ; gère le FTPS explicite via <see cref="BesanconConfig.FtpSsl"/>.
+    /// Récupération du fichier de l'observatoire de Besançon sur le FTP (équivalent du ftpe2m Indy
+    /// du legacy). FtpWebRequest est obsolète mais intégré .NET, donc pas de dépendance externe ;
+    /// le FTPS explicite est géré via la config (FtpSsl).
     /// </summary>
     public static class BesanconFtpService
     {
@@ -23,11 +23,9 @@ namespace Metrologo.Services.Besancon
             public bool Ok => Contenu != null;
         }
 
-        /// <summary>
-        /// Télécharge le fichier distant. Retourne le contenu si OK, sinon un <see cref="ResultatFtp"/>
-        /// décrivant précisément l'échec : config manquante, ou réponse FTP du serveur (ex.
-        /// « 530 Login incorrect », « 550 File not found »), ou erreur réseau (timeout, TLS, refus).
-        /// </summary>
+        /// <summary>Télécharge le fichier distant. Retourne le contenu si OK, sinon le détail de
+        /// l'échec : config manquante, réponse FTP du serveur (530 login, 550 fichier absent...)
+        /// ou erreur réseau (timeout, TLS, refus).</summary>
         public static async Task<ResultatFtp> TelechargerAsync(BesanconConfig cfg)
         {
             if (string.IsNullOrWhiteSpace(cfg.FtpHote) || string.IsNullOrWhiteSpace(cfg.FtpUtilisateur))
@@ -66,7 +64,7 @@ namespace Metrologo.Services.Besancon
             }
             catch (WebException wex)
             {
-                // Réponse FTP du serveur (code + texte) si disponible — le plus parlant pour diagnostiquer.
+                // réponse FTP du serveur (code + texte) si disponible, le plus parlant pour diagnostiquer
                 string detail = wex.Message;
                 if (wex.Response is FtpWebResponse fr)
                 {

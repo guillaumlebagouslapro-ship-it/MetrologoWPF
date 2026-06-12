@@ -3,10 +3,7 @@ using System.Collections.Generic;
 
 namespace Metrologo.Models
 {
-    /// <summary>
-    /// Modèle d'appareil enregistré dans le catalogue local.
-    /// Identifié par un ID stable (slug) et une signature IDN servant au matching lors du scan.
-    /// </summary>
+    /// <summary>Modèle d'appareil du catalogue local. Id stable (slug) + signature IDN pour le matching au scan.</summary>
     public class ModeleAppareil
     {
         /// <summary>Identifiant stable, généré à la création (ex: "agilent-53131a-7f3a").</summary>
@@ -32,23 +29,18 @@ namespace Metrologo.Models
         public List<string> Couplages { get; set; } = new();
 
         /// <summary>
-        /// Réglages dynamiques affichés dans la fenêtre Configuration et envoyés à l'appareil
-        /// lors de la validation (ex: impédance, filtre, atténuation). Permet d'étendre la UI
-        /// sans recompiler : chaque réglage porte ses options + leurs commandes SCPI.
+        /// Réglages dynamiques de la fenêtre Configuration (impédance, filtre, atténuation...).
+        /// Chaque réglage porte ses options et leurs commandes SCPI, donc on peut étendre la UI sans recompiler.
         /// </summary>
         public List<ReglageAppareil> Reglages { get; set; } = new();
 
-        // Stocké en UTC. Convertir avec ToLocalTime() pour l'affichage UI — la
-        // bascule été/hiver est gérée automatiquement par la stack horaire Windows.
+        // stocké en UTC, ToLocalTime() pour l'affichage
         public DateTime DateCreation { get; set; } = DateTime.UtcNow;
         public string CreePar { get; set; } = string.Empty;
 
         /// <summary>
-        /// Nombre de voies (canaux d'entrée) physiquement présentes sur cet appareil :
-        /// 1 (appareil mono-voie), 2 (Voie A + B), ou 3 (Voie A + B + C avec souvent
-        /// une 3e voie HF). Pilote l'affichage des sections de réglages dans l'UI
-        /// Enregistrement appareil. Défaut 2 pour rétrocompat avec les modèles
-        /// historiques (53131A, 53230A) qui ont systématiquement A + B.
+        /// Nombre de voies physiques (1, 2 ou 3, la 3e étant souvent une voie HF). Pilote l'affichage
+        /// des sections de réglages. Défaut 2 pour les modèles historiques (53131A, 53230A) qui ont A + B.
         /// </summary>
         public int NbVoies { get; set; } = 2;
 
@@ -79,34 +71,25 @@ namespace Metrologo.Models
         public string ExeMesure { get; set; } = ":READ?";
 
         /// <summary>
-        /// Modèle de commande pour programmer le gate time. <c>{0}</c> sera remplacé
-        /// par le temps en secondes. Ex: <c>":FREQ:ARM:STOP:TIM {0}"</c>.
-        /// Vide = pas de gate programmable (ou l'appareil n'a pas cette notion).
+        /// Template de commande pour le gate time, {0} = temps en secondes (ex: ":FREQ:ARM:STOP:TIM {0}").
+        /// Vide = pas de gate programmable.
         /// </summary>
         public string CommandeGate { get; set; } = string.Empty;
 
         /// <summary>
-        /// Commande de mesure en lot — si l'appareil sait faire N mesures côté hardware
-        /// et les retourner d'un coup en CSV. <c>{N}</c> sera remplacé par le nombre de
-        /// mesures. Ex 53131A : <c>":SAMP:COUN {N};:READ:ARR? {N}"</c>.
-        ///
-        /// Si non vide, l'orchestrator utilise ce mode bulk au lieu du :FETCh? boucle —
-        /// gain massif sur les boucles courtes (10 ms × 30 → ~0,5 s vs ~6 s en :FETCh?
-        /// boucle), car les mesures se font côté instrument sans aller-retour GPIB.
-        ///
-        /// Vide = fallback automatique sur :INIT:CONT ON + :FETCh? (mode rapide), puis
-        /// sur :READ? si Fetch n'est pas dérivable. Pas de comportement spécifique à un
-        /// modèle en dur côté C# — la stratégie est entièrement décidée par le catalogue.
+        /// Commande de mesure en lot quand l'appareil sait faire N mesures côté hardware et les
+        /// renvoyer d'un coup en CSV. {N} = nombre de mesures (ex 53131A : ":SAMP:COUN {N};:READ:ARR? {N}").
+        /// Si non vide, l'orchestrator passe en bulk au lieu de boucler sur :FETCh?, gros gain sur les
+        /// gates courtes (10 ms x 30 : ~0,5 s contre ~6 s) car plus d'aller-retour GPIB par mesure.
+        /// Vide = fallback :INIT:CONT ON + :FETCh?, puis :READ?. La stratégie vient entièrement du
+        /// catalogue, rien de codé en dur par modèle.
         /// </summary>
         public string CommandeMesureMultiple { get; set; } = string.Empty;
 
         /// <summary>
-        /// Commande SCPI qui retourne la **prochaine** mesure (et bloque jusqu'à ce
-        /// qu'elle soit dispo) au lieu de la dernière déjà lue. Permet d'éviter le
-        /// Task.Delay entre deux fetches dans la boucle de mesures rapides.
-        ///
-        /// Ex 53131A : <c>":DATA:FRESh:FREQ?"</c> ou similaire selon firmware. Vide =
-        /// fallback sur :FETCh? + Task.Delay = gate × 0,5 + détection doublons.
+        /// Commande SCPI qui renvoie la prochaine mesure (bloquante) au lieu de la dernière déjà lue,
+        /// ce qui évite le Task.Delay entre deux fetches en boucle rapide. Ex 53131A : ":DATA:FRESh:FREQ?"
+        /// selon firmware. Vide = fallback :FETCh? + Task.Delay (gate x 0,5) + détection doublons.
         /// </summary>
         public string CommandeFetchFresh { get; set; } = string.Empty;
 
@@ -124,71 +107,51 @@ namespace Metrologo.Models
         public string SrqOff { get; set; } = string.Empty;
 
         /// <summary>
-        /// Vérification optionnelle de l'arming après envoi de la commande de gate :
-        /// envoie <c>:FREQ:ARM:STOP:SOUR?</c> + <c>:FREQ:ARM:STOP:TIM?</c> + <c>:SYST:ERR?</c>
-        /// pour confirmer que l'instrument a bien pris en compte les commandes.
-        /// <para/>
-        /// <b>Spécifique au HP/Agilent 53131A</b> et compatibles. Les autres modèles
-        /// (Keysight 53230A, Stanford SR620, etc.) renvoient <c>-113 Undefined header</c>
-        /// sur ces commandes ARM, qui s'affichent ensuite à l'écran de l'instrument.
-        /// <para/>
-        /// Défaut : <c>false</c> (pas de vérif). À activer uniquement pour les modèles
-        /// qui supportent la syntaxe <c>:FREQ:ARM:*</c> historique.
+        /// Vérif optionnelle de l'arming après envoi du gate (:FREQ:ARM:STOP:SOUR? + :TIM? + :SYST:ERR?).
+        /// Spécifique au HP/Agilent 53131A et compatibles : les autres (53230A, SR620...) répondent
+        /// -113 Undefined header sur ces commandes ARM, qui s'affiche à l'écran de l'instrument.
+        /// Défaut false, à activer seulement si le modèle supporte la syntaxe :FREQ:ARM:* historique.
         /// </summary>
         public bool VerifArmingActive { get; set; } = false;
 
         /// <summary>
-        /// Active le mode rapide <c>:INIT:CONT ON</c> + boucle <c>:FETCh?</c> dans
-        /// l'orchestrator. Convient au 53131A et compatibles (où <c>:INIT:CONT ON</c>
-        /// met le compteur en acquisition continue lisible par <c>:FETCh?</c>).
-        /// <para/>
-        /// <b>À désactiver pour le 53230A et les compteurs modernes</b> : leur
-        /// <c>:INIT:CONT ON</c> a un comportement différent (mode "front panel running")
-        /// et la combinaison <c>:INIT:CONT ON</c> + <c>:FETCh?</c> génère <c>-113
-        /// Undefined header</c> ou <c>+230 Data corrupt or stale</c>. Ces compteurs
-        /// utilisent à la place <c>SAMP:COUN N</c> + <c>READ?</c> via <c>CommandeMesureMultiple</c>.
-        /// <para/>
-        /// Défaut : <c>true</c> (rétrocompat 53131A historique). Mettre <c>false</c>
-        /// pour les compteurs modernes — l'orchestrator retombera alors sur le mode
-        /// classique (<c>:READ?</c> par mesure) ou sur le bulk fetch si configuré.
+        /// Active le mode rapide :INIT:CONT ON + boucle :FETCh? dans l'orchestrator (ok pour le 53131A
+        /// et compatibles). A désactiver pour le 53230A et les compteurs modernes : leur :INIT:CONT ON
+        /// fait du "front panel running" et la combinaison avec :FETCh? donne -113 ou +230 Data corrupt,
+        /// ils passent par SAMP:COUN N + READ? via CommandeMesureMultiple. Défaut true (rétrocompat
+        /// 53131A) ; à false l'orchestrator retombe sur :READ? par mesure ou sur le bulk si configuré.
         /// </summary>
         public bool ModeRapideActif { get; set; } = true;
 
         /// <summary>
-        /// Commande pour <b>lancer</b> une acquisition gap-free de N mesures sans renvoyer
-        /// les valeurs (placeholder <c>{N}</c>). Utilisée uniquement en <b>mode streaming</b>
-        /// (= bulk avec lecture une-par-une via <see cref="CommandeFetchFresh"/>) pour les
-        /// gates longues (≥ 1 s) où on veut afficher les valeurs en live malgré le gap-free.
-        /// <para/>
-        /// Ex 53230A : <c>:SENS:FREQ:MODE CONT;:SAMP:COUN {N};:INIT:IMM</c>
-        /// <para/>
-        /// Si vide ou si <see cref="CommandeFetchFresh"/> vide, le mode streaming est désactivé
-        /// et l'orchestrator utilise <see cref="CommandeMesureMultiple"/> classique (bulk en
-        /// 1 seule transaction GPIB, sans live UI).
+        /// Commande qui lance une acquisition gap-free de N mesures sans renvoyer les valeurs
+        /// (placeholder {N}). Sert au mode streaming (bulk lu une mesure à la fois via
+        /// CommandeFetchFresh) pour les gates longues (1 s et plus) où on veut du live à l'écran.
+        /// Ex 53230A : :SENS:FREQ:MODE CONT;:SAMP:COUN {N};:INIT:IMM. Si vide (ou si
+        /// CommandeFetchFresh est vide), pas de streaming : bulk classique en une transaction GPIB.
         /// </summary>
         public string CommandeBulkInit { get; set; } = string.Empty;
 
-        // ---------------- Appareils legacy (ne répondent pas à *IDN?) ----------------
+        // -------- appareils legacy (pas de *IDN?) --------
 
         /// <summary>
-        /// <c>true</c> = appareil ancien ne répondant pas à <c>*IDN?</c> (EIP 545, Racal-Dana 1996,
-        /// Stanford SR620). Il n'est pas détectable par le scan GPIB : l'orchestrator le résout
-        /// par <see cref="AdresseFixeParDefaut"/> au lieu d'un match IDN sur le bus.
-        /// Défaut <c>false</c> → comportement IDN historique inchangé pour les compteurs modernes.
+        /// true = appareil ancien qui ne répond pas à *IDN? (EIP 545, Racal-Dana 1996, Stanford SR620).
+        /// Indétectable au scan GPIB : l'orchestrator le résout par AdresseFixeParDefaut au lieu d'un
+        /// match IDN. Défaut false (comportement IDN inchangé pour les compteurs modernes).
         /// </summary>
         public bool Legacy { get; set; } = false;
 
         /// <summary>
-        /// Adresse GPIB par défaut d'un appareil legacy / en mode « adresses fixes ». Pré-remplie
-        /// dans l'UI (éditable selon le banc). Ignorée pour les appareils détectés par IDN.
+        /// Adresse GPIB par défaut d'un appareil legacy / en mode adresses fixes. Pré-remplie dans
+        /// l'UI (éditable selon le banc), ignorée pour les appareils détectés par IDN.
         /// </summary>
         public int AdresseFixeParDefaut { get; set; } = 0;
 
         /// <summary>
-        /// Map slot UI (0=10 ms … 12=100 s) → commande de gate discrète, non templatable par
-        /// <see cref="CommandeGate"/>. Ex Stanford slot 6 → <c>"armm5;size1E0"</c>, Racal slot 6 →
-        /// <c>"GA1E0"</c>, EIP slots 0/3/6 → <c>"R2"/"R1"/"R0"</c>. Quand non vide, prioritaire sur
-        /// <see cref="CommandeGate"/> dans <c>CatalogueAdapter</c>. Vide = comportement template inchangé.
+        /// Map slot UI (0=10 ms ... 12=100 s) vers une commande de gate discrète quand le template
+        /// CommandeGate ne suffit pas. Ex Stanford slot 6 = "armm5;size1E0", Racal slot 6 = "GA1E0",
+        /// EIP slots 0/3/6 = "R2"/"R1"/"R0". Si non vide, prioritaire sur CommandeGate dans
+        /// CatalogueAdapter. Vide = comportement template inchangé.
         /// </summary>
         public Dictionary<int, string> CommandesGateParSlot { get; set; } = new();
     }

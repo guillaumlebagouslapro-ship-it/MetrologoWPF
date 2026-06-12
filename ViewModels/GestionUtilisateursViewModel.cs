@@ -12,17 +12,9 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.ViewModels
 {
-    /// <summary>
-    /// CRUD local des utilisateurs (lecture / création / renommage / suppression / rôle)
-    /// + gestion des mots de passe d'admin. Stockage 100 % local via
-    /// <see cref="ComptesLocauxService"/>.
-    ///
-    /// Restrictions :
-    ///   • Tout admin peut ajouter, renommer, supprimer un utilisateur lambda.
-    ///   • Seul un super-administrateur peut modifier les rôles et réinitialiser
-    ///     les mots de passe d'autres admins.
-    ///   • Tout admin connecté peut changer son propre mot de passe.
-    /// </summary>
+    /// <summary>CRUD des utilisateurs + mots de passe admin, stockage local via ComptesLocauxService.
+    /// Un admin gère les utilisateurs lambda et son propre mot de passe ; seul un SuperAdmin
+    /// touche aux rôles et aux mots de passe des autres admins.</summary>
     public partial class GestionUtilisateursViewModel : ObservableObject
     {
         public ObservableCollection<Utilisateur> Utilisateurs { get; } = new();
@@ -36,7 +28,7 @@ namespace Metrologo.ViewModels
 
         [ObservableProperty] private string _statut = string.Empty;
 
-        /// <summary>Vrai si l'admin authentifié dans la session courante est SuperAdmin.</summary>
+        // vrai si l'admin de la session courante est SuperAdmin
         public bool EstSuperAdmin => EtatApplication.EstSuperAdmin;
 
         public GestionUtilisateursViewModel()
@@ -51,8 +43,8 @@ namespace Metrologo.ViewModels
         {
             try
             {
-                // Relit le JSON à jour : le bouton « Rafraîchir » reflète ainsi les comptes
-                // créés / modifiés depuis un autre poste sans redémarrer l'application.
+                // on relit le JSON à jour : Rafraîchir voit ainsi les comptes créés ou
+                // modifiés depuis un autre poste sans redémarrer l'appli
                 Preferences.InvaliderCacheUtilisateurs();
 
                 Utilisateurs.Clear();
@@ -146,11 +138,8 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Change le rôle. Si la transition crée un nouvel admin (promotion depuis
-        /// Utilisateur), le service génère un mot de passe et on l'affiche une seule
-        /// fois pour qu'on puisse le communiquer.
-        /// </summary>
+        // change le rôle ; sur une promotion en admin le service génère un mot de passe,
+        // affiché une seule fois pour le communiquer à l'intéressé
         [RelayCommand(CanExecute = nameof(PeutChangerRole))]
         private void ChangerRole()
         {
@@ -190,10 +179,8 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Réinitialise le mot de passe du compte admin sélectionné. Réservé au
-        /// SuperAdministrateur. Le nouveau mot de passe est affiché une seule fois.
-        /// </summary>
+        // réinitialise le mot de passe de l'admin sélectionné (SuperAdmin uniquement),
+        // le nouveau n'est affiché qu'une seule fois
         [RelayCommand(CanExecute = nameof(PeutReinitialiserMotDePasse))]
         private void ReinitialiserMotDePasse()
         {
@@ -227,10 +214,7 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Permet à l'admin connecté de changer son propre mot de passe. Accessible
-        /// quel que soit le rôle (Admin ou SuperAdmin).
-        /// </summary>
+        // l'admin connecté change son propre mot de passe (Admin comme SuperAdmin)
         [RelayCommand]
         private void ChangerMonMotDePasse()
         {

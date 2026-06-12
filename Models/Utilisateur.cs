@@ -7,10 +7,8 @@ namespace Metrologo.Models
         Utilisateur,
         Administrateur,
         /// <summary>
-        /// « Chef » — peut tout ce que fait un Administrateur, ET en plus :
-        /// modifier les rôles des autres utilisateurs et changer le mot de passe
-        /// d'accès à la zone admin. Il y a toujours au moins un SuperAdministrateur
-        /// (impossible de supprimer ou de rétrograder le dernier).
+        /// Le "chef" : tout ce que fait un Administrateur, plus la gestion des rôles et du mot de
+        /// passe admin. Il en reste toujours au moins un (impossible de supprimer ou rétrograder le dernier).
         /// </summary>
         SuperAdministrateur
     }
@@ -27,17 +25,12 @@ namespace Metrologo.Models
         public DateTime? DernierLogin { get; set; }
 
         /// <summary>
-        /// Hash du mot de passe d'accès à la zone admin. <c>null</c> pour les comptes
-        /// <see cref="RoleUtilisateur.Utilisateur"/> (ils ne se connectent jamais à l'admin).
-        /// Renseigné automatiquement à la promotion en Admin/SuperAdmin et effacé à
-        /// la rétrogradation.
+        /// Hash du mot de passe d'accès à la zone admin. null pour les simples Utilisateurs.
+        /// Renseigné à la promotion en Admin/SuperAdmin, effacé à la rétrogradation.
         /// </summary>
         public string? PasswordHash { get; set; }
 
-        /// <summary>
-        /// Affichage convivial (Prénom Nom) pour l'UI. Tombe en arrière sur le login
-        /// si Nom/Prénom ne sont pas renseignés (cas des comptes hérités sans ces champs).
-        /// </summary>
+        /// <summary>Affichage "Prénom Nom" pour l'UI ; repli sur le login pour les comptes hérités sans ces champs.</summary>
         public string NomComplet =>
             !string.IsNullOrWhiteSpace(Prenom) || !string.IsNullOrWhiteSpace(Nom)
                 ? $"{Prenom} {Nom}".Trim()

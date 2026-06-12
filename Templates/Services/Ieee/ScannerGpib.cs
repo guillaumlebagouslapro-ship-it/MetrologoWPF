@@ -29,15 +29,13 @@ namespace Metrologo.Services.Ieee
         public bool AErreur => !string.IsNullOrEmpty(Erreur);
 
         /// <summary>
-        /// Heuristique : la réponse <c>*IDN?</c> semble incohérente (plus de 4 champs, ou
-        /// caractères de contrôle) → <b>possible conflit d'adresse</b> : deux appareils réglés
-        /// sur la même adresse GPIB répondent en même temps et leurs réponses se mélangent sur
-        /// le bus. Best-effort : deux appareils <i>identiques</i> peuvent renvoyer une réponse
-        /// propre et passer inaperçus.
+        /// Réponse *IDN? incohérente = possible conflit d'adresse (deux appareils sur la même
+        /// adresse, réponses mélangées sur le bus). Best-effort : deux appareils identiques
+        /// peuvent passer inaperçus.
         /// </summary>
         public bool ConflitAdressePossible => Repond && ScannerGpib.EstIdnSuspect(ReponseIdn);
 
-        /// <summary>Étiquette courte, ex: <c>GPIB0::15</c>.</summary>
+        /// <summary>Étiquette courte, ex: GPIB0::15.</summary>
         public string AdresseCourte => $"GPIB{Board}::{Adresse}";
 
         public string Affichage => Repond
@@ -73,29 +71,23 @@ namespace Metrologo.Services.Ieee
     }
 
     /// <summary>
-    /// Scanner du bus GPIB : balaie les adresses primaires 1..30, envoie <c>*IDN?</c>
-    /// à chaque appareil qui répond, et parse la chaîne d'identification retournée.
-    ///
-    /// Utilise NI-VISA via <c>NationalInstruments.Visa</c>.
+    /// Scanner du bus GPIB : balaie les adresses 1..30, envoie *IDN? et parse la réponse.
+    /// Passe par NI-VISA (NationalInstruments.Visa).
     /// </summary>
     public static class ScannerGpib
     {
-        /// <summary>
-        /// Plage d'adresses GPIB utilisables. L'adresse 0 est habituellement celle du contrôleur.
-        /// </summary>
+        // plage d'adresses scannées (0 = le contrôleur, on ne le scanne pas)
         public const int AdressePremiere = 1;
         public const int AdresseDerniere = 30;
 
-        // Regex pour extraire board + adresse primaire d'une chaîne VISA "GPIB<b>::<a>::INSTR".
+        // extrait board + adresse primaire d'une chaîne VISA "GPIBx::y::INSTR"
         private static readonly Regex _regexGpib =
             new(@"^GPIB(\d+)::(\d+)(?:::\d+)?::INSTR$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         /// <summary>
-        /// Scanne le bus GPIB en s'appuyant sur <c>ResourceManager.Find()</c>. C'est beaucoup plus rapide
-        /// que d'itérer toutes les adresses : NI-VISA sait déjà qui répond sur le bus.
-        ///
-        /// <para>Si <c>Find()</c> ne retourne rien, fallback sur un balayage séquentiel (1..30)
-        /// sur le board indiqué — utile si un appareil est branché mais n'a pas encore été "annoncé" à VISA.</para>
+        /// Scanne le bus via ResourceManager.Find() (rapide, VISA sait déjà qui répond).
+        /// Si Find() ne donne rien, fallback en balayage séquentiel 1..30 sur le board indiqué,
+        /// utile pour un appareil branché mais pas encore vu par VISA.
         /// </summary>
         public static async Task<List<ResultatScanGpib>> ScannerAsync(
             int gpibBoard = 0,
@@ -135,7 +127,7 @@ namespace Metrologo.Services.Ieee
             return resultats;
         }
 
-        /// <summary>Scanne une seule adresse (utilise en test ciblé).</summary>
+        /// <summary>Scanne une seule adresse (test ciblé).</summary>
         public static Task<ResultatScanGpib> InterrogerAsync(
             int adresse, int gpibBoard = 0, int timeoutMs = 1000, CancellationToken ct = default)
         {
@@ -158,7 +150,7 @@ namespace Metrologo.Services.Ieee
         private static ResultatScanGpib InterrogerRessource(
             ResourceManager rm, string resource, int timeoutMs)
         {
-            // Extraction du board + adresse depuis la chaîne VISA (ex: "GPIB9::15::INSTR").
+            // extrait board + adresse de la chaîne VISA (ex "GPIB9::15::INSTR")
             int board = 0, addr = 0;
             var m = _regexGpib.Match(resource);
             if (m.Success)
@@ -172,7 +164,7 @@ namespace Metrologo.Services.Ieee
                 using var session = (IMessageBasedSession)rm.Open(resource);
                 session.TimeoutMilliseconds = timeoutMs;
 
-                // FormattedIO pour gérer les terminateurs proprement.
+                // FormattedIO gère les terminateurs proprement
                 session.FormattedIO.WriteLine("*IDN?");
                 string reponse = session.FormattedIO.ReadLine()?.Trim() ?? string.Empty;
 
@@ -215,8 +207,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Retourne la liste brute des ressources VISA que NI connaît (toutes interfaces confondues).
-        /// Utile pour vérifier que l'adaptateur voit bien les instruments, indépendamment de notre scan séquentiel.
+        /// Liste brute des ressources VISA connues de NI (toutes interfaces). Permet de vérifier
+        /// que l'adaptateur voit les instruments, indépendamment de notre scan.
         /// </summary>
         public static Task<List<string>> ListerRessourcesAsync(CancellationToken ct = default)
         {
@@ -236,8 +228,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Parse une chaîne IDN standard IEEE-488.2 : <c>Fabricant,Modèle,Série,Firmware</c>.
-        /// Exemples : <c>HEWLETT-PACKARD,53131A,0,4613</c> · <c>STANFORD,SR620,s/n 12345,ver 1.20</c>.
+        /// Parse une chaîne IDN standard IEEE-488.2 : Fabricant,Modèle,Série,Firmware.
+        /// Ex "HEWLETT-PACKARD,53131A,0,4613" ou "STANFORD,SR620,s/n 12345,ver 1.20".
         /// </summary>
         public static (string? fabricant, string? modele, string? serie, string? firmware) ParserIdn(string idn)
         {
@@ -253,11 +245,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Détecte une réponse <c>*IDN?</c> incohérente, symptôme typique de deux appareils
-        /// réglés sur la même adresse GPIB (collision de bus : les deux réponses se superposent).
-        /// Une réponse standard IEEE-488.2 a exactement 4 champs « Fab,Modèle,Série,Firmware » et
-        /// ne contient que des caractères imprimables. Plus de 4 champs (deux IDN concaténés) ou
-        /// des caractères de contrôle ⇒ suspect.
+        /// Détecte un *IDN? incohérent, symptôme typique de deux appareils sur la même adresse
+        /// (les réponses se superposent sur le bus). Un IDN normal = 4 champs et que de
+        /// l'imprimable ; plus de 4 champs ou des caractères de contrôle = suspect.
         /// </summary>
         public static bool EstIdnSuspect(string? idn)
         {

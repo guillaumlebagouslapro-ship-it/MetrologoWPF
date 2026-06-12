@@ -13,41 +13,33 @@ namespace Metrologo.Models
         private static Rubidium? _rubidiumActif;
         private static bool _chargeDepuisPreferences;
 
-        /// <summary>
-        /// Utilisateur déclaré au démarrage via le dropdown (identité affichage + journal).
-        /// Aucune authentification — sert juste à savoir qui est en face de l'app.
-        /// </summary>
+        /// <summary>Utilisateur déclaré au démarrage via le dropdown (affichage + journal).
+        /// Pas d'authentification, sert juste à savoir qui est en face de l'app.</summary>
         public static Utilisateur? UtilisateurConnecte { get; set; }
 
         /// <summary>
-        /// Admin réellement authentifié via la modale login + mot de passe. <c>null</c>
-        /// tant qu'on n'est pas dans la zone admin. Set au déverrouillage admin, clear
-        /// au retour Accueil. Sert à déterminer les actions sensibles autorisées
-        /// (ex. seul un SuperAdmin peut gérer les rôles).
+        /// Admin réellement authentifié via la modale login + mot de passe. null hors zone admin
+        /// (set au déverrouillage, clear au retour Accueil). Sert aux actions sensibles,
+        /// ex. seul un SuperAdmin gère les rôles.
         /// </summary>
         public static Utilisateur? AdminConnecte { get; set; }
 
-        /// <summary>
-        /// Vrai si l'admin authentifié dans la session courante est SuperAdministrateur.
-        /// Reflète le compte qui a validé la modale Administration, PAS le dropdown
-        /// d'identité au démarrage.
-        /// </summary>
+        /// <summary>Vrai si l'admin authentifié est SuperAdministrateur. Reflète le compte de la
+        /// modale Administration, pas le dropdown d'identité du démarrage.</summary>
         public static bool EstSuperAdmin =>
             AdminConnecte?.Role == RoleUtilisateur.SuperAdministrateur;
 
-        /// <summary>
-        /// Appareils actuellement détectés sur le bus GPIB (rafraîchi après chaque scan).
-        /// Utilisé par la fenêtre de Configuration pour peupler la liste des fréquencemètres.
-        /// </summary>
+        /// <summary>Appareils détectés sur le bus GPIB (rafraîchi à chaque scan).
+        /// Alimente la liste des fréquencemètres de la fenêtre Configuration.</summary>
         public static ObservableCollection<AppareilDetecte> AppareilsDetectes { get; } = new();
 
-        /// <summary>Levé après chaque mise à jour de <see cref="AppareilsDetectes"/>.</summary>
+        /// <summary>Levé après chaque mise à jour de AppareilsDetectes.</summary>
         public static event EventHandler? AppareilsDetectesChange;
 
         /// <summary>
-        /// Mode « adresses fixes » actif (choisi sur le poste Baie). Quand <c>true</c>, la fenêtre
-        /// Configuration propose les appareils legacy du catalogue à une adresse GPIB éditable au
-        /// lieu de la liste des appareils détectés par scan. Toujours <c>false</c> en Paillasse.
+        /// Mode adresses fixes (poste Baie). Si true, la fenêtre Configuration propose les appareils
+        /// legacy du catalogue à une adresse GPIB éditable au lieu des appareils détectés par scan.
+        /// Toujours false en Paillasse.
         /// </summary>
         public static bool ModeAdressesFixes { get; set; }
 
@@ -78,9 +70,8 @@ namespace Metrologo.Models
                 AssurerChargement();
                 if (_rubidiumActif == null) return "Rubidium : non défini";
 
-                // Valeur EXACTE de la fréquence de référence (toute la précision du double),
-                // mais groupée par milliers pour la lisibilité (« 10 000 000 » au lieu de
-                // « 10000000 » collé). C'est cette valeur que ZNFreqRef reprend dans Excel.
+                // fréquence de référence exacte (toute la précision du double), groupée par
+                // milliers pour la lisibilité ("10 000 000"). C'est la valeur reprise par ZNFreqRef dans Excel.
                 string freq = Metrologo.Services.SaisieHelper.FormaterFrequence(
                     _rubidiumActif.FrequenceMoyenne);
                 string libelle = _rubidiumActif.EstReglageManuel
@@ -93,10 +84,9 @@ namespace Metrologo.Models
         public static event EventHandler? RubidiumActifChange;
 
         /// <summary>
-        /// Force la notification + la sauvegarde du rubidium courant. À appeler
-        /// quand on a modifié en place les champs (Designation / FrequenceMoyenne)
-        /// du rubidium actif via la gestion du catalogue : le setter standard
-        /// short-circuit sur <see cref="ReferenceEquals"/> et ne se déclencherait pas.
+        /// Force notification + sauvegarde du rubidium courant. À appeler quand on a modifié ses
+        /// champs en place via la gestion du catalogue : le setter short-circuit sur ReferenceEquals
+        /// et ne se déclencherait pas.
         /// </summary>
         public static void NotifierRubidiumActifChange()
         {
@@ -113,11 +103,9 @@ namespace Metrologo.Models
         }
 
         /// <summary>
-        /// Force la relecture du rubidium actif depuis les préférences partagées (fichier
-        /// réseau) et notifie l'UI via <see cref="RubidiumActifChange"/>. Sans ça,
-        /// <see cref="AssurerChargement"/> ne s'exécute qu'une fois (au démarrage) et le
-        /// rubidium resterait figé après un changement admin fait depuis un autre poste.
-        /// Appelé par l'actualisation à chaud de la configuration.
+        /// Relit le rubidium actif depuis le fichier réseau et notifie l'UI. Sans ça, le chargement
+        /// ne se fait qu'au démarrage et le rubidium resterait figé après un changement admin fait
+        /// depuis un autre poste. Appelé par l'actualisation à chaud de la configuration.
         /// </summary>
         public static void RechargerRubidiumActif()
         {

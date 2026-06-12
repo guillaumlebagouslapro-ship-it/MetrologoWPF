@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Wrapper P/Invoke des fonctions NI-488.2 natives (ni4882.dll). Approche
-    /// utilisée historiquement par le Delphi (via dpib32) et qui contourne la couche
-    /// NI-VISA managée — gain typique : write+read GPIB ~190 ms → ~30-80 ms.
+    /// Wrapper P/Invoke des fonctions NI-488.2 natives (ni4882.dll). Même approche que le Delphi
+    /// historique (dpib32) : on contourne la couche NI-VISA managée, write+read GPIB passe de
+    /// ~190 ms à ~30-80 ms.
     /// </summary>
     internal static class Ni488Native
     {
@@ -41,9 +41,9 @@ namespace Metrologo.Services.Ieee
         [DllImport(Dll, EntryPoint = "ibonl", ExactSpelling = true)]
         public static extern int ibonl(int ud, int v);
 
-        // ibconfig : configure une option du handle. Sert pour timeout, EOS, etc.
-        // Sur les versions récentes de NI-488.2 (ni4882.dll), ibtmo et ibeos ne sont
-        // PAS exportés directement — il faut passer par ibconfig avec la bonne constante.
+        // ibconfig : configure une option du handle (timeout, EOS, etc.).
+        // Sur les NI-488.2 récents (ni4882.dll), ibtmo et ibeos ne sont PAS exportés :
+        // il faut passer par ibconfig avec la bonne constante.
         [DllImport(Dll, EntryPoint = "ibconfig", ExactSpelling = true)]
         public static extern int ibconfig(int ud, int option, int value);
 
@@ -56,9 +56,9 @@ namespace Metrologo.Services.Ieee
         public static int ibtmo(int ud, int tmo) => ibconfig(ud, IbcTMO, tmo);
         public static int ibeos(int ud, int v)
         {
-            // v = REOS | char (notre convention) → on configure char + bits séparément
+            // v = REOS | char (notre convention) : on configure char et bits séparément
             int car = v & 0xFF;
-            int bits = (v >> 8);  // REOS = 0x0400 → 4 → bit 0x04 (REOS_BIT) — voir ni4882.h
+            int bits = (v >> 8);  // REOS = 0x0400 -> 4 -> bit 0x04 (REOS_BIT), voir ni4882.h
             ibconfig(ud, IbcEOSchar, car);
             return ibconfig(ud, IbcEOSbits, bits);
         }
@@ -75,7 +75,7 @@ namespace Metrologo.Services.Ieee
         [DllImport(Dll, EntryPoint = "ThreadIberr", ExactSpelling = true)]
         public static extern int ThreadIberr();
 
-        // Note : pas de ThreadIbcntl (avec 'l') — sur ni4882.dll c'est ThreadIbcnt.
+        // attention : pas de ThreadIbcntl (avec 'l') sur ni4882.dll, l'export s'appelle ThreadIbcnt
         [DllImport(Dll, EntryPoint = "ThreadIbcnt", ExactSpelling = true)]
         public static extern int ThreadIbcntl();
 
@@ -87,9 +87,7 @@ namespace Metrologo.Services.Ieee
         // EOS mode bits (à OR avec le caractère terminateur)
         public const int REOS = 0x0400;  // Termine le read sur le char EOS
 
-        /// <summary>
-        /// Convertit une durée en ms vers un code timeout NI-488.2 (T1ms=5 … T1000s=17).
-        /// </summary>
+        /// <summary>Convertit une durée en ms vers un code timeout NI-488.2 (T1ms=5 ... T1000s=17).</summary>
         public static int MapTimeoutCode(int ms)
         {
             if (ms <= 0) return 0;       // TNONE

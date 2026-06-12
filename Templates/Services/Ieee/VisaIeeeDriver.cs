@@ -10,11 +10,8 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Pilote IEEE réel basé sur NI-VISA via <c>NationalInstruments.Visa</c>.
-    /// Convertit les primitives Delphi (EcritureIEEE, LectureIEEE, etc.) en sessions VISA.
-    ///
-    /// Les sessions GPIB sont mises en cache par adresse pour éviter de les rouvrir à chaque commande.
-    /// Libérer via <see cref="Dispose"/> à la fermeture de l'application.
+    /// Pilote IEEE réel sur NI-VISA (NationalInstruments.Visa). Les sessions GPIB sont mises en
+    /// cache par adresse pour éviter de les rouvrir à chaque commande ; Dispose à la fermeture de l'appli.
     /// </summary>
     public sealed class VisaIeeeDriver : IIeeeDriver, IDisposable
     {
@@ -24,7 +21,7 @@ namespace Metrologo.Services.Ieee
         private readonly object _lock = new();
         private bool _disposed;
 
-        /// <param name="gpibBoard">Index de la carte GPIB — 0 pour GPIB0 (cas général).</param>
+        /// <summary>gpibBoard : index de la carte, 0 pour GPIB0 (cas général).</summary>
         public VisaIeeeDriver(int gpibBoard = 0)
         {
             _rm = new ResourceManager();
@@ -40,7 +37,7 @@ namespace Metrologo.Services.Ieee
                 using var intf = (GpibInterface)_rm.Open(resource);
                 intf.SendInterfaceClear();
             }
-            catch (Exception) { /* best-effort — certains backends refusent IFC en runtime */ }
+            catch (Exception) { /* best-effort, certains backends refusent IFC en runtime */ }
             return Task.CompletedTask;
         }
 
@@ -51,9 +48,9 @@ namespace Metrologo.Services.Ieee
             var session = ObtenirSession(adresse);
             AppliquerTerminateurs(session, readTerm: null);
 
-            // Respect de WriteTerm (cf. Metrologo.ini / catalogue) :
+            // WriteTerm (cf. Metrologo.ini / catalogue) :
             //   0 = rien (pas de LF, pas d'EOI)
-            //   1 = NL (LF) en fin de commande + EOI — convention Delphi la plus courante
+            //   1 = LF en fin de commande + EOI (convention Delphi la plus courante)
             //   2 = EOI uniquement (pas de LF)
             session.SendEndEnabled = writeTerm != 0;
             string aEcrire = writeTerm == 1 ? commande + "\n" : commande;
@@ -157,9 +154,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Ferme les sessions GPIB en cache sans toucher au <c>ResourceManager</c>. Les prochaines
-        /// opérations en rouvriront de fraîches — utile si un appareil a été éteint/rallumé ou
-        /// que le bus est dans un état bancal après un timeout.
+        /// Ferme les sessions en cache sans toucher au ResourceManager (rouvertes à la demande).
+        /// Utile après un appareil éteint/rallumé ou un bus bancal suite à timeout.
         /// </summary>
         public void ReinitialiserSessions()
         {

@@ -11,24 +11,16 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Méthodes d'extension sur <see cref="AppareilIEEE"/> portant la logique Delphi
-    /// de <c>TAppareilIEEE.Lecture</c>, <c>ConfigAppareil</c>, et <c>MesureIntervalleRacalDana</c>.
-    ///
-    /// Toutes les commandes GPIB passent par un <see cref="IIeeeDriver"/> injecté — ce qui
-    /// permet de tester en simulation sans matériel et de changer de backend (VISA, NI-488.2, …)
-    /// sans toucher à la logique de mesure.
-    ///
-    /// Référence Delphi : U_DeclarationsMETROLOGO.pas lignes 674 (Lecture), 1047 (MesureIntervalleRacalDana)
-    /// et F_Main.pas ligne 1927 (ConfigAppareil).
+    /// Logique de mesure portée du Delphi (TAppareilIEEE.Lecture, ConfigAppareil, MesureIntervalleRacalDana),
+    /// via un IIeeeDriver injecté : on peut simuler sans matériel et changer de backend GPIB sans toucher ici.
     /// </summary>
+    // réf Delphi : U_DeclarationsMETROLOGO.pas:674 (Lecture), :1047 (MesureIntervalleRacalDana), F_Main.pas:1927 (ConfigAppareil)
     public static class AppareilIeeeOperations
     {
-        // Bit MAV (Message Available) de l'octet de statut IEEE-488.2.
+        // bit MAV (Message Available) du status byte IEEE-488.2
         private const byte BitMav = 0x10;
 
-        /// <summary>
-        /// Envoie la chaîne d'initialisation de l'appareil (<c>ChaineInit</c> du .ini).
-        /// </summary>
+        /// <summary>Envoie la chaîne d'init de l'appareil (ChaineInit du .ini).</summary>
         public static Task InitialiserAsync(
             this AppareilIEEE appareil, IIeeeDriver driver, CancellationToken ct = default)
         {
@@ -37,10 +29,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Portage de <c>TfrmMain.ConfigAppareil</c> : IFC → voie MUX → ConfEntree → activation SRQ.
+        /// Portage de TfrmMain.ConfigAppareil : IFC, puis voie MUX (si mux fourni et VoieMux valide),
+        /// ConfEntree et activation SRQ.
         /// </summary>
-        /// <param name="mux">Multiplexeur optionnel. Ignoré si null ou si <c>mesure.VoieMux &lt;= 0</c>.</param>
-        /// <param name="commandesMux">Commandes MUX indexées par numéro de voie (1..N). Ignoré si null.</param>
         public static async Task ConfigurerAsync(
             this AppareilIEEE appareil,
             IIeeeDriver driver,
@@ -70,13 +61,8 @@ namespace Metrologo.Services.Ieee
 
         /// <summary>
         /// Programme la gate courante sur l'appareil (sauf en mode Interval, cf. F_Main.pas:1211).
+        /// verifierArming relit l'arming après écriture (~200 ms), à couper dans les boucles de balayage.
         /// </summary>
-        /// <param name="verifierArming">
-        /// Si <c>true</c> (défaut), relit l'arming après écriture pour s'assurer que l'instrument
-        /// a bien pris en compte les commandes (3 paires query/read = ~200 ms d'overhead). À
-        /// désactiver dans les boucles de balayage où chaque ms compte et où l'arming est déjà
-        /// validé par le bon comportement des mesures.
-        /// </param>
         public static async Task AppliquerGateAsync(
             this AppareilIEEE appareil, IIeeeDriver driver, int gateIndex,
             TypeMesure typeMesure, CancellationToken ct = default,
@@ -86,8 +72,8 @@ namespace Metrologo.Services.Ieee
 
             if (!appareil.Gates.TryGetValue(gateIndex, out var gate))
             {
-                // Silence = bug invisible : l'appareil reste en mode gate par défaut et
-                // la cadence observée ne correspond pas à ce que l'utilisateur a choisi.
+                // on loggue, sinon bug invisible : l'appareil reste en gate par défaut
+                // et la cadence ne correspond pas à ce que l'utilisateur a choisi
                 JournalLog.Warn(CategorieLog.Mesure, "GATE_INTROUVABLE",
                     $"Gate index {gateIndex} absent de {appareil.Nom} — commande de gate non envoyée, "
                     + "l'appareil tournera en mode par défaut.",
@@ -100,20 +86,18 @@ namespace Metrologo.Services.Ieee
                 return;
             }
 
-            // Le timeout VISA par défaut (5 s) est trop court dès que la gate dépasse ~3 s :
-            // le :READ? ne rend la main qu'à la fin du gate, donc il faut que le driver attende
-            // au moins gate + marge handshake GPIB. Sinon, premier READ = 0 Hz (chaîne vide après
-            // timeout), puis le Write suivant se bloque car le 53131A n'a pas eu le temps de
-            // vider son buffer de sortie.
+            // le timeout VISA par défaut (5 s) est trop court dès que la gate dépasse ~3 s :
+            // le :READ? ne rend la main qu'à la fin du gate, il faut donc attendre au moins
+            // gate + marge handshake GPIB. Sinon premier READ = 0 Hz (chaîne vide après timeout)
+            // puis le Write suivant bloque, le 53131A n'ayant pas vidé son buffer de sortie.
             int timeoutMs = Math.Max(5000, (int)(gate.ValeurSecondes * 1000) + 2000);
             driver.DefinirTimeout(appareil.Adresse, timeoutMs);
 
             if (string.IsNullOrEmpty(gate.Commande)) return;
 
-            // Certains compteurs (notamment le 53131A) digèrent mal les commandes SCPI chaînées
-            // avec ";" dans un seul Write : la 1ère s'applique, les suivantes sont silencieusement
-            // ignorées. On scinde donc en writes successifs avec un petit délai pour laisser
-            // l'instrument internaliser chaque changement d'état d'arming.
+            // certains compteurs (le 53131A en particulier) digèrent mal les commandes SCPI
+            // chaînées par ";" dans un seul Write : la 1ère passe, les suivantes sont ignorées
+            // en silence. On scinde en writes successifs avec un petit délai entre chaque.
             var sousCommandes = gate.Commande
                 .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -126,14 +110,10 @@ namespace Metrologo.Services.Ieee
                 await Task.Delay(50, ct);
             }
 
-            // Vérification : relit les valeurs d'arming pour confirmer que l'instrument a pris
-            // en compte nos commandes. Coût : ~200 ms (3 paires query/read). Skippable dans les
-            // boucles de balayage où l'arming est déjà éprouvé.
-            //
-            // Réservé aux modèles qui supportent la syntaxe :FREQ:ARM:* (HP/Agilent 53131A et
-            // compatibles). Les autres compteurs (53230A, SR620, etc.) renvoient -113
-            // Undefined header sur ces commandes, ce qui s'affiche à l'écran de l'instrument.
-            // → contrôlé par le champ catalogue VerifArmingActive (défaut false = universel).
+            // relecture de l'arming pour confirmer la prise en compte (~200 ms, 3 paires query/read).
+            // Réservé aux modèles qui supportent :FREQ:ARM:* (HP/Agilent 53131A et compatibles) :
+            // les autres (53230A, SR620...) renvoient -113 Undefined header, qui s'affiche à
+            // l'écran de l'instrument. D'où le champ catalogue VerifArmingActive (défaut false).
             if (verifierArming && appareil.VerifArmingActive)
             {
                 await VerifierArmingAsync(appareil, driver, ct);
@@ -151,8 +131,8 @@ namespace Metrologo.Services.Ieee
                 await driver.EcrireAsync(appareil.Adresse, ":FREQ:ARM:STOP:TIM?", appareil.WriteTerm, ct);
                 var tim = (await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct))?.Trim() ?? "";
 
-                // On requête aussi l'erreur SCPI en attente — si une commande a été rejetée plus tôt,
-                // elle sera dans la file d'erreur (ex : "-113,"Undefined header"").
+                // on lit aussi la file d'erreur SCPI : une commande rejetée plus tôt
+                // y traîne encore (ex -113 Undefined header)
                 await driver.EcrireAsync(appareil.Adresse, ":SYST:ERR?", appareil.WriteTerm, ct);
                 var err = (await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct))?.Trim() ?? "";
 
@@ -168,8 +148,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Désactive la génération de SRQ (ex: "QM0" pour Racal, "SR00" pour EIP).
-        /// À appeler en fin de boucle de mesures — cf. F_Main.pas:1263 (correctif bug Racal 10ms↔20ms).
+        /// Coupe la génération de SRQ ("QM0" sur Racal, "SR00" sur EIP) en fin de boucle de mesures.
+        /// Cf. F_Main.pas:1263 (correctif du bug Racal 10 ms / 20 ms).
         /// </summary>
         public static Task DesactiverSrqAsync(
             this AppareilIEEE appareil, IIeeeDriver driver, CancellationToken ct = default)
@@ -179,8 +159,7 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Portage de <c>TAppareilIEEE.Lecture</c> : exécute une mesure unique et retourne la valeur.
-        /// Retourne 0.0 en cas de timeout (comportement Delphi identique).
+        /// Portage de TAppareilIEEE.Lecture : une mesure unique. Retourne 0.0 sur timeout, comme en Delphi.
         /// </summary>
         public static async Task<double> MesurerAsync(
             this AppareilIEEE appareil,
@@ -196,11 +175,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Mode rapide : envoie une commande de fetch (typiquement <c>:FETCh:FREQ?</c>) qui lit
-        /// la dernière mesure complétée par l'instrument **sans ré-armer**. À utiliser dans
-        /// une boucle avec <c>:INIT:CONT ON</c> activé en amont — sinon retourne toujours la
-        /// même valeur. Beaucoup plus rapide que <see cref="MesurerAsync"/> sur le 53131A
-        /// (~30-50 ms/mesure vs ~670 ms) car on évite l'arming à chaque appel.
+        /// Mode rapide : commande de fetch (typiquement :FETCh:FREQ?) qui lit la dernière mesure
+        /// sans ré-armer. Suppose :INIT:CONT ON activé en amont, sinon on relit toujours la même
+        /// valeur. Sur 53131A : ~30-50 ms/mesure contre ~670 ms pour un READ complet.
         /// </summary>
         public static async Task<double> FetcherAsync(
             this AppareilIEEE appareil,
@@ -215,16 +192,10 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Mode bulk : envoie une commande de mesure multiple (ex 53131A :
-        /// <c>:SAMP:COUN 30;:READ:ARR? 30</c>) qui demande à l'instrument de faire N
-        /// mesures en interne et de les retourner en bloc. Évite N aller-retours GPIB
-        /// → gain majeur sur les boucles courtes (gate ≤ 100 ms).
-        ///
-        /// Le placeholder <c>{N}</c> dans <paramref name="commandeTemplate"/> est remplacé
-        /// par <paramref name="nbMesures"/>. La réponse est parsée comme CSV (séparateur
-        /// virgule, format SCPI standard — chaque valeur peut avoir son propre header de
-        /// taille <c>TailleHeaderReponse</c>, mais on ignore cette subtilité ici car en
-        /// pratique les bulk transfers SCPI ne mettent pas de header par valeur).
+        /// Mode bulk : l'instrument fait N mesures en interne et les renvoie en bloc
+        /// (ex 53131A : ":SAMP:COUN 30;:READ:ARR? 30"), ce qui évite N aller-retours GPIB.
+        /// Gros gain sur les gates courtes (100 ms et moins). Le placeholder {N} du template
+        /// est remplacé par nbMesures, la réponse est parsée en CSV sans header par valeur.
         /// </summary>
         public static async Task<List<double>> MesurerEnLotAsync(
             this AppareilIEEE appareil,
@@ -238,8 +209,8 @@ namespace Metrologo.Services.Ieee
 
             string reponse = await EcrireEtLireAsync(appareil, driver, commande, ct);
 
-            // Log la réponse brute (tronquée à 200 char pour ne pas saturer le journal) pour
-            // pouvoir adapter la commande SCPI si elle ne marche pas avec l'instrument.
+            // on loggue la réponse brute (tronquée à 200 car.) pour pouvoir adapter
+            // la commande SCPI si l'instrument ne la digère pas
             string apercu = string.IsNullOrEmpty(reponse)
                 ? "(vide)"
                 : reponse.Length > 200 ? reponse.Substring(0, 200) + "..." : reponse;
@@ -251,10 +222,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Parse une réponse SCPI multi-valeurs (CSV ou whitespace-separated). Tolère :
-        /// les virgules, points-virgules, espaces et tabs comme séparateurs. Les valeurs
-        /// non parsables sont remplacées par 0. Si moins de <paramref name="nbAttendu"/>
-        /// valeurs sont reçues, complète avec des 0 (et on logguera côté orchestrator).
+        /// Parse une réponse SCPI multi-valeurs. Séparateurs tolérés : virgule, point-virgule,
+        /// espace, tab. Les morceaux non parsables sont ignorés, à l'appelant de vérifier le compte.
         /// </summary>
         public static List<double> ParserValeursMultiples(string reponse, int nbAttendu)
         {
@@ -275,11 +244,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Dérive une commande de fetch à partir de la commande de mesure de l'appareil.
-        /// Convention SCPI : <c>:READ:XXX?</c> ↔ <c>:FETCh:XXX?</c> (READ ré-arme + lit ; FETCH
-        /// ne fait que lire la dernière mesure complète). Retourne <c>null</c> si la commande
-        /// d'origine ne correspond pas au pattern (ex: appareil pré-SCPI), auquel cas le mode
-        /// rapide n'est pas applicable et on retombe sur le READ classique.
+        /// Dérive la commande de fetch depuis la commande de mesure : :READ:XXX? devient :FETCh:XXX?
+        /// (READ ré-arme + lit, FETCH lit juste la dernière mesure). Retourne null si pas de pattern
+        /// READ (appareil pré-SCPI) : pas de mode rapide possible, on garde le READ classique.
         /// </summary>
         public static string? DeriverCommandeFetch(string commandeMesure)
         {
@@ -300,9 +267,7 @@ namespace Metrologo.Services.Ieee
 
         // ---------------- Interne ----------------
 
-        /// <summary>
-        /// Équivalent Delphi <c>EcritureLectureIEEE</c> : envoi commande + attente MAV (si SRQ géré) + lecture.
-        /// </summary>
+        /// <summary>Équivalent Delphi EcritureLectureIEEE : envoi commande + attente MAV (si SRQ géré) + lecture.</summary>
         private static async Task<string> EcrireEtLireAsync(
             AppareilIEEE appareil, IIeeeDriver driver, string commande, CancellationToken ct)
         {
@@ -328,9 +293,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Saute l'entête de la réponse et parse le nombre.
-        /// TailleHeaderReponse est la position 1-based du premier caractère numérique
-        /// (1 = pas de saut, 3 = saute 2 caractères — ex. entêtes type "F:" sur certains compteurs).
+        /// Saute l'entête de la réponse et parse le nombre. TailleHeaderReponse est la position
+        /// 1-based du premier caractère numérique (1 = pas de saut, 3 = saute 2 caractères,
+        /// genre entête "F:" sur certains compteurs).
         /// </summary>
         private static double ParserValeur(string reponse, int tailleHeader)
         {

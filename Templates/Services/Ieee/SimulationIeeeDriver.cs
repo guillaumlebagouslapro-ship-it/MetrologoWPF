@@ -7,20 +7,16 @@ using System.Threading.Tasks;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Pilote IEEE simulé — ne touche aucun matériel. Utilisé en dev / tests / formation.
-    ///
-    /// Comportement :
-    ///   - Mémorise la dernière commande envoyée par adresse.
-    ///   - Si la dernière commande ressemble à une requête de mesure (<c>meas?</c>, <c>RS</c>, <c>RE</c>),
-    ///     renvoie une fréquence nominale bruitée (~10 MHz avec σ dépendant de la gate).
-    ///   - Retourne un MAV toujours prêt après un court délai (simule la mesure terminée).
+    /// Pilote IEEE simulé, aucun matériel (dev / tests / formation). Mémorise la dernière commande
+    /// par adresse ; si elle ressemble à une requête de mesure (meas?, RS, RE), renvoie ~10 MHz
+    /// bruité avec un sigma dépendant de la gate. Le MAV est toujours prêt après un court délai.
     /// </summary>
     public class SimulationIeeeDriver : IIeeeDriver
     {
         private readonly Random _random = new Random();
         private readonly Dictionary<int, string> _derniereCommande = new();
 
-        // Temps de gate (secondes) extrait grossièrement de la dernière commande gate reçue.
+        // temps de gate (s) extrait grossièrement de la dernière commande gate reçue
         private readonly Dictionary<int, double> _gateSecondes = new();
 
         public Task SendInterfaceClearAsync(CancellationToken ct = default)
@@ -51,7 +47,7 @@ namespace Metrologo.Services.Ieee
 
         public async Task<byte> LireStatusByteAsync(int adresse, CancellationToken ct = default)
         {
-            // Simule un court délai d'acquisition puis bit MAV armé.
+            // court délai d'acquisition puis MAV armé
             await Task.Delay(10, ct);
             return 0x10;  // MAV set
         }
@@ -61,20 +57,19 @@ namespace Metrologo.Services.Ieee
 
         public void ReinitialiserSessions()
         {
-            // Pas de session persistante à invalider en mode simulation.
+            // pas de session persistante en simulation
             _derniereCommande.Clear();
             _gateSecondes.Clear();
         }
 
         public void AborterToutesSessions()
         {
-            // Pas d'instrument réel à débloquer en simulation : le LireAsync simulé est court
-            // (await Task.Delay(20, ct)) et déjà annulable via le token.
+            // rien à débloquer : le LireAsync simulé est court et déjà annulable via le token
         }
 
         public void DefinirTimeout(int adresse, int timeoutMs)
         {
-            // No-op en simulation.
+            // no-op en simulation
         }
 
         // --------------- Internes ---------------
@@ -86,14 +81,14 @@ namespace Metrologo.Services.Ieee
             return c.StartsWith("meas") || c.StartsWith("rs") || c.StartsWith("re");
         }
 
-        // Reconnaît grossièrement size1E0, 1E1, GA1E-2… pour fixer un temps de gate simulé.
+        // reconnaît grossièrement les notations type 1E0, 1E1, GA1E-2 pour fixer la gate simulée
         private void DetecterGate(int adresse, string cmd)
         {
             if (string.IsNullOrEmpty(cmd)) return;
             int idx = cmd.IndexOf('E', StringComparison.OrdinalIgnoreCase);
             if (idx < 1 || idx >= cmd.Length - 1) return;
 
-            // Cherche le chiffre de mantisse juste avant 'E' et l'exposant (signé) après.
+            // mantisse juste avant 'E', exposant (signé) juste après
             int mStart = idx - 1;
             while (mStart > 0 && char.IsDigit(cmd[mStart - 1])) mStart--;
             string mantisse = cmd.Substring(mStart, idx - mStart);

@@ -7,11 +7,8 @@
         public double FrequenceMoyenne { get; set; }
         public bool AvecGPS { get; set; }
 
-        /// <summary>
-        /// Vrai si la fréquence a été saisie manuellement par l'admin (= aucun rubidium
-        /// du catalogue n'a été sélectionné). Dans ce cas, la valeur de
-        /// <see cref="FrequenceMoyenne"/> vient directement de la saisie utilisateur.
-        /// </summary>
+        /// <summary>Vrai si la fréquence a été saisie à la main par l'admin (aucun rubidium du
+        /// catalogue sélectionné) : FrequenceMoyenne vient alors directement de la saisie.</summary>
         public bool EstReglageManuel { get; set; }
 
         // Affiche directement le nom choisi dans le catalogue (réglage manuel à part).
@@ -20,14 +17,13 @@
             : Designation;
 
         /// <summary>Fréquence formatée pour l'affichage : groupée par milliers, précision exacte
-        /// (« 10 000 000 » / « 10 000 000,1234 »). Pour les listes/onglets rubidium.</summary>
+        /// ("10 000 000" / "10 000 000,1234"). Pour les listes/onglets rubidium.</summary>
         public string FrequenceAffichee => Services.SaisieHelper.FormaterFrequence(FrequenceMoyenne);
 
         /// <summary>
-        /// Libellé écrit dans la feuille de mesure (zone <c>ZNRubidium</c>). On affiche
-        /// directement la <see cref="Designation"/> choisie dans le catalogue (le nom est libre :
-        /// y inclure une mention de raccordement — « GPS » etc. — si besoin). Aucun suffixe
-        /// automatique n'est ajouté. Pour un réglage manuel : « Réglage manuel (xxx Hz) ».
+        /// Libellé écrit dans la feuille de mesure (zone ZNRubidium) : la Designation du catalogue
+        /// telle quelle, sans suffixe automatique (le nom est libre, y mettre "GPS" etc. si besoin).
+        /// Pour un réglage manuel : "Réglage manuel (xxx Hz)".
         /// </summary>
         public string DesignationAvecRaccord => EstReglageManuel
             ? $"Réglage manuel ({FrequenceMoyenne} Hz)"

@@ -19,22 +19,18 @@ namespace Metrologo.ViewModels
     public partial class AccueilViewModel : ObservableObject
     {
         // Driver IEEE bas niveau : VISA réel via NI-VISA (matériel branché).
-        // Pour la simulation sans matériel, remplacer par `new SimulationIeeeDriver()`.
-        // Pour P/Invoke direct sur ni4882.dll : `new Ni488Driver(0)` — testé, perf identique
-        // sur 53131A car la latence est dans l'instrument lui-même, pas dans la stack.
+        // Pour simuler sans matériel : new SimulationIeeeDriver().
+        // Ni488Driver(0) (P/Invoke ni4882.dll) testé : perf identique sur 53131A,
+        // la latence vient de l'instrument, pas de la stack.
         private readonly IIeeeDriver _ieeeDriver = new VisaIeeeDriver(gpibBoard: 0);
-        // Type concret conservé (au lieu de IExcelService) pour accéder à FallbackTimestampUtilise.
+        // type concret (pas IExcelService) pour pouvoir lire FallbackTimestampUtilise
         private readonly ExcelService _excelService = new ExcelService();
         private readonly MesureOrchestrator _orchestrator;
 
         private CancellationTokenSource? _cts;
 
-        /// <summary>
-        /// Token séparé pour signaler un ABANDON forcé de la tâche de mesure : utilisé
-        /// quand l'utilisateur appuie sur STOP mais que la tâche est bloquée par un
-        /// COM Excel mort (RPC qui prend ~60 s à se réveiller). Permet de rendre la main
-        /// à l'UI immédiatement même si la tâche orchestration ne réagit pas.
-        /// </summary>
+        /// <summary>Token d'abandon forcé : si STOP est cliqué alors que la tâche est bloquée par un
+        /// COM Excel mort (RPC ~60 s), permet de rendre la main à l'UI sans attendre l'orchestration.</summary>
         private CancellationTokenSource? _abandonCts;
 
         [ObservableProperty] private bool _estSurBaie = true;
@@ -46,16 +42,10 @@ namespace Metrologo.ViewModels
         [NotifyPropertyChangedFor(nameof(LibelleAppareilConfigure))]
         private Mesure _mesureConfig = new Mesure();
 
-        /// <summary>
-        /// Vrai dès qu'une configuration a été validée (N° FI renseigné). Pilote l'affichage
-        /// du bandeau « Fiche en cours » sur l'écran d'accueil.
-        /// </summary>
+        /// <summary>Vrai dès qu'une config est validée (N° FI renseigné). Pilote le bandeau Fiche en cours de l'accueil.</summary>
         public bool EstConfigure => !string.IsNullOrWhiteSpace(MesureConfig?.NumFI);
 
-        /// <summary>
-        /// Libellé court de l'appareil sélectionné dans la config (vide si aucun) — affiché
-        /// dans le bandeau « Fiche en cours ».
-        /// </summary>
+        /// <summary>Libellé court de l'appareil de la config (vide si aucun), affiché dans le bandeau Fiche en cours.</summary>
         public string LibelleAppareilConfigure
         {
             get
@@ -72,12 +62,8 @@ namespace Metrologo.ViewModels
         [NotifyCanExecuteChangedFor(nameof(StopperMesureCommand))]
         private bool _mesureEnCours;
 
-        /// <summary>
-        /// Vrai entre le clic sur « Arrêter » et la fin réelle de la mesure (token annulé +
-        /// Device Clear envoyé). Donne un feedback visuel instantané au user (le bouton
-        /// passe à « Arrêt en cours… ») le temps que le compteur libère son <c>:FETCh?</c>
-        /// en cours et que la boucle de mesure sorte.
-        /// </summary>
+        /// <summary>Vrai entre le clic sur Arrêter et la fin réelle de la mesure (token annulé + Device Clear).
+        /// Donne un feedback instantané au user, le temps que le compteur libère son :FETCh? en cours.</summary>
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(StopperMesureCommand))]
         private bool _arretEnCours;
@@ -89,7 +75,7 @@ namespace Metrologo.ViewModels
         /// <summary>Nombre d'appareils détectés sur le bus GPIB (mis à jour après chaque scan).</summary>
         [ObservableProperty] private int _nbAppareilsDetectes;
 
-        /// <summary>Résumé du scan : "3 détecté(s), 2 reconnu(s)" — affiché sur la carte Diagnostic.</summary>
+        /// <summary>Résumé du scan ("3 détecté(s), 2 reconnu(s)"), affiché sur la carte Diagnostic.</summary>
         [ObservableProperty] private string _resumeScanGpib = "Scan en cours...";
 
         /// <summary>Vrai tant que le scan initial n'est pas terminé (cache le texte détaillé).</summary>
@@ -102,7 +88,7 @@ namespace Metrologo.ViewModels
         /// <summary>Affiche le panneau de suivi Besançon (vrai dès qu'un rubidium actif est défini).</summary>
         [ObservableProperty] private bool _besanconVisible;
 
-        /// <summary>Titre du panneau (« À jour », « Retard », « Critique »…).</summary>
+        /// <summary>Titre du panneau (À jour, Retard, Critique...).</summary>
         [ObservableProperty] private string _besanconTitre = "Suivi Besançon";
 
         /// <summary>Message détaillé sous le titre (ancienneté des données, cause d'un problème…).</summary>
@@ -132,18 +118,15 @@ namespace Metrologo.ViewModels
             // quotidienne ou rattrapage d'une moyenne manquante).
             BesanconScheduler.StatutChange += (_, _) => _ = RafraichirBesanconAsync();
 
-            // Scan GPIB initial en arrière-plan — ne bloque pas l'ouverture de la fenêtre.
+            // scan GPIB initial en arrière-plan, ne bloque pas l'ouverture de la fenêtre
             _ = Task.Run(ScannerInitialAsync);
 
             // État Besançon initial.
             _ = RafraichirBesanconAsync();
         }
 
-        /// <summary>
-        /// Réévalue l'état du suivi Besançon (voyant + rapport) depuis la base partagée et
-        /// met à jour le panneau. Appelée au démarrage, sur changement de rubidium, et après
-        /// chaque passage de la tâche Besançon. Marshalé sur le thread UI.
-        /// </summary>
+        /// <summary>Réévalue le suivi Besançon (voyant + rapport) depuis la base partagée. Appelée au
+        /// démarrage, au changement de rubidium et après chaque passage de la tâche. Marshalé sur le thread UI.</summary>
         [RelayCommand]
         private async Task RafraichirBesanconAsync()
         {
@@ -181,11 +164,7 @@ namespace Metrologo.ViewModels
             else Appliquer();
         }
 
-        /// <summary>
-        /// Relance manuellement un scan GPIB depuis la page d'accueil (bouton Rescanner).
-        /// Utile si l'utilisateur branche un appareil en cours de session ou si le scan initial
-        /// n'a pas trouvé ce qu'il attendait.
-        /// </summary>
+        /// <summary>Relance manuelle du scan GPIB (bouton Rescanner), utile si on branche un appareil en cours de session.</summary>
         [RelayCommand]
         private Task RescannerAsync()
         {
@@ -193,11 +172,7 @@ namespace Metrologo.ViewModels
             return ScannerInitialAsync();
         }
 
-        /// <summary>
-        /// Scan GPIB lancé automatiquement au démarrage. Résultat : <see cref="NbAppareilsDetectes"/>
-        /// + texte résumé dans <see cref="InformationsGenerales"/>. L'utilisateur n'a pas besoin de
-        /// scanner manuellement à chaque démarrage.
-        /// </summary>
+        /// <summary>Scan GPIB auto au démarrage : alimente NbAppareilsDetectes et le résumé dans InformationsGenerales.</summary>
         private async Task ScannerInitialAsync()
         {
             try
@@ -316,16 +291,13 @@ namespace Metrologo.ViewModels
 
         // -------- Commandes --------
 
-        /// <summary>
-        /// Ouvre dans l'Explorateur Windows le dossier où Metrologo stocke les fichiers Excel
-        /// générés (<c>%USERPROFILE%\Documents\Metrologo</c>). Crée le dossier s'il n'existe pas.
-        /// </summary>
+        /// <summary>Ouvre dans l'Explorateur le dossier des fichiers Excel générés (le crée si besoin).</summary>
         [RelayCommand]
         private void OuvrirDossierMesures()
         {
-            // Priorité au chemin réseau configuré (Admin > Chemins d'accès > Mesures —
-            // chemin réseau partagé). Fallback sur le dossier local Bureau\Metrologo
-            // si le réseau est vide ou inaccessible (coupure connexion, partage down).
+            // priorité au chemin réseau configuré (Admin > Chemins d'accès > Mesures),
+            // fallback sur Bureau\Metrologo si le réseau est vide ou inaccessible
+            // (coupure connexion, partage down)
             string dossierLocal = System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
                 "Metrologo");
@@ -381,9 +353,9 @@ namespace Metrologo.ViewModels
             if (win.ShowDialog() == true)
             {
                 MesureConfig = vm.MesureConfig;
-                // L'assignation ci-dessus garde souvent la même référence (vm avait reçu
-                // notre instance par référence) — CommunityToolkit ne notifie pas dans ce
-                // cas et le bandeau « Fiche en cours » ne s'affiche jamais. On force.
+                // l'assignation ci-dessus garde souvent la même référence (vm avait reçu
+                // notre instance), donc CommunityToolkit ne notifie pas et le bandeau
+                // Fiche en cours ne s'affiche jamais : on force la notification
                 OnPropertyChanged(nameof(MesureConfig));
                 OnPropertyChanged(nameof(EstConfigure));
                 OnPropertyChanged(nameof(LibelleAppareilConfigure));
@@ -420,13 +392,8 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Commande déclenchée par le bouton « Lancer la mesure ». L'utilisateur veut
-        /// systématiquement passer par la fenêtre de configuration avant chaque mesure
-        /// (même si une config précédente existe) — on délègue donc à OuvrirConfigurationAsync
-        /// qui rappellera <see cref="ExecuterMesureInterneAsync"/>(false) après validation.
-        /// Pour relancer SANS reconfigurer, utiliser le bouton « Relancer ».
-        /// </summary>
+        /// <summary>Bouton Lancer la mesure : on passe toujours par la fenêtre de config (l'utilisateur
+        /// reconfigure à chaque mesure), qui rappelle ExecuterMesureInterneAsync(false) après validation. Pour relancer sans reconfigurer : bouton Relancer.</summary>
         [RelayCommand]
         private Task ExecuterMesureAsync() => ExecuterMesureInterneAsync(ouvrirConfigAvant: true);
 
@@ -434,7 +401,7 @@ namespace Metrologo.ViewModels
         {
             if (MesureEnCours) return;
 
-            // 1) Rubidium obligatoire — défini uniquement dans le menu Administration
+            // 1) rubidium obligatoire (défini uniquement dans le menu Administration)
             var rubi = EtatApplication.RubidiumActif;
             if (rubi == null)
             {
@@ -448,11 +415,10 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // 2) Cycle 1 — clic sur « Lancer la mesure » : on ouvre la config avant la mesure,
-            //    même si une config valide existait déjà (l'utilisateur reconfigure à chaque
-            //    mesure : N° FI différent, paramètres modifiés…). À la validation,
+            // 2) clic sur Lancer la mesure : on ouvre la config même si une config valide
+            //    existait déjà (N° FI différent, paramètres modifiés...). À la validation,
             //    OuvrirConfigurationAsync rappelle ExecuterMesureInterneAsync(false) pour
-            //    enchaîner sur le lancement réel. On RETURN ici pour éviter le double-call.
+            //    enchaîner sur le lancement réel. On return ici pour éviter le double-call.
             if (ouvrirConfigAvant || string.IsNullOrWhiteSpace(MesureConfig?.NumFI))
             {
                 Log("ℹ Ouverture de la configuration avant lancement.");

@@ -30,16 +30,11 @@ namespace Metrologo.ViewModels
             RebuildAppareils();
         }
 
-        /// <summary>
-        /// Vrai en poste Baie + mode « adresses fixes » : pilote l'affichage du champ d'adresse
-        /// GPIB éditable dans la fenêtre Configuration.
-        /// </summary>
+        /// <summary>Vrai en poste Baie avec adresses fixes : affiche le champ d'adresse GPIB éditable.</summary>
         public bool ModeAdressesFixes => EstSurBaie && Metrologo.Models.EtatApplication.ModeAdressesFixes;
 
-        /// <summary>
-        /// Adresse GPIB saisie pour l'appareil legacy sélectionné (mode adresses fixes). Met à jour
-        /// à la fois l'option et <c>MesureConfig.AdresseFixeForcee</c> pour l'orchestrator.
-        /// </summary>
+        /// <summary>Adresse GPIB saisie pour l'appareil legacy sélectionné (mode adresses fixes).
+        /// Met aussi à jour MesureConfig.AdresseFixeForcee pour l'orchestrator.</summary>
         public int AdresseFixeSaisie
         {
             get => AppareilSelectionne?.AdresseFixe ?? 0;
@@ -52,14 +47,11 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Réglages dynamiques du modèle sélectionné (ex: Impédance, Couplage, Filtre).
-        /// Peuplée depuis le catalogue à chaque changement d'appareil — l'UI génère une
-        /// ComboBox par réglage via un ItemsControl.
-        /// </summary>
+        /// <summary>Réglages dynamiques du modèle sélectionné (impédance, couplage, filtre...),
+        /// repeuplés depuis le catalogue à chaque changement d'appareil. Une ComboBox par réglage côté UI.</summary>
         public ObservableCollection<ReglageDynamiqueViewModel> ReglagesDynamiques { get; } = new();
 
-        // ------- Collections filtrées par voie, exposées au XAML pour un rendu structuré -------
+        // collections filtrées par voie, exposées au XAML
 
         public ObservableCollection<ReglageDynamiqueViewModel> ReglagesVoieA { get; } = new();
         public ObservableCollection<ReglageDynamiqueViewModel> ReglagesVoieB { get; } = new();
@@ -72,7 +64,7 @@ namespace Metrologo.ViewModels
         public bool AReglagesVoieC => ReglagesVoieC.Count > 0;
         public bool AReglagesMode  => ReglagesMode.Count > 0;
 
-        // ------- Sélection de la voie active (pilote visibilité + filtrage des commandes envoyées) -------
+        // sélection de la voie active (pilote la visibilité + le filtrage des commandes envoyées)
 
         public bool EstVoieA
         {
@@ -92,7 +84,7 @@ namespace Metrologo.ViewModels
             set { if (value) { MesureConfig.VoieActive = VoieActive.C; NotifierVoiesActives(); } }
         }
 
-        /// <summary>Visibilité du bloc Voie A dans le XAML (= réglages définis ET voie active).</summary>
+        /// <summary>Bloc Voie A visible dans le XAML : réglages définis ET voie active.</summary>
         public bool AfficherVoieA => AReglagesVoieA && EstVoieA;
         public bool AfficherVoieB => AReglagesVoieB && EstVoieB;
         public bool AfficherVoieC => AReglagesVoieC && EstVoieC;
@@ -116,15 +108,12 @@ namespace Metrologo.ViewModels
             RebuildModulesIncertitude();
         }
 
-        // ------- Masquage progressif des sections du formulaire -------
-        // Le formulaire s'ouvre vide : seule la section Identification (N° FI) est visible.
-        // Une fois un FI valide saisi, on dévoile Type/Nb/Module ; une fois le module choisi
-        // (ou aucun module dispo pour ce type), on dévoile Source/Instrument/Mode.
+        // Masquage progressif du formulaire : à l'ouverture seule la section Identification
+        // (N° FI) est visible. FI valide saisi -> on dévoile Type/Nb/Module ; module choisi
+        // (ou aucun dispo pour ce type) -> on dévoile Source/Instrument/Mode.
 
-        /// <summary>
-        /// Étape 1 — N° FI au format <c>XX_NNNNN</c> (8 caractères, _ en position 3).
-        /// Tant que false, toutes les sections suivantes restent masquées.
-        /// </summary>
+        /// <summary>Étape 1 : N° FI au format XX_NNNNN (8 caractères, _ en position 3).
+        /// Tant que false, tout le reste du formulaire est masqué.</summary>
         public bool EtapeFIValide
         {
             get
@@ -134,33 +123,25 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Étape 2 — FI valide + module d'incertitude sélectionné (ou aucun dispo pour
-        /// ce type de mesure, auquel cas le message d'aide remplace la sélection).
-        /// Tant que false, les sections Source/Instrument/Mode restent masquées.
-        /// </summary>
+        /// <summary>Étape 2 : FI valide + module d'incertitude choisi (ou aucun dispo pour ce type,
+        /// auquel cas un message d'aide remplace la sélection). Tant que false, Source/Instrument/Mode restent masqués.</summary>
         public bool EtapeTypeValide =>
             EtapeFIValide && (ModuleSelectionne != null || !AModulesIncertitude);
 
-        /// <summary>
-        /// Visibilité de la section « Source du signal » : combinée avec
-        /// <see cref="ShowSourceMesure"/> (Fréquence uniquement) ET l'étape 2.
-        /// </summary>
+        /// <summary>Section "Source du signal" : visible si type Fréquence (ShowSourceMesure) ET étape 2 validée.</summary>
         public bool AfficherSourceMesure => ShowSourceMesure && EtapeTypeValide;
 
-        /// <summary>
-        /// Notifie le XAML que les conditions de visibilité des sections ont changé.
-        /// À appeler après toute modification de NumFI, TypeMesure, NbMesures ou Module.
-        /// </summary>
+        /// <summary>À appeler après modification de NumFI, TypeMesure, NbMesures ou Module
+        /// pour rafraîchir la visibilité des sections.</summary>
         public void NotifierEtapes()
         {
             OnPropertyChanged(nameof(EtapeFIValide));
             OnPropertyChanged(nameof(EtapeTypeValide));
             OnPropertyChanged(nameof(AfficherSourceMesure));
 
-            // Démarre le journal utilisateur de la FI dès que le numéro est complet/valide.
-            // JournalFIService.DemarrerSession est idempotent : appels répétés avec la même
-            // FI = no-op, donc on peut l'invoquer sans risque à chaque notification.
+            // démarre le journal utilisateur dès que le numéro de FI est valide.
+            // DemarrerSession est idempotent (même FI = no-op), donc appelable
+            // à chaque notification sans risque.
             if (EtapeFIValide)
             {
                 string utilisateur = EtatApplication.UtilisateurConnecte?.NomComplet
@@ -176,20 +157,14 @@ namespace Metrologo.ViewModels
 
         // ------- Modules d'incertitude (filtrés par TypeMesure) -------
 
-        /// <summary>
-        /// Liste des modules d'incertitude affichables dans la ComboBox "Module" — filtrés
-        /// pour ne garder que ceux qui couvrent la <see cref="TypeMesure"/> courante (au
-        /// moins une ligne CSV avec <c>Fonction</c> = équivalent du type).
-        /// </summary>
+        /// <summary>Modules d'incertitude proposés dans la ComboBox "Module" : seulement ceux qui
+        /// couvrent le TypeMesure courant (au moins une ligne CSV dont Fonction correspond au type).</summary>
         public ObservableCollection<ModuleIncertitude> ModulesDisponibles { get; } = new();
 
         private ModuleIncertitude? _moduleSelectionne;
 
-        /// <summary>
-        /// Module choisi par l'opérateur — son <c>NumModule</c> est sérialisé dans
-        /// <see cref="MesureConfig"/> pour que l'<c>ExcelService</c> retrouve les coefficients
-        /// CoeffA/CoeffB à la fin de la mesure.
-        /// </summary>
+        /// <summary>Module choisi par l'opérateur. Son NumModule est stocké dans MesureConfig
+        /// pour que l'ExcelService retrouve les coefficients CoeffA/CoeffB en fin de mesure.</summary>
         public ModuleIncertitude? ModuleSelectionne
         {
             get
@@ -211,11 +186,8 @@ namespace Metrologo.ViewModels
         /// <summary>Vrai si au moins un module couvre le type de mesure courant.</summary>
         public bool AModulesIncertitude => ModulesDisponibles.Count > 0;
 
-        // ------------------------------------------------------------------------------------
-        // Module Fréquence auxiliaire (utilisé uniquement en Tachymètre Contact/Optique pour
-        // alimenter ZNCoeffA / ZNCoeffB côté Hz, en complément du module tachy qui alimente
-        // ZNCoeffC / ZNCoeffD côté RPM).
-        // ------------------------------------------------------------------------------------
+        // Module Fréquence auxiliaire : uniquement en Tachymètre Contact/Optique, alimente
+        // ZNCoeffA/ZNCoeffB côté Hz (le module tachy alimente ZNCoeffC/ZNCoeffD côté RPM).
         public ObservableCollection<ModuleIncertitude> ModulesFreqDisponibles { get; } = new();
 
         private ModuleIncertitude? _moduleFreqSelectionne;
@@ -236,20 +208,12 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Vrai pour les types Tachymètre uniquement — déclenche l'affichage du second
-        /// ComboBox « Module Fréquence (Hz) » dans la fenêtre Configuration.
-        /// </summary>
+        /// <summary>Vrai pour les types Tachymètre : affiche le second ComboBox "Module Fréquence (Hz)".</summary>
         public bool ModuleFreqRequis =>
             EnTetesMesureHelper.EstTachymetre(MesureConfig.TypeMesure);
 
-        /// <summary>
-        /// Reconstruit la liste des modules selon <see cref="MesureConfig.TypeMesure"/>.
-        /// Lit le sous-dossier dédié à ce type (ex. <c>Incertitudes\Frequence\</c>).
-        /// Restaure la sélection persistée (<c>NumModuleIncertitude</c>) si elle est encore valide.
-        /// Reconstruit également la liste des modules Fréquence auxiliaires (utilisée
-        /// uniquement en tachymétrie).
-        /// </summary>
+        /// <summary>Reliste les modules selon le TypeMesure (sous-dossier dédié, ex. Incertitudes\Frequence)
+        /// et restaure la sélection persistée si encore valide. Idem pour la liste Fréquence auxiliaire (tachy).</summary>
         private void RebuildModulesIncertitude()
         {
             ModulesDisponibles.Clear();
@@ -259,7 +223,7 @@ namespace Metrologo.ViewModels
                 ModulesDisponibles.Add(m);
             }
 
-            // Restaure la sélection précédente si toujours pertinente.
+            // restaure la sélection précédente si toujours pertinente
             string numPersist = MesureConfig?.NumModuleIncertitude ?? string.Empty;
             _moduleSelectionne = ModulesDisponibles.FirstOrDefault(m =>
                 string.Equals(m.NumModule, numPersist, StringComparison.OrdinalIgnoreCase));
@@ -268,7 +232,7 @@ namespace Metrologo.ViewModels
                 MesureConfig.NumModuleIncertitude = string.Empty;
             }
 
-            // Liste auxiliaire des modules Fréquence (uniquement pertinente pour tachy).
+            // liste auxiliaire des modules Fréquence (tachy uniquement)
             ModulesFreqDisponibles.Clear();
             if (ModuleFreqRequis)
             {
@@ -289,24 +253,16 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(ModuleFreqRequis));
         }
 
-        /// <summary>
-        /// Déclenché quand <see cref="MesureConfig"/> est réassigné (typiquement par
-        /// AcceuilViewModel qui passe la config persistée entre deux ouvertures de la fenêtre).
-        /// Rebuild la liste des appareils et les réglages dynamiques pour restaurer l'état
-        /// précédent (appareil sélectionné, options SCPI choisies) sans que l'utilisateur
-        /// ait à tout re-saisir.
-        /// </summary>
+        /// <summary>MesureConfig réassigné (AcceuilViewModel repasse la config persistée à la réouverture) :
+        /// on rebuild appareils + réglages pour restaurer l'état précédent sans re-saisie.</summary>
         partial void OnMesureConfigChanged(Mesure value)
         {
-            // Réassignation d'une config persistée (réouverture de la fenêtre) : on repart d'une
-            // sélection vierge pour que l'appareil soit restauré UNIQUEMENT depuis la valeur
-            // persistée (MesureConfig.IdModeleCatalogue), et non depuis un _appareilSelectionne
-            // périmé. En mode baie « adresses fixes », la liste des modèles legacy n'est jamais
-            // vide : le constructeur (RebuildAppareils → RebuildAppareilsFixes) auto-sélectionnait
-            // le 1ᵉʳ modèle, qui masquait ensuite la valeur persistée (cf. RebuildAppareilsFixes
-            // ligne « selId = _appareilSelectionne?... ?? MesureConfig... ») et l'écrasait. En mode
-            // classique la liste détectée est souvent vide à la construction → pas de pollution,
-            // d'où l'asymétrie où seul le mode baie « oubliait » l'appareil après une mesure.
+            // On repart d'une sélection vierge pour que l'appareil soit restauré uniquement depuis
+            // la valeur persistée (IdModeleCatalogue), pas depuis un _appareilSelectionne périmé.
+            // Sinon en mode baie adresses fixes, la liste legacy n'étant jamais vide, le
+            // constructeur auto-sélectionnait le 1er modèle qui écrasait la valeur persistée
+            // (d'où le bug "le mode baie oublie l'appareil après une mesure" ; en mode classique
+            // la liste détectée est vide à la construction, donc pas de souci).
             _appareilSelectionne = null;
             RebuildAppareils();
             RebuildReglagesDynamiques();
@@ -314,17 +270,14 @@ namespace Metrologo.ViewModels
             RefreshAll();
         }
 
-        /// <summary>
-        /// Liste des appareils **détectés** sur le bus GPIB et disponibles pour être sélectionnés.
-        /// Chaque appareil est marqué "catalogue" (prêt à l'emploi) ou "hors catalogue" (à enregistrer
-        /// via Administration → Gérer les appareils avant utilisation).
-        /// </summary>
+        /// <summary>Appareils détectés sur le bus GPIB, marqués catalogue ou hors catalogue
+        /// (à enregistrer via Administration avant utilisation).</summary>
         public ObservableCollection<OptionAppareil> Appareils { get; } = new();
 
         private void RebuildAppareils()
         {
-            // Mode « adresses fixes » (Baie) : on liste les appareils legacy du catalogue plutôt
-            // que les appareils détectés sur le bus (qui n'y figurent pas, faute de *IDN?).
+            // mode adresses fixes (baie) : on liste les appareils legacy du catalogue plutôt
+            // que ceux détectés sur le bus (les legacy ne répondent pas au *IDN?)
             if (EstSurBaie && Metrologo.Models.EtatApplication.ModeAdressesFixes)
             {
                 RebuildAppareilsFixes();
@@ -358,9 +311,8 @@ namespace Metrologo.ViewModels
                 });
             }
 
-            // Retrouver la sélection courante — par IDN fabricant+modèle d'abord (cas d'un
-            // simple refresh après scan), sinon par l'Id du modèle catalogue persisté dans
-            // la Mesure (cas d'une réouverture de la fenêtre avec une config déjà validée).
+            // retrouve la sélection : par IDN fabricant+modèle d'abord (refresh après scan),
+            // sinon par l'Id catalogue persisté dans la Mesure (réouverture de la fenêtre)
             if (selFab != null || selMod != null)
             {
                 _appareilSelectionne = Appareils.FirstOrDefault(o =>
@@ -374,11 +326,10 @@ namespace Metrologo.ViewModels
                     o.Detecte?.ModeleReconnu?.Id == MesureConfig.IdModeleCatalogue);
             }
 
-            // Si rien n'a été restauré ET qu'il y a au moins un appareil détecté, on
-            // sélectionne le premier — via la propriété pour que le setter renseigne
-            // MesureConfig.IdModeleCatalogue. Sans ça, l'UI affichait bien le 1er appareil
-            // (via le getter qui fait FirstOrDefault) mais l'orchestrator ne le voyait pas
-            // côté config → erreur « Aucun appareil sélectionné » au lancement de la mesure.
+            // rien restauré : on sélectionne le premier, via la propriété pour que le setter
+            // renseigne IdModeleCatalogue. Sans ça l'UI affichait le 1er appareil (getter
+            // FirstOrDefault) mais la config restait vide -> "Aucun appareil sélectionné"
+            // au lancement de la mesure.
             if (_appareilSelectionne == null && Appareils.Count > 0)
             {
                 AppareilSelectionne = Appareils[0];
@@ -396,12 +347,8 @@ namespace Metrologo.ViewModels
             RefreshAll();
         }
 
-        /// <summary>
-        /// Construit la liste des appareils en mode « adresses fixes » : tous les modèles legacy
-        /// du catalogue, avec leur adresse GPIB pré-remplie (éditable). L'utilisateur en choisit un
-        /// (EIP / Racal / Stanford) — la collision d'adresse (EIP/Stanford = 16) n'est jamais un
-        /// problème puisqu'un seul appareil est actif à la fois.
-        /// </summary>
+        /// <summary>Liste des appareils en mode adresses fixes : tous les modèles legacy du catalogue,
+        /// adresse GPIB pré-remplie éditable. La collision EIP/Stanford (16) est sans risque, un seul actif à la fois.</summary>
         private void RebuildAppareilsFixes()
         {
             string? selId = _appareilSelectionne?.ModeleFixe?.Id ?? MesureConfig?.IdModeleCatalogue;
@@ -420,7 +367,7 @@ namespace Metrologo.ViewModels
             _appareilSelectionne = Appareils.FirstOrDefault(o => o.ModeleFixe?.Id == selId);
             if (_appareilSelectionne == null && Appareils.Count > 0)
             {
-                AppareilSelectionne = Appareils[0];   // via setter → renseigne Id + AdresseFixeForcee
+                AppareilSelectionne = Appareils[0];   // via setter -> renseigne Id + AdresseFixeForcee
             }
             else if (_appareilSelectionne != null && MesureConfig != null)
             {
@@ -436,10 +383,7 @@ namespace Metrologo.ViewModels
 
         private OptionAppareil? _appareilSelectionne;
 
-        /// <summary>
-        /// Sélection courante dans la ComboBox. Pointe vers un appareil détecté sur le bus ; le
-        /// modèle catalogue associé (si présent) est utilisé par l'orchestrator pour piloter la mesure.
-        /// </summary>
+        /// <summary>Sélection courante dans la ComboBox ; le modèle catalogue associé sert à l'orchestrator.</summary>
         public OptionAppareil? AppareilSelectionne
         {
             get
@@ -453,9 +397,8 @@ namespace Metrologo.ViewModels
                 if (ReferenceEquals(_appareilSelectionne, value)) return;
                 _appareilSelectionne = value;
 
-                // Si le modèle catalogue est présent, on mémorise son Id pour l'orchestrator ;
-                // sinon chaîne vide — l'orchestrator refusera de lancer et invitera l'utilisateur
-                // à enregistrer l'appareil.
+                // Id du modèle catalogue pour l'orchestrator ; chaîne vide si hors catalogue
+                // (l'orchestrator refusera alors de lancer la mesure)
                 var modele = ModeleCatalogueSelectionne();
                 MesureConfig.IdModeleCatalogue = modele?.Id ?? string.Empty;
 
@@ -471,10 +414,8 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Reconstruit la liste des réglages dynamiques + les sous-collections par voie/mode
-        /// à partir du modèle catalogue correspondant à l'appareil sélectionné.
-        /// </summary>
+        /// <summary>Reconstruit les réglages dynamiques et les sous-collections par voie/mode
+        /// depuis le modèle catalogue de l'appareil sélectionné.</summary>
         private void RebuildReglagesDynamiques()
         {
             ReglagesDynamiques.Clear();
@@ -493,11 +434,10 @@ namespace Metrologo.ViewModels
 
                 foreach (var reglage in modele.Reglages)
                 {
-                    // Réglages "Auto" : ne s'affichent JAMAIS dans la fenêtre Configuration.
-                    // L'option est sélectionnée automatiquement à la validation selon le contexte
-                    // (TypeMesure + VoieActive), cf. CalculerCommandesAutomatiques.
-                    // « Mode de mesure » est désormais traité comme Auto : plus de menu déroulant,
-                    // la commande CONF:FREQ est toujours calculée d'après la voie active.
+                    // réglages Auto : jamais affichés ici, l'option est choisie à la validation
+                    // selon TypeMesure + VoieActive (cf. CalculerCommandesAutomatiques).
+                    // "Mode de mesure" est traité pareil : plus de menu déroulant, CONF:FREQ
+                    // est toujours calculé d'après la voie active.
                     if (reglage.Auto || EstReglageMode(reglage)) continue;
 
                     var vm = new ReglageDynamiqueViewModel(reglage);
@@ -529,18 +469,12 @@ namespace Metrologo.ViewModels
             NotifierVoiesActives();
         }
 
-        /// <summary>
-        /// Vrai si ce réglage est le « Mode de mesure » (commande CONF:FREQ / :FUNC). Ce réglage
-        /// n'est plus proposé dans la fenêtre Configuration : il est masqué de l'UI et sa commande
-        /// est toujours calculée automatiquement selon la voie active (cf. SelectionnerOptionAuto).
-        /// </summary>
+        /// <summary>Vrai si c'est le réglage "Mode de mesure" (CONF:FREQ / :FUNC) : masqué de l'UI,
+        /// sa commande est toujours calculée d'après la voie active (cf. SelectionnerOptionAuto).</summary>
         private static bool EstReglageMode(ReglageAppareil reglage)
             => reglage.Nom.Contains("Mode", StringComparison.OrdinalIgnoreCase);
 
-        /// <summary>
-        /// Retrouve le modèle du catalogue correspondant à l'appareil actuellement sélectionné
-        /// (via l'IDN de la détection). Retourne null si pas détecté ou pas au catalogue.
-        /// </summary>
+        /// <summary>Modèle catalogue de l'appareil sélectionné (via l'IDN), null si pas détecté ou hors catalogue.</summary>
         private ModeleAppareil? ModeleCatalogueSelectionne()
         {
             // Mode adresses fixes : le modèle legacy est porté directement par l'option sélectionnée.
@@ -558,8 +492,8 @@ namespace Metrologo.ViewModels
 
         public IEnumerable<TypeMesure> TypesMesure => Enum.GetValues(typeof(TypeMesure)).Cast<TypeMesure>();
 
-        /// <summary>Échelle canonique complète des temps de porte (doit rester alignée avec
-        /// <c>CatalogueAdapter._secondesSlotsUi</c> et <c>EnTetesMesureHelper._libellesGate</c>).</summary>
+        /// <summary>Échelle canonique des temps de porte, à garder alignée avec
+        /// CatalogueAdapter._secondesSlotsUi et EnTetesMesureHelper._libellesGate.</summary>
         private static readonly string[] _libellesGateCanoniques =
         {
             "10 ms", "20 ms", "50 ms", "100 ms", "200 ms", "500 ms",
@@ -567,11 +501,8 @@ namespace Metrologo.ViewModels
             "100 s", "200 s", "500 s", "1000 s"
         };
 
-        /// <summary>
-        /// Temps de porte disponibles dans la ComboBox : **filtrés** sur ceux que l'utilisateur
-        /// a cochés dans le catalogue pour l'appareil actuellement sélectionné. Si aucun appareil
-        /// catalogue n'est sélectionné, renvoie la liste canonique complète.
-        /// </summary>
+        /// <summary>Temps de porte de la ComboBox, filtrés sur ceux cochés au catalogue pour
+        /// l'appareil sélectionné. Liste canonique complète si pas d'appareil catalogue.</summary>
         public List<string> GateTimes
         {
             get
@@ -583,12 +514,8 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Libellé de la gate sélectionnée — binding <c>SelectedItem</c> de la ComboBox. La
-        /// conversion vers <c>MesureConfig.GateIndex</c> (slot canonique 0..15) se fait ici
-        /// pour que <c>AppliquerGateAsync</c> retrouve bien la commande SCPI correspondante
-        /// dans le dictionnaire du catalogue.
-        /// </summary>
+        /// <summary>Libellé de la gate sélectionnée (SelectedItem de la ComboBox). La conversion vers
+        /// GateIndex (slot canonique 0..15) se fait ici pour qu'AppliquerGateAsync retrouve la commande SCPI au catalogue.</summary>
         public string? GateLibelleSelectionne
         {
             get
@@ -611,36 +538,25 @@ namespace Metrologo.ViewModels
 
         public List<int> MeasurementCounts => Enumerable.Range(1, 100).ToList();
 
-        /// <summary>
-        /// Coefficients multiplicateurs proposés en mode Indirect. Index 0..4 correspond à
-        /// l'exposant de 10 (×10⁰ … ×10⁴), utilisé par la formule Excel
-        /// <c>POWER(10, ZNCoeffMult)</c> pour convertir la mesure en fréquence réelle.
-        /// </summary>
+        /// <summary>Multiplicateurs du mode Indirect. L'index 0..4 = exposant de 10, utilisé par la
+        /// formule Excel POWER(10, ZNCoeffMult) pour convertir la mesure en fréquence réelle.</summary>
         public List<string> CoefsMultiplicateurs => new()
         {
             "×1 (10⁰)", "×10 (10¹)", "×100 (10²)", "×1000 (10³)", "×10000 (10⁴)"
         };
 
-        // Le temps de porte unique se configure ici uniquement pour les mesures de Fréquence.
-        // Pour la Stabilité, la sélection se fait dans SelectionGateWindow (multi-gates à balayer
-        // via cases à cocher + presets) — afficher un combo « TEMPS DE PORTE » ici serait
-        // redondant et trompeur.
+        // le temps de porte unique ne se configure ici que pour la Fréquence ; en Stabilité
+        // la sélection multi-gates se fait dans SelectionGateWindow, un combo ici serait redondant
         public bool ShowGateSettings =>
             MesureConfig.TypeMesure == TypeMesure.Frequence ||
             MesureConfig.TypeMesure == TypeMesure.FreqAvantInterv ||
             MesureConfig.TypeMesure == TypeMesure.FreqFinale;
 
-        /// <summary>
-        /// Init manuelle disponible uniquement pour TypeMesure=Fréquence (conforme Delphi,
-        /// TfrmConfigStanford.chkInitManu.Enabled := FMesure.TypeMesure = etFrequence).
-        /// </summary>
+        /// <summary>Init manuelle dispo uniquement en Fréquence (conforme Delphi, TfrmConfigStanford.chkInitManu).</summary>
         public bool InitManuDisponible => MesureConfig.TypeMesure == TypeMesure.Frequence;
 
-        /// <summary>
-        /// État de la case « Initialisation manuelle » (wrapper sur le modèle pour rafraîchir
-        /// l'affichage quand on coche/décoche). Cochée : l'opérateur configure l'appareil à la
-        /// main, l'app n'envoie aucune commande de configuration et masque les réglages.
-        /// </summary>
+        /// <summary>Case "Initialisation manuelle" (wrapper sur le modèle pour notifier l'UI).
+        /// Cochée : l'opérateur configure l'appareil à la main, on n'envoie rien et on masque les réglages.</summary>
         public bool InitManu
         {
             get => MesureConfig.InitManu;
@@ -653,12 +569,8 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Réglages dynamiques (voie, impédance 50 Ω/1 MΩ, couplage AC/DC, filtre, range,
-        /// trigger) affichés seulement quand l'appareil en propose ET que l'init manuelle
-        /// n'est PAS cochée. En init manuelle ils sont masqués : l'opérateur paramètre
-        /// l'appareil de son côté.
-        /// </summary>
+        /// <summary>Réglages dynamiques affichés seulement si l'appareil en propose et que l'init
+        /// manuelle n'est pas cochée (en init manuelle l'opérateur paramètre l'appareil lui-même).</summary>
         public bool ShowReglagesDynamiques => AReglagesDynamiques && !MesureConfig.InitManu;
 
         // Source du signal : visible seulement pour le type "Fréquence"
@@ -732,7 +644,7 @@ namespace Metrologo.ViewModels
             // Si on quitte la Stabilité, on reset GateIndices à un seul élément (= la 1ère
             // gate de la sélection multi-gates). Sans ce reset, une mesure Fréquence
             // lancée juste après une Stabilité boucle sur toutes les gates qu'avait
-            // sélectionnées la Stab — comportement non voulu.
+            // sélectionnées la Stab, comportement non voulu.
             if (MesureConfig.TypeMesure != TypeMesure.Stabilite
                 && MesureConfig.GateIndices.Count > 1)
             {
@@ -744,7 +656,7 @@ namespace Metrologo.ViewModels
             if (!InitManuDisponible && MesureConfig.InitManu)
                 MesureConfig.InitManu = false;
 
-            // Le filtrage des modules d'incertitude dépend de TypeMesure → relister.
+            // le filtrage des modules d'incertitude dépend de TypeMesure -> relister
             RebuildModulesIncertitude();
 
             OnPropertyChanged(nameof(MesureConfig));
@@ -754,15 +666,8 @@ namespace Metrologo.ViewModels
 
         public Action<bool>? CloseAction { get; set; }
 
-        /// <summary>
-        /// Valide la configuration : envoie d'abord les commandes SCPI des réglages dynamiques
-        /// à l'appareil sélectionné, puis ferme la fenêtre.
-        /// Si l'appareil n'est pas détecté ou sans réglages, ferme directement.
-        ///
-        /// Refuse de fermer tant que le numéro de fiche d'intervention n'est pas saisi — évite
-        /// à l'utilisateur de devoir tout reparamétrer quand il lance une mesure et se rend
-        /// compte qu'il a oublié le FI.
-        /// </summary>
+        /// <summary>Valide la config : envoie les commandes SCPI des réglages à l'appareil puis ferme.
+        /// Refuse de fermer sans numéro de FI, pour éviter de devoir tout reparamétrer après coup.</summary>
         [RelayCommand]
         private async Task ValiderAsync()
         {
@@ -814,7 +719,7 @@ namespace Metrologo.ViewModels
             }
             else if (existe == false)
             {
-                // Fi inconnue de la base ASERi → refus identique au Delphi
+                // FI inconnue de la base ASERi -> refus identique au Delphi
                 MessageBox.Show(
                     $"La FI n° {sFI} n'existe pas dans ASERi !",
                     "Erreur",
@@ -841,25 +746,8 @@ namespace Metrologo.ViewModels
 
         [RelayCommand] private void Annuler() => CloseAction?.Invoke(false);
 
-        /// <summary>
-        /// Calcule les commandes SCPI à envoyer automatiquement à l'appareil selon le
-        /// contexte (TypeMesure + VoieActive). Lit les <see cref="ReglageAppareil"/> du
-        /// catalogue qui ont le flag <c>Auto: true</c> et sélectionne pour chacun l'option
-        /// dont le libellé matche le contexte.
-        ///
-        /// Convention de libellés reconnus (l'admin doit les respecter à l'enregistrement) :
-        /// <list type="bullet">
-        ///   <item>Mode de mesure :
-        ///         "TIAB…" → Interval ;
-        ///         "FREQ Voie A/B/C" → fréquence sur la voie correspondante</item>
-        ///   <item>Résolution :
-        ///         "CONT…" → Stabilité (Allan deviation gap-free) ;
-        ///         "AUTO" → tout le reste (fallback par défaut)</item>
-        /// </list>
-        ///
-        /// Si un libellé attendu n'est pas trouvé pour le contexte courant, on fallback sur
-        /// la 1ère option du réglage (= valeur par défaut catalogue) — comportement permissif.
-        /// </summary>
+        /// <summary>Commandes SCPI envoyées automatiquement selon le contexte (TypeMesure + VoieActive) :
+        /// pour chaque réglage Auto du catalogue, choisit l'option dont le libellé matche (cf. SelectionnerOptionAuto).</summary>
         private List<string> CalculerCommandesAutomatiques(string idModele)
         {
             _ = idModele; // gardé pour signature future, mais on lit le catalogue directement
@@ -867,7 +755,7 @@ namespace Metrologo.ViewModels
             var modele = ModeleCatalogueSelectionne();
             if (modele == null) return commandes;
 
-            // « Mode de mesure » est inclus même s'il n'est pas marqué Auto au catalogue :
+            // "Mode de mesure" est inclus même s'il n'est pas marqué Auto au catalogue :
             // il n'est plus proposé à l'utilisateur, sa commande CONF:FREQ est toujours
             // calculée automatiquement selon la voie active.
             foreach (var reglage in modele.Reglages.Where(r => r.Auto || EstReglageMode(r)))
@@ -882,24 +770,9 @@ namespace Metrologo.ViewModels
             return commandes;
         }
 
-        /// <summary>
-        /// Choisit l'option d'un réglage <c>Auto</c> selon le contexte courant (TypeMesure +
-        /// VoieActive), par matching des libellés d'options.
-        ///
-        /// Conventions de libellés reconnus côté code :
-        /// <list type="bullet">
-        ///   <item>Mode de mesure : <c>"Voie A"</c> / <c>"Voie B"</c> / <c>"Voie C"</c> selon
-        ///         <see cref="VoieActive"/> ; <c>"TIAB"</c> en priorité si
-        ///         <see cref="TypeMesure.Interval"/>.</item>
-        ///   <item>Résolution : <c>"CONT"</c> pour <see cref="TypeMesure.Stabilite"/>,
-        ///         <c>"AUTO"</c> sinon (fallback).</item>
-        /// </list>
-        /// Si l'option attendue n'est pas trouvée, on prend la 1ère option du catalogue.
-        ///
-        /// Les champs <c>QuandType</c> / <c>QuandVoie</c> de <see cref="OptionReglage"/> sont
-        /// disponibles mais non utilisés ici (les libellés suffisent pour les 2 cas connus —
-        /// "Mode de mesure" et "Résolution" — qui sont les seuls réglages Auto en pratique).
-        /// </summary>
+        /// <summary>Choisit l'option d'un réglage Auto par matching de libellés : "TIAB" si Interval, "Voie A/B/C"
+        /// selon la voie active, "CONT" en Stabilité, "AUTO" sinon ; à défaut la 1ère option du catalogue.
+        /// Les champs QuandType/QuandVoie ne sont pas utilisés, les libellés suffisent en pratique.</summary>
         private OptionReglage? SelectionnerOptionAuto(ReglageAppareil reglage)
         {
             if (reglage.Options.Count == 0) return null;
@@ -955,7 +828,7 @@ namespace Metrologo.ViewModels
 
             // Adresse cible : appareil détecté sur le bus (scan) OU adresse fixe (appareil legacy
             // sans *IDN?). Sans cette branche, le mode adresses fixes laissait
-            // CommandesScpiReglages vide → impédance/couplage jamais rejoués par l'orchestrator.
+            // CommandesScpiReglages vide -> impédance/couplage jamais rejoués par l'orchestrator.
             var det = AppareilSelectionne?.Detecte;
             bool estFixe = AppareilSelectionne?.EstFixe == true;
             if (det == null && !estFixe)
@@ -979,12 +852,10 @@ namespace Metrologo.ViewModels
             });
             reglagesApplicables.AddRange(ReglagesMode);
 
-            // Une CommandeScpi catalogue peut chaîner plusieurs commandes SCPI séparées par
-            // ";:" (ex: ":INP1:LEV:AUTO OFF;:INP1:LEV {0}" sur le 53230A). On les split ici
-            // en entrées distinctes pour que le driver émette UNE write GPIB par sous-commande.
-            // Motivation : sur le firmware Keysight 53230A, certaines chaînes concaténées sont
-            // tronquées au parsing — la seconde commande est silencieusement ignorée. Envoyer
-            // séparément garantit que chaque ordre est bien pris en compte.
+            // une CommandeScpi catalogue peut chaîner plusieurs commandes séparées par ";:"
+            // (ex ":INP1:LEV:AUTO OFF;:INP1:LEV {0}" sur le 53230A). On split en writes GPIB
+            // distinctes : le firmware du 53230A tronque parfois les chaînes concaténées et
+            // ignore silencieusement la seconde commande.
             var commandesUtilisateur = reglagesApplicables
                 .Select(r => r.CommandeSelectionnee)
                 .Where(c => !string.IsNullOrWhiteSpace(c))
@@ -994,32 +865,22 @@ namespace Metrologo.ViewModels
             // Commandes auto (typiquement Résolution :SENS:FREQ:MODE) selon TypeMesure + VoieActive.
             var commandesAuto = CalculerCommandesAutomatiques(modele.Id);
 
-            // ⚠ ORDRE CRITIQUE pour le 53230A (et compteurs similaires).
-            // Sur ces appareils, la commande "Mode de mesure" (CONF:FREQ / CONF:TINT / :FUNC)
-            // réinitialise TOUS les paramètres d'entrée à leur valeur par défaut — y compris
-            // INP:LEV:AUTO qui revient à ON et INP:LEV qui revient à 0V auto-calibré. Toute
-            // commande INP:* envoyée AVANT CONF:* est donc silencieusement écrasée.
-            //
-            // Le catalogue marque "Mode de mesure" comme Auto=false (le user choisit Voie A/B/TIAB),
-            // donc cette commande arrive dans le bucket `commandesUtilisateur`. On la sort ici
-            // pour la placer en TÊTE de la séquence finale, suivie des autres commandes auto
-            // (Résolution), puis seulement après les paramètres d'entrée et le trigger level.
-            //
+            // ORDRE CRITIQUE pour le 53230A (et compteurs similaires) : CONF:FREQ / CONF:TINT /
+            // :FUNC réinitialise TOUS les paramètres d'entrée (INP:LEV:AUTO repasse ON, INP:LEV
+            // revient à 0V). Toute commande INP:* envoyée avant CONF:* est donc écrasée.
             // Ordre final :
-            //   1. CONF:FREQ / CONF:TINT / :FUNC      (setup mesure — réinitialise tout)
+            //   1. CONF:FREQ / CONF:TINT / :FUNC      (setup mesure, réinitialise tout)
             //   2. :SENS:FREQ:MODE AUTO|RECIPROCAL    (résolution, dépend du type de mesure)
             //   3. :INP1:IMP / :COUP / :FILT / :RANG  (paramètres d'entrée)
-            //   4. :INP1:LEV:AUTO OFF puis :INP1:LEV  (trigger level — en DERNIER, pour ne
-            //                                          surtout pas être écrasé par CONF:FREQ)
+            //   4. :INP1:LEV:AUTO OFF puis :INP1:LEV  (trigger level en dernier, pour ne pas
+            //                                          être écrasé par CONF:FREQ)
             bool EstCommandeSetup(string cmd) =>
                 cmd.StartsWith("CONF:", StringComparison.OrdinalIgnoreCase) ||
                 cmd.StartsWith(":FUNC", StringComparison.OrdinalIgnoreCase) ||
                 cmd.StartsWith(":CONF", StringComparison.OrdinalIgnoreCase);
 
-            // CONF:FREQ / :FUNC provient maintenant des commandes AUTO (« Mode de mesure » n'est
-            // plus un réglage utilisateur). On extrait les commandes de setup de TOUTES les
-            // sources pour les garder en tête : sinon CONF:FREQ, qui réinitialise l'appareil,
-            // écraserait les commandes envoyées avant lui.
+            // CONF:FREQ / :FUNC vient maintenant des commandes auto ("Mode de mesure" n'est plus
+            // un réglage utilisateur) : on extrait le setup de toutes les sources pour le garder en tête.
             var commandesSetup = commandesUtilisateur.Where(EstCommandeSetup)
                 .Concat(commandesAuto.Where(EstCommandeSetup)).ToList();
             var commandesAutoReste = commandesAuto.Where(c => !EstCommandeSetup(c)).ToList();
@@ -1030,9 +891,8 @@ namespace Metrologo.ViewModels
             commandes.AddRange(commandesAutoReste);   // 2. :SENS:FREQ:MODE (résolution)
             commandes.AddRange(commandesEntree);      // 3. INP1:IMP/COUP/FILT/RANG + LEV:AUTO OFF + LEV
 
-            // On mémorise les commandes choisies dans la Mesure — l'orchestrator les rejouera
-            // après le *RST pour que l'état de l'appareil soit cohérent avec la configuration
-            // pendant la boucle de mesures.
+            // commandes mémorisées dans la Mesure : l'orchestrator les rejouera après le *RST
+            // pour garder l'appareil cohérent avec la config pendant la boucle de mesures
             MesureConfig.CommandesScpiReglages = new List<string>(commandes);
 
             if (commandes.Count == 0) return;
@@ -1064,14 +924,8 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>
-        /// Découpe une chaîne SCPI chaînée (séparateur ";:") en commandes individuelles bien
-        /// formées (chacune préfixée par ":"). Exemple :
-        /// <code>":INP1:LEV:AUTO OFF;:INP1:LEV 0" → [":INP1:LEV:AUTO OFF", ":INP1:LEV 0"]</code>
-        /// Si la chaîne ne contient pas ";:", elle est renvoyée telle quelle (single-element).
-        /// Utilisé pour garantir l'exécution séquentielle côté instrument sur les firmwares
-        /// qui parsent mal la concaténation (53230A notamment).
-        /// </summary>
+        /// <summary>Découpe une chaîne SCPI chaînée par ";:" en commandes individuelles re-préfixées
+        /// par ":". Nécessaire pour les firmwares qui parsent mal la concaténation (53230A notamment).</summary>
         private static IEnumerable<string> SplitCommandesScpi(string commande)
         {
             if (string.IsNullOrWhiteSpace(commande)) yield break;
@@ -1085,9 +939,8 @@ namespace Metrologo.ViewModels
             {
                 string p = parts[i].Trim();
                 if (string.IsNullOrEmpty(p)) continue;
-                // La 1ʳᵉ partie garde son ":" initial déjà présent dans la chaîne d'origine.
-                // Les suivantes ont perdu le ":" qui suivait le ";", on le réajoute pour
-                // que la commande reparte de la racine SCPI.
+                // la 1ère partie garde son ":" initial ; les suivantes ont perdu le ":" du
+                // séparateur, on le remet pour repartir de la racine SCPI
                 yield return i == 0 ? p : ":" + p;
             }
         }

@@ -8,23 +8,15 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Envoie à un appareil les commandes SCPI associées à un ensemble de réglages choisis
-    /// dans la fenêtre Configuration. Toutes les commandes sont journalisées pour faciliter
-    /// le diagnostic (on voit exactement ce qui part sur le bus).
-    ///
-    /// Utilise le driver VISA injecté. Si <c>commandes</c> est vide ou que toutes sont vides,
-    /// ne fait rien.
+    /// Envoie à un appareil les commandes SCPI des réglages choisis dans la fenêtre Configuration.
+    /// Tout est journalisé : on voit exactement ce qui part sur le bus.
     /// </summary>
     public static class AppareilScpiService
     {
         /// <summary>
-        /// Envoie les commandes à l'adresse donnée, une par une, en respectant le terminateur
-        /// de l'appareil (<see cref="ParametresIeee.TermWrite"/>).
+        /// Envoie les commandes une par une à l'adresse donnée, avec le TermWrite du modèle.
+        /// Les chaînes vides sont ignorées.
         /// </summary>
-        /// <param name="modele">Modèle source — utilisé pour récupérer <c>TermWrite</c> et journaliser.</param>
-        /// <param name="adresse">Adresse primaire GPIB de l'appareil.</param>
-        /// <param name="commandes">Commandes SCPI à envoyer dans l'ordre. Les chaînes vides sont ignorées.</param>
-        /// <param name="driver">Driver IEEE (<see cref="VisaIeeeDriver"/> en prod, simulation en test).</param>
         public static async Task EnvoyerAsync(
             ModeleAppareil modele,
             int adresse,
@@ -44,11 +36,10 @@ namespace Metrologo.Services.Ieee
 
                 await driver.EcrireAsync(adresse, cmd, termWrite, ct);
 
-                // Le 53131A (et d'autres compteurs lents) ont besoin de ~50 ms pour digérer
-                // chaque commande avant la suivante — sans ça, certaines commandes sont
-                // rejetées silencieusement et l'instrument peut se retrouver dans un état
-                // bancal qui bloque les sessions VISA suivantes (ex: *RST de l'orchestrator
-                // au début d'une mesure).
+                // le 53131A (et d'autres compteurs lents) a besoin de ~50 ms entre les commandes,
+                // sinon certaines sont rejetées en silence et l'instrument peut rester dans un
+                // état bancal qui bloque les sessions VISA suivantes (ex: le *RST de l'orchestrator
+                // au début d'une mesure)
                 await Task.Delay(50, ct);
             }
 

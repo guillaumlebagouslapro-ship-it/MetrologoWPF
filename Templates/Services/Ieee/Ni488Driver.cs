@@ -10,11 +10,9 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Pilote IEEE basé sur NI-488.2 natif (P/Invoke direct sur ni4882.dll).
-    /// Alternative à <see cref="VisaIeeeDriver"/> qui passe par la couche NI-VISA managée.
-    /// Beaucoup plus rapide pour les cycles write+read courts (~30-80 ms vs ~190 ms en VISA),
-    /// au prix d'un peu plus de boilerplate côté status/erreur. Approche identique au Delphi
-    /// historique (qui utilisait dpib32, wrapper Pascal de la même DLL).
+    /// Pilote IEEE en NI-488.2 natif (P/Invoke direct sur ni4882.dll), alternative à VisaIeeeDriver.
+    /// Bien plus rapide sur les cycles write+read courts (~30-80 ms contre ~190 ms en VISA), au prix
+    /// d'un peu de boilerplate status/erreur. Même approche que le Delphi historique (dpib32).
     /// </summary>
     public sealed class Ni488Driver : IIeeeDriver, IDisposable
     {
@@ -116,8 +114,8 @@ namespace Metrologo.Services.Ieee
 
         public Task DefinirRemoteLocalAsync(int adresse, bool remote, CancellationToken ct = default)
         {
-            // Non implémenté pour l'instant — pas utilisé par la mesure courante.
-            // Possible via ibloc (local) ou en envoyant LLO en command mode.
+            // non implémenté pour l'instant, la mesure courante ne s'en sert pas
+            // (faisable via ibloc pour local, ou LLO en command mode)
             return Task.CompletedTask;
         }
 

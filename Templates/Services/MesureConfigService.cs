@@ -6,20 +6,10 @@ using Metrologo.Models;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Lit le fichier de config <c>%LocalAppData%\Metrologo\Mesures_Config.txt</c> qui
-    /// associe à chaque type de mesure un n° de module et une étiquette de fonction. Ces
-    /// valeurs sont écrites dans les colonnes A et B de la feuille de mesure (la col C
-    /// = temps de gate vient de la sélection utilisateur, pas du config).
-    ///
-    /// Format INI simple, modifiable par l'admin avec un éditeur de texte :
-    /// <code>
-    /// [Frequence]
-    /// Module=78015
-    /// Fonction=freq
-    /// </code>
-    ///
-    /// Si le fichier n'existe pas au 1er démarrage, un fichier par défaut est créé avec
-    /// les valeurs livrées (modifiable ensuite par l'admin).
+    /// Lit Mesures_Config.txt (LocalAppData\Metrologo) : n° de module et fonction par type
+    /// de mesure, écrits en colonnes A/B de la feuille de mesure (la col C = temps de gate
+    /// vient de la sélection utilisateur). Format INI simple éditable par l'admin,
+    /// créé avec les valeurs livrées au premier démarrage s'il n'existe pas.
     /// </summary>
     public static class MesureConfigService
     {
@@ -27,11 +17,8 @@ namespace Metrologo.Services
         private static Dictionary<string, (string Module, string Fonction)>? _cache;
 
         /// <summary>
-        /// Retourne (n°Module, Fonction) pour un type de mesure donné. Les sections du
-        /// fichier sont indexées par le nom <see cref="TypeMesure"/> ("Frequence",
-        /// "Stabilite", "TachyContact"…). Si le type n'est pas dans le fichier, on
-        /// retourne ("", "") — l'utilisateur verra des cellules vides côté Excel et
-        /// pourra ajouter la section manquante au config.
+        /// (Module, Fonction) pour un type de mesure ; les sections du fichier portent le nom
+        /// du TypeMesure. Si la section manque on retourne ("", ""), cellules vides côté Excel.
         /// </summary>
         public static (string Module, string Fonction) ObtenirPourType(TypeMesure type)
         {
@@ -39,10 +26,7 @@ namespace Metrologo.Services
             return _cache!.TryGetValue(type.ToString(), out var v) ? v : ("", "");
         }
 
-        /// <summary>
-        /// Force le rechargement du fichier au prochain appel — utile si l'admin a
-        /// modifié le <c>.txt</c> en cours de session de l'app.
-        /// </summary>
+        /// <summary>Force la relecture du fichier au prochain appel (si l'admin l'a modifié en cours de session).</summary>
         public static void Recharger() => _cache = null;
 
         public static string CheminFichier =>
@@ -89,7 +73,7 @@ namespace Metrologo.Services
             }
             catch (Exception)
             {
-                // Fichier mal formé — on garde le cache vide (cellules vides côté Excel).
+                // fichier mal formé : on garde le cache vide, ça donnera des cellules vides côté Excel
             }
         }
 

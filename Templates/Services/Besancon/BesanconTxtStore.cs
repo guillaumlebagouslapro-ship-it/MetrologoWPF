@@ -9,11 +9,10 @@ using System.Threading.Tasks;
 namespace Metrologo.Services.Besancon
 {
     /// <summary>
-    /// Stockage cumulatif des valeurs de Besançon dans un simple fichier texte sur le partage,
-    /// en remplacement de la base SQL <c>BASE_E2M</c>. Une ligne par mesure
-    /// (<c>MJD &lt;tab&gt; date &lt;tab&gt; valeur(Hz)</c>), triée par date julienne croissante et
-    /// SANS doublon de MJD : à chaque récupération FTP, seules les dates encore absentes sont
-    /// ajoutées — le fichier s'incrémente donc jour après jour.
+    /// Stockage cumulatif des valeurs Besançon dans un simple fichier texte sur le partage, en
+    /// remplacement de la base SQL BASE_E2M. Une ligne par mesure (MJD, date, valeur en Hz, séparés
+    /// par tab), triée par MJD croissant et sans doublon : à chaque récupération FTP seules les
+    /// dates absentes sont ajoutées, le fichier grossit jour après jour.
     /// </summary>
     public static class BesanconTxtStore
     {
@@ -31,7 +30,7 @@ namespace Metrologo.Services.Besancon
             public double Nouvelle { get; init; }
         }
 
-        /// <summary>Bilan d'un <see cref="AjouterAsync"/> : nouvelles dates + corrections appliquées.</summary>
+        /// <summary>Bilan d'un AjouterAsync : nouvelles dates + corrections appliquées.</summary>
         public readonly struct ResultatAjout
         {
             public int Nouvelles { get; init; }
@@ -40,21 +39,16 @@ namespace Metrologo.Services.Besancon
         }
 
         /// <summary>
-        /// Fusionne les mesures FTP dans le fichier cumulatif :
-        /// <list type="bullet">
-        /// <item>MJD absent → nouvelle ligne (incrément normal du jour) ;</item>
-        /// <item>MJD déjà présent mais valeur DIFFÉRENTE → correction appliquée (rare : Besançon
-        ///       révise parfois une valeur passée) ;</item>
-        /// <item>MJD déjà présent, valeur identique → ignoré (cas courant à chaque récupération).</item>
-        /// </list>
-        /// Le fichier n'est réécrit (trié par MJD croissant, avec en-tête) que s'il y a au moins
-        /// une nouveauté ou une correction. Retourne le bilan détaillé.
+        /// Fusionne les mesures FTP dans le fichier cumulatif : MJD absent = nouvelle ligne,
+        /// MJD présent avec valeur différente = correction (rare, Besançon révise parfois une
+        /// valeur passée), MJD présent avec valeur identique = ignoré (cas courant). Le fichier
+        /// n'est réécrit que s'il y a au moins une nouveauté ou une correction.
         /// </summary>
         public static async Task<ResultatAjout> AjouterAsync(IEnumerable<MesureBesancon> mesures)
         {
             Directory.CreateDirectory(CheminsMetrologo.Besancon);
 
-            // Charge l'historique existant (MJD -> valeur) pour dédoublonner et le conserver.
+            // charge l'historique existant (MJD -> valeur) pour dédoublonner et le conserver
             var parMjd = await LireAsync();
 
             int nouvelles = 0;
@@ -63,7 +57,7 @@ namespace Metrologo.Services.Besancon
             {
                 if (parMjd.TryGetValue(m.Mjd, out double existante))
                 {
-                    // Date déjà connue : on ne réécrit QUE si la source a corrigé la valeur.
+                    // date déjà connue : on ne réécrit que si la source a corrigé la valeur
                     if (!MemeValeur(existante, m.Valeur))
                     {
                         corrections.Add(new Correction { Mjd = m.Mjd, Ancienne = existante, Nouvelle = m.Valeur });
@@ -76,29 +70,24 @@ namespace Metrologo.Services.Besancon
             }
 
             var res = new ResultatAjout { Nouvelles = nouvelles, Corrections = corrections };
-            if (!res.FichierModifie) return res;   // rien de neuf ni corrigé → pas de réécriture
+            if (!res.FichierModifie) return res;   // rien de neuf ni corrigé : pas de réécriture
 
             var sb = new StringBuilder();
             sb.AppendLine(EnTete);
-            foreach (var kv in parMjd)   // SortedDictionary → déjà trié par MJD croissant
+            foreach (var kv in parMjd)   // SortedDictionary : déjà trié par MJD croissant
                 sb.AppendLine(FormaterLigne(kv.Key, kv.Value));
 
             await File.WriteAllTextAsync(CheminValeurs, sb.ToString(), Encoding.UTF8);
             return res;
         }
 
-        /// <summary>
-        /// Égalité « telle qu'écrite dans le fichier » : on compare la représentation
-        /// round-trippable (InvariantCulture), exactement ce qui serait persisté. Évite tout
-        /// faux positif de bruit flottant tout en détectant la moindre correction réelle.
-        /// </summary>
+        /// <summary>Égalité telle qu'écrite dans le fichier : on compare la représentation texte
+        /// (InvariantCulture). Évite le bruit flottant tout en détectant toute correction réelle.</summary>
         private static bool MemeValeur(double a, double b) =>
             a.ToString(CultureInfo.InvariantCulture) == b.ToString(CultureInfo.InvariantCulture);
 
-        /// <summary>
-        /// Relit le fichier cumulatif en dictionnaire <c>MJD -&gt; valeur</c> (trié, vide si le
-        /// fichier n'existe pas encore). L'en-tête et les lignes non conformes sont ignorés.
-        /// </summary>
+        /// <summary>Relit le fichier cumulatif en dictionnaire MJD -> valeur (trié, vide si le
+        /// fichier n'existe pas). En-tête et lignes non conformes ignorés.</summary>
         public static async Task<SortedDictionary<int, double>> LireAsync()
         {
             var parMjd = new SortedDictionary<int, double>();
@@ -112,7 +101,7 @@ namespace Metrologo.Services.Besancon
 
                 var tokens = ligne.Split('\t');
                 if (tokens.Length < 3) continue;
-                // 1er token entier = MJD (ignore l'en-tête « MJD » et tout texte parasite).
+                // 1er token entier = MJD (ignore la ligne d'en-tête et tout texte parasite)
                 if (!int.TryParse(tokens[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int mjd))
                     continue;
                 if (!double.TryParse(tokens[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double v))

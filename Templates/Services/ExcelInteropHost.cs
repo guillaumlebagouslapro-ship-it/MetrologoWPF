@@ -13,18 +13,13 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Hôte Excel partagé par toute l'application : une seule instance <c>Excel.Application</c>
-    /// est lancée en arrière-plan au démarrage (invisible). Chaque mesure réutilise cette instance
-    /// pour ouvrir son classeur et afficher les valeurs en direct pendant l'acquisition.
-    ///
-    /// On utilise du <c>dynamic</c> (late-binding COM via <c>Type.GetTypeFromProgID("Excel.Application")</c>)
-    /// plutôt que le package Microsoft.Office.Interop.Excel : cela évite la dépendance à la PIA
-    /// <c>office.dll</c> qui n'est pas installée par défaut avec toutes les versions d'Office et
-    /// qui plante l'assembly loader à l'exécution avec "Could not load file or assembly 'office'".
-    ///
-    /// Tous les accès COM passent par <see cref="Marshal.ReleaseComObject"/> pour éviter qu'Excel
-    /// ne reste en tâche de fond après la fermeture de Metrologo (zombie process).
+    /// Hôte Excel partagé : une seule instance Excel.Application cachée, lancée au démarrage,
+    /// que toutes les mesures réutilisent pour l'affichage live.
     /// </summary>
+    // COM en late-binding (dynamic + GetTypeFromProgID) plutôt que la PIA Microsoft.Office.Interop :
+    // office.dll n'est pas installée avec toutes les versions d'Office et plante l'assembly loader
+    // ("Could not load file or assembly 'office'"). Tout objet COM passe par Marshal.ReleaseComObject,
+    // sinon EXCEL.EXE reste en zombie après fermeture de Metrologo.
     public sealed class ExcelInteropHost : IDisposable
     {
         private static readonly Lazy<ExcelInteropHost> _instance = new(() => new ExcelInteropHost());
@@ -36,31 +31,22 @@ namespace Metrologo.Services
         private string _cheminClasseurActif = string.Empty;
 
         /// <summary>
-        /// Chemin du Metrologo.xla pré-ouvert dans l'instance Excel (utilisé pour résoudre
-        /// les formules <c>[1]!Cal_xxx(...)</c> des rapports). Stocké pour exempter le .xla
-        /// de <see cref="FermerClasseursParasitesInterne"/> qui sinon le refermerait au
-        /// premier nettoyage. Vide tant que le .xla n'a pas été pré-chargé.
+        /// Chemin du Metrologo.xla pré-ouvert dans Excel (résout les formules [1]!Cal_xxx des rapports).
+        /// Stocké pour l'exempter du nettoyage des classeurs parasites. Vide tant que pas pré-chargé.
         /// </summary>
         private string _cheminXlaPreCharge = string.Empty;
 
         /// <summary>
-        /// Sigma relatif (n-1) par numéro de gate accumulé pendant une session de mesure
-        /// Stabilité. Utilisé à la dernière gate pour calibrer l'axe Y log du graphe Stab
-        /// (<see cref="CalibrerAxeYGrapheStabViaComInterne"/>). Reset à chaque nouvelle
-        /// session Stab via <see cref="ReinitialiserSigmasStab"/>.
+        /// Sigma relatif (n-1) par gate, accumulé pendant une session Stab : sert à calibrer
+        /// l'axe Y log du graphe à la dernière gate. Reset à chaque nouvelle session.
         /// </summary>
         private readonly Dictionary<int, double> _sigmasRelatifsParGate = new();
 
         public void ReinitialiserSigmasStab() => _sigmasRelatifsParGate.Clear();
 
         /// <summary>
-        /// Liste les processus EXCEL.EXE actuellement en cours sur la machine, EXCLUANT notre
-        /// instance Excel cachée (identifiée par <see cref="_excelPid"/>). Utilisé pour détecter
-        /// les classeurs Excel ouverts par l'utilisateur en parallèle de Metrologo — qui peuvent
-        /// verrouiller le fichier .xlsx de la mesure et faire échouer ClosedXML.
-        ///
-        /// Retourne une liste vide si seul notre Excel COM tourne (cas normal) ou si Excel n'est
-        /// pas installé.
+        /// Liste les EXCEL.EXE en cours, sauf notre instance cachée (_excelPid). Sert à détecter
+        /// les Excel ouverts par l'utilisateur qui verrouillent le .xlsx de mesure (échec ClosedXML).
         /// </summary>
         public List<Process> ListerExcelsExternes()
         {
@@ -88,19 +74,13 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Termine tous les processus EXCEL.EXE externes (Process.Kill) — c'est-à-dire ceux qui
-        /// ne sont pas notre instance Excel COM cachée. À appeler après confirmation utilisateur
-        /// pour libérer un fichier .xlsx verrouillé par une fenêtre Excel ouverte en parallèle.
-        ///
-        /// Retourne le nombre de process effectivement fermés. Best-effort : si un kill échoue
-        /// (permissions, race condition), on continue avec les suivants.
+        /// Tue tous les EXCEL.EXE externes (à appeler après confirmation utilisateur) pour libérer
+        /// un .xlsx verrouillé. Retourne le nombre de process fermés, best-effort.
         /// </summary>
         public int FermerExcelsExternes() => FermerExcels(ListerExcelsExternes());
 
         /// <summary>
-        /// Termine la liste de processus EXCEL.EXE fournie (Process.Kill). Best-effort :
-        /// un kill qui échoue (permissions, race) n'interrompt pas les suivants.
-        /// Retourne le nombre de process effectivement fermés.
+        /// Kill les process EXCEL.EXE fournis. Best-effort, retourne le nombre fermés.
         /// </summary>
         public int FermerExcels(IEnumerable<Process> procs)
         {

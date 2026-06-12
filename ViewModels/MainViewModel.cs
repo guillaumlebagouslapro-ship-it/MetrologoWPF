@@ -37,11 +37,8 @@ namespace Metrologo.ViewModels
 
         private readonly AccueilViewModel _accueilViewModel = new();
 
-        /// <summary>
-        /// Expose le ViewModel d'accueil pour que le bandeau de navigation
-        /// (MainWindow.xaml) puisse y binder les commandes/propriétés GPIB qui ont été
-        /// remontées hors de la zone de mesure (scan, badge nb appareils, etc.).
-        /// </summary>
+        /// <summary>Exposé pour que le bandeau de navigation (MainWindow.xaml) puisse binder
+        /// les commandes/propriétés GPIB remontées hors de la zone de mesure (scan, badge nb appareils...).</summary>
         public AccueilViewModel Accueil => _accueilViewModel;
         private readonly AdminViewModel _adminViewModel = new();
         private readonly SelectionPosteViewModel _selectionPosteViewModel = new();
@@ -53,11 +50,8 @@ namespace Metrologo.ViewModels
         public bool EstEnSelectionScanMode => VueActuelle is SelectionScanModeViewModel;
         public bool EstEnSelectionUtilisateur => VueActuelle is SelectionUtilisateurViewModel;
 
-        /// <summary>
-        /// Faux tant que l'utilisateur n'a pas choisi son identité + son poste : la barre
-        /// de navigation et la barre de statut sont alors masquées pour éviter qu'on
-        /// contourne ces étapes en cliquant sur « Accueil ».
-        /// </summary>
+        /// <summary>Faux tant que l'utilisateur n'a pas choisi son identité + son poste : on masque
+        /// la nav et la barre de statut pour empêcher de sauter ces étapes via le bouton Accueil.</summary>
         public bool NavigationActive => !EstEnSelectionPoste && !EstEnSelectionScanMode && !EstEnSelectionUtilisateur;
 
         public string TexteMode => EstEnModeAdmin ? "Mode : Administration" : "Mode : Exploitation";
@@ -74,17 +68,17 @@ namespace Metrologo.ViewModels
         }
         public string RubidiumActifTexte => _accueilViewModel.RubidiumActifTexte;
 
-        // ---- Changements admin reçus depuis un AUTRE poste (indicateur persistant ⚠) ----
+        // changements admin reçus depuis un AUTRE poste (indicateur triangle d'alerte persistant)
         private readonly List<EntreeJournalAdmin> _changementsAdmin = new();
 
-        /// <summary>Vrai dès qu'au moins un changement admin a été reçu et pas encore acquitté
-        /// (affiche le triangle d'alerte dans le bandeau ; disparaît au clic).</summary>
+        /// <summary>Vrai tant qu'un changement admin reçu n'a pas été acquitté
+        /// (triangle d'alerte dans le bandeau, disparaît au clic).</summary>
         [ObservableProperty] private bool _aChangementsAdminEnAttente;
 
-        /// <summary>Nombre de changements non acquittés (badge sur le triangle).</summary>
+        /// <summary>Badge sur le triangle : nombre de changements non acquittés.</summary>
         [ObservableProperty] private int _nbChangementsAdmin;
 
-        /// <summary>Résumé pour l'infobulle du triangle.</summary>
+        /// <summary>Texte de l'infobulle du triangle.</summary>
         public string ResumeChangementsAdmin =>
             _changementsAdmin.Count == 0
                 ? string.Empty
@@ -96,11 +90,8 @@ namespace Metrologo.ViewModels
                         .Select(e => $"• {e.Horodatage:HH:mm} — {e.ActionLisible}"
                                    + (string.IsNullOrWhiteSpace(e.Utilisateur) ? "" : $" (par {e.Utilisateur})")));
 
-        /// <summary>
-        /// Pop-up rubidium sur CE poste (l'événement est déjà marshalé sur le thread UI par
-        /// <see cref="BesanconScheduler"/>). Information (nouvelle valeur) ou avertissement (sous
-        /// la limite 1e-13).
-        /// </summary>
+        /// <summary>Pop-up rubidium sur CE poste : info (nouvelle valeur) ou avertissement (sous 1e-13).
+        /// L'événement arrive déjà marshalé sur le thread UI par BesanconScheduler.</summary>
         private void OnPopupRubidiumDemandee(string titre, string message, bool avertissement)
         {
             MessageBox.Show(message, titre, MessageBoxButton.OK,
@@ -118,17 +109,12 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(ResumeChangementsAdmin));
         }
 
-        /// <summary>Vrai quand un rafraîchissement a été demandé pendant une mesure et
-        /// reste en attente de la fin de celle-ci (évite un double-abonnement).</summary>
+        // rafraîchissement demandé pendant une mesure, en attente de sa fin (évite un double-abonnement)
         private bool _rafraichissementDiffereArme;
 
-        /// <summary>
-        /// Clic sur le triangle : affiche le détail des changements et propose de les
-        /// charger tout de suite. « Oui » → relit les fichiers de configuration et applique
-        /// les modifications ; si une mesure est en cours, on attend sa fin avant de relire.
-        /// « Non » → l'indicateur reste affiché comme rappel ; les réglages seront pris au
-        /// prochain démarrage.
-        /// </summary>
+        /// <summary>Clic sur le triangle : détail des changements + proposition de recharger.
+        /// Oui : relit la config et l'applique (différé si une mesure est en cours).
+        /// Non : l'indicateur reste en rappel, les réglages seront pris au prochain démarrage.</summary>
         [RelayCommand]
         private async Task AcquitterChangementsAdmin()
         {
@@ -153,11 +139,10 @@ namespace Metrologo.ViewModels
                 "Changements administrateur", MessageBoxButton.YesNo, MessageBoxImage.Information);
 
             if (choix != MessageBoxResult.Yes)
-                return; // « Plus tard » : on garde l'indicateur ⚠ comme rappel persistant.
+                return; // "plus tard" : on garde l'indicateur comme rappel persistant
 
-            // Une mesure est en cours : on ne relit pas le fichier maintenant (on ne veut
-            // pas changer les réglages au milieu d'une acquisition). On arme un
-            // rafraîchissement différé qui s'exécutera dès la fin de la mesure.
+            // mesure en cours : pas question de changer les réglages au milieu d'une
+            // acquisition, on arme un rafraîchissement différé qui partira à la fin
             if (_accueilViewModel.MesureEnCours)
             {
                 ArmerRafraichissementDiffere();
@@ -171,8 +156,7 @@ namespace Metrologo.ViewModels
             await ExecuterRafraichissementAsync();
         }
 
-        /// <summary>S'abonne (une seule fois) à la fin de la mesure en cours pour relire la
-        /// configuration dès qu'elle se termine.</summary>
+        /// <summary>S'abonne (une seule fois) à la fin de la mesure en cours pour relire la config à ce moment-là.</summary>
         private void ArmerRafraichissementDiffere()
         {
             if (_rafraichissementDiffereArme) return;
@@ -186,9 +170,9 @@ namespace Metrologo.ViewModels
             if (e.PropertyName != nameof(AccueilViewModel.MesureEnCours)) return;
             if (_accueilViewModel.MesureEnCours) return; // mesure toujours en cours
 
-            // Fin de mesure : on se désabonne et on applique. La fin de mesure peut survenir
-            // sur un thread de fond → on marshale sur le thread UI avant de toucher aux
-            // bindings (RubidiumActifChange, catalogue…).
+            // fin de mesure : on se désabonne et on applique. Ça peut arriver sur un thread
+            // de fond, donc on repasse sur le thread UI avant de toucher aux bindings
+            // (RubidiumActifChange, catalogue...)
             _accueilViewModel.PropertyChanged -= OnAccueilPropertyChangedPourRafraichissement;
             _rafraichissementDiffereArme = false;
 
@@ -199,8 +183,8 @@ namespace Metrologo.ViewModels
                 _ = ExecuterRafraichissementAsync();
         }
 
-        /// <summary>Relit les fichiers de configuration et applique les changements, puis
-        /// efface l'indicateur. Partagé entre l'actualisation immédiate et différée.</summary>
+        /// <summary>Relit la config, applique les changements et efface l'indicateur.
+        /// Commun à l'actualisation immédiate et différée.</summary>
         private async Task ExecuterRafraichissementAsync()
         {
             try
@@ -217,8 +201,8 @@ namespace Metrologo.ViewModels
             }
             catch (System.Exception ex)
             {
-                // Échec (ex. partage serveur injoignable) : on NE touche pas à l'indicateur
-                // pour que l'utilisateur puisse réessayer plus tard.
+                // échec (ex. partage injoignable) : on laisse l'indicateur en place
+                // pour pouvoir réessayer plus tard
                 MessageBox.Show(
                     "Le rechargement de la configuration a échoué :\n" + ex.Message
                   + "\n\nLes réglages seront pris en compte au prochain démarrage.",
@@ -230,9 +214,9 @@ namespace Metrologo.ViewModels
         {
             NotificationsAdminWatcher.ChangementsRecus += OnChangementsAdminRecus;
 
-            // Pop-up directe sur CE poste quand la valeur du rubidium est mise à jour (écart hebdo
-            // Besançon) ou qu'elle passe sous la limite 1e-13. Le watcher ⚠ ne couvrant que les
-            // AUTRES postes, cet événement assure l'affichage sur le poste qui exécute la tâche.
+            // pop-up directe sur CE poste quand la valeur rubidium est mise à jour (écart hebdo
+            // Besançon) ou passe sous 1e-13. Le watcher ne couvre que les AUTRES postes,
+            // cet événement assure l'affichage sur le poste qui exécute la tâche
             BesanconScheduler.PopupRubidiumDemandee += OnPopupRubidiumDemandee;
 
             // Étape 1 : sélection de l'utilisateur dans le menu déroulant.

@@ -13,24 +13,13 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Catalogue
 {
     /// <summary>
-    /// Catalogue centralisé des modèles d'appareils enregistrés (SCPI / IEEE).
-    ///
-    /// Stockage : fichier JSON unique sur le partage réseau —
-    /// <see cref="CheminsMetrologo.FichierCatalogueAppareils"/>
-    /// (par défaut <c>M:\exe_spe\Data_Metrologo\Catalogues\appareils.json</c>). Lecture
-    /// au démarrage de l'app + à chaque <see cref="ChargerAsync"/> ; ré-écriture
-    /// atomique (fichier temp + Move) après chaque modification, partage entre postes
-    /// transparent.
-    ///
-    /// Migration depuis l'ancien stockage SQL Server : si le fichier réseau n'existe
-    /// pas encore mais qu'un JSON local hérité est présent
-    /// (<c>%LocalAppData%\Metrologo\Catalogues\AppareilsCatalogue.json</c>), il est
-    /// importé automatiquement au premier chargement.
-    ///
-    /// Concurrence multi-postes : verrou applicatif via SemaphoreSlim + écriture
-    /// atomique. Deux postes qui modifient simultanément ne corrompront pas le
-    /// fichier (le dernier qui écrit gagne). Pour des scénarios plus complexes
-    /// (merge), il faudra introduire un fichier .lock dédié.
+    /// Catalogue centralisé des modèles d'appareils SCPI/IEEE. Stockage : un seul fichier JSON
+    /// sur le partage réseau (par défaut M:\exe_spe\Data_Metrologo\Catalogues\appareils.json),
+    /// relu à chaque ChargerAsync et réécrit de façon atomique (temp + Move) après chaque modif.
+    /// Au premier chargement, si le fichier réseau n'existe pas, on importe l'ancien JSON local
+    /// (%LocalAppData%\Metrologo\Catalogues\AppareilsCatalogue.json) hérité de l'époque SQL Server.
+    /// Multi-postes : SemaphoreSlim + écriture atomique, pas de corruption possible mais le
+    /// dernier qui écrit gagne. Pour faire du merge il faudrait un fichier .lock dédié.
     /// </summary>
     public class CatalogueAppareilsService
     {
@@ -61,17 +50,15 @@ namespace Metrologo.Services.Catalogue
             {
                 string fichier = CheminsMetrologo.FichierCatalogueAppareils;
 
-                // 1ʳᵉ exécution : tenter une migration depuis le JSON hérité local
-                // (idempotente : no-op si le fichier réseau existe déjà ou si pas de
-                // legacy local trouvé). 100 % fichier — pas de dépendance SQL.
+                // première exécution : migration depuis le JSON hérité local si présent
+                // (no-op sinon). 100% fichier, aucune dépendance SQL.
                 if (!File.Exists(fichier))
                 {
                     await ImporterJsonHeriteSiPresentAsync(fichier);
                 }
 
-                // Lecture du fichier réseau (peut rester absent si la migration n'a
-                // rien trouvé ou si le fichier vient d'être supprimé — dans ce cas
-                // on démarre sur un catalogue vide).
+                // fichier réseau (peut être absent si la migration n'a rien trouvé :
+                // on démarre alors sur un catalogue vide)
                 List<ModeleAppareil> charges = await LireFichierAsync(fichier);
 
                 Modeles.Clear();
@@ -96,11 +83,9 @@ namespace Metrologo.Services.Catalogue
         // -------------------------------------------------------------------------
 
         /// <summary>
-        /// Ajoute un modèle <b>en mémoire uniquement</b> (aucune écriture sur le partage réseau)
-        /// s'il n'existe pas déjà (comparaison par <c>Id</c>). Utilisé pour seeder les profils
-        /// legacy au démarrage : ils sont définis dans le code et toujours présents, sans polluer
-        /// le catalogue réseau partagé ni dépendre de la disponibilité de <c>M:\</c>.
-        /// Retourne <c>true</c> si le modèle a été ajouté, <c>false</c> s'il était déjà présent.
+        /// Ajoute un modèle en mémoire uniquement (pas d'écriture réseau) s'il n'est pas déjà
+        /// présent (même Id). Sert à seeder les profils legacy au démarrage sans polluer le
+        /// catalogue partagé ni dépendre de M:\. Retourne false si déjà présent.
         /// </summary>
         public bool AjouterEnMemoireSiAbsent(ModeleAppareil modele)
         {
@@ -129,9 +114,8 @@ namespace Metrologo.Services.Catalogue
         }
 
         /// <summary>
-        /// Importe un ou plusieurs modèles depuis une chaîne JSON (objet seul ou tableau).
-        /// Les Id existants sont mis à jour, les nouveaux sont ajoutés. Une seule
-        /// ré-écriture du fichier à la fin de la batch.
+        /// Importe un ou plusieurs modèles depuis du JSON (objet seul ou tableau). Id existant =
+        /// mise à jour, sinon ajout. Une seule réécriture du fichier en fin de batch.
         /// </summary>
         public async Task<int> ImporterDepuisJsonAsync(string json)
         {

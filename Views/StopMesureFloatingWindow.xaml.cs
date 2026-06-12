@@ -7,20 +7,10 @@ using System.Windows.Interop;
 namespace Metrologo.Views
 {
     /// <summary>
-    /// Fenêtre flottante d'arrêt d'urgence pendant une mesure. Approche maximale
-    /// fiabilité :
-    /// <list type="bullet">
-    ///   <item>Pas de <c>AllowsTransparency</c> (cause connue de problèmes de clic sur
-    ///     Topmost) — fenêtre opaque solide rouge vif, ultra-visible.</item>
-    ///   <item><c>PreviewMouseLeftButtonDown</c> au niveau Window → tout clic n'importe
-    ///     où sur la fenêtre déclenche l'arrêt (pas besoin de viser un bouton).</item>
-    ///   <item><b>Raccourci global Ctrl+Shift+S</b> via <c>RegisterHotKey</c> — fonctionne
-    ///     même si Excel monopolise la souris (passe par le système Windows, pas par
-    ///     notre input).</item>
-    ///   <item>Touches Échap / Espace / Entrée locales pour arrêter au clavier.</item>
-    ///   <item>Hook <c>WM_SETCURSOR</c> qui force le curseur Arrow via Win32 SetCursor —
-    ///     contourne l'I-beam hérité d'Excel.</item>
-    /// </list>
+    /// Fenêtre flottante d'arrêt d'urgence pendant une mesure. Tout est fait pour qu'elle reste
+    /// cliquable : fenêtre opaque (AllowsTransparency pose des soucis de clic en Topmost), clic
+    /// n'importe où, hotkey globale Ctrl+Shift+S via RegisterHotKey (marche même si Excel a le
+    /// focus), Échap/Espace/Entrée, et hook WM_SETCURSOR pour contourner le curseur imposé par Excel.
     /// </summary>
     public partial class StopMesureFloatingWindow : Window
     {
@@ -96,7 +86,7 @@ namespace Metrologo.Views
             _source = HwndSource.FromHwnd(hWnd);
             _source?.AddHook(WndProc);
 
-            // Ctrl+Shift+S global — fonctionne même quand Excel a le focus.
+            // Ctrl+Shift+S global, fonctionne même quand Excel a le focus.
             _hotkeyEnregistre = RegisterHotKey(hWnd, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_S);
         }
 
@@ -110,8 +100,8 @@ namespace Metrologo.Views
                     return IntPtr.Zero;
 
                 case WM_SETCURSOR:
-                    // Force le curseur main partout sur la fenêtre — visualise clairement
-                    // qu'on peut cliquer n'importe où, peu importe ce qu'Excel a mis comme curseur.
+                    // curseur main partout sur la fenêtre : on voit qu'on peut cliquer
+                    // n'importe où, peu importe ce qu'Excel a mis comme curseur
                     SetCursor(LoadCursor(IntPtr.Zero, IDC_HAND));
                     handled = true;
                     return new IntPtr(1);
