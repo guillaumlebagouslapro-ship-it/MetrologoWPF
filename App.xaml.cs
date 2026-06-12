@@ -44,6 +44,15 @@ namespace Metrologo
             EventManager.RegisterClassHandler(typeof(Window), Window.LoadedEvent,
                 new RoutedEventHandler(AttribuerOwnerAutomatique));
 
+            // Les fenêtres ont des tailles fixes pensées pour un grand écran (ex.
+            // Configuration : 860 px de haut) — sur un petit écran elles débordent du
+            // cadre. À l'ouverture de chaque fenêtre, on la rétrécit si besoin pour
+            // qu'elle tienne dans la zone de travail (écran moins barre des tâches)
+            // et on la repositionne entièrement visible. Le contenu scrollable
+            // (ScrollViewer) prend le relais pour la partie qui ne tient plus.
+            EventManager.RegisterClassHandler(typeof(Window), Window.LoadedEvent,
+                new RoutedEventHandler(AdapterTailleAEcran));
+
             // Vérif des prérequis (Excel, NI-VISA, ni4882.dll) AVANT de toucher aux services
             // qui en dépendent, sinon ça plante silencieusement sur les postes mal configurés.
             // S'il manque quelque chose, on propose de continuer en mode dégradé ou de quitter.
@@ -389,6 +398,73 @@ namespace Metrologo
             catch
             {
                 // Best-effort : sans Owner la fenêtre s'ouvre quand même, comme avant.
+            }
+        }
+
+        /// <summary>
+        /// Handler de classe appelé au Loaded de CHAQUE Window : adapte la fenêtre à la
+        /// zone de travail de l'écran, dans les deux sens.
+        ///   • Grand écran : la fenêtre est agrandie proportionnellement (les tailles
+        ///     déclarées dans les XAML sont conçues pour un écran Full HD), plafonné à
+        ///     ×1.4 pour ne pas diluer le contenu sur un très grand écran.
+        ///   • Petit écran : la fenêtre est rétrécie pour tenir dans la zone de travail
+        ///     (le contenu scrollable prend le relais), puis recalée entièrement visible.
+        /// Ne touche pas aux fenêtres maximisées ni aux fenêtres auto-positionnées
+        /// (toasts Topmost qui gèrent leur propre placement).
+        /// </summary>
+        private static void AdapterTailleAEcran(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Window fenetre) return;
+            if (fenetre.WindowState != WindowState.Normal) return;
+            if (fenetre.Topmost) return;
+
+            try
+            {
+                Rect zone = SystemParameters.WorkArea;
+                const double marge = 16;
+                double maxLargeur = zone.Width - marge;
+                double maxHauteur = zone.Height - marge;
+
+                double largeurInitiale = double.IsNaN(fenetre.Width) ? fenetre.ActualWidth : fenetre.Width;
+                double hauteurInitiale = double.IsNaN(fenetre.Height) ? fenetre.ActualHeight : fenetre.Height;
+
+                // Facteur d'agrandissement proportionnel à l'écran. Référence de
+                // conception : zone de travail Full HD (1920×1040 unités WPF). Jamais
+                // < 1 ici — la réduction passe par le plafonnement maxLargeur/maxHauteur
+                // ci-dessous, qui ne rétrécit que ce qui déborde réellement.
+                const double refLargeur = 1920, refHauteur = 1040;
+                double facteur = Math.Min(zone.Width / refLargeur, zone.Height / refHauteur);
+                facteur = Math.Clamp(facteur, 1.0, 1.4);
+
+                double largeur = Math.Min(largeurInitiale * facteur, maxLargeur);
+                double hauteur = Math.Min(hauteurInitiale * facteur, maxHauteur);
+
+                bool retaillee = Math.Abs(largeur - largeurInitiale) > 0.5
+                              || Math.Abs(hauteur - hauteurInitiale) > 0.5;
+                if (retaillee)
+                {
+                    // Conserve le centre d'origine (les fenêtres s'ouvrent centrées) pour
+                    // que l'agrandissement/réduction ne décale pas la fenêtre.
+                    double centreX = fenetre.Left + largeurInitiale / 2;
+                    double centreY = fenetre.Top + hauteurInitiale / 2;
+                    fenetre.Width = largeur;
+                    fenetre.Height = hauteur;
+                    fenetre.Left = centreX - largeur / 2;
+                    fenetre.Top = centreY - hauteur / 2;
+                }
+
+                // Recale la fenêtre pour qu'elle soit entièrement dans la zone de travail
+                // (après retaille, ou si elle a été ouverte à cheval sur un bord).
+                if (retaillee || fenetre.Left < zone.Left || fenetre.Top < zone.Top
+                    || fenetre.Left + largeur > zone.Right || fenetre.Top + hauteur > zone.Bottom)
+                {
+                    fenetre.Left = Math.Max(zone.Left, Math.Min(fenetre.Left, zone.Right - largeur));
+                    fenetre.Top = Math.Max(zone.Top, Math.Min(fenetre.Top, zone.Bottom - hauteur));
+                }
+            }
+            catch
+            {
+                // Best-effort : en cas de souci la fenêtre garde sa taille déclarée.
             }
         }
 

@@ -28,16 +28,20 @@ namespace Metrologo.ViewModels
 
         public bool ListeVide => Utilisateurs.Count == 0;
 
-        /// <summary>Nom du poste (machine Windows) — affiché dans le panneau d'accueil.</summary>
-        public string NomPoste => Environment.MachineName;
-
-        /// <summary>Date du jour formatée en français (ex. « mardi 22 mai 2026 »).</summary>
+        /// <summary>Date du jour formatée en français (ex. « mardi 22 mai 2026 »).
+        /// Rafraîchie en continu par le timer (l'écran de lancement peut rester
+        /// affiché des heures — la date/heure doit suivre).</summary>
         public string DateActuelle =>
             CultureInfo.GetCultureInfo("fr-FR").TextInfo.ToTitleCase(
                 DateTime.Now.ToString("dddd d MMMM yyyy", CultureInfo.GetCultureInfo("fr-FR")));
 
-        /// <summary>Heure du jour formatée HH:mm.</summary>
+        /// <summary>Heure du jour formatée HH:mm, rafraîchie en continu.</summary>
         public string HeureActuelle => DateTime.Now.ToString("HH:mm");
+
+        // Timer UI qui notifie DateActuelle/HeureActuelle chaque seconde — l'affichage
+        // ne change visuellement qu'au changement de minute, mais le tick fin évite un
+        // décalage perceptible juste après l'ouverture de l'écran.
+        private readonly System.Windows.Threading.DispatcherTimer _horloge;
 
         public string NombreComptesTexte => Utilisateurs.Count switch
         {
@@ -53,6 +57,17 @@ namespace Metrologo.ViewModels
         public SelectionUtilisateurViewModel()
         {
             Recharger();
+
+            _horloge = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _horloge.Tick += (_, _) =>
+            {
+                OnPropertyChanged(nameof(HeureActuelle));
+                OnPropertyChanged(nameof(DateActuelle));
+            };
+            _horloge.Start();
         }
 
         /// <summary>
