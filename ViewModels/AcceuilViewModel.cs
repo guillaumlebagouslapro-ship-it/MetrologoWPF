@@ -452,12 +452,12 @@ namespace Metrologo.ViewModels
             if (EnTetesMesureHelper.EstTachymetre(MesureConfig.TypeMesure)
                 && string.IsNullOrWhiteSpace(MesureConfig.NumModuleIncertitudeFreq))
             {
-                Log("✖ Mesure tachy impossible : module Fréquence auxiliaire non sélectionné.");
+                Log("✖ Mesure tachy/strobo impossible : module Fréquence auxiliaire non sélectionné.");
                 Journal.Warn(CategorieLog.Mesure, "MESURE_BLOQUEE_MODULE_FREQ",
-                    "Tentative de mesure tachy sans module Fréquence auxiliaire.");
+                    "Tentative de mesure tachy/strobo sans module Fréquence auxiliaire.");
                 MessageBox.Show(
-                    "Pour une mesure tachymétrique, il faut sélectionner DEUX modules :\n"
-                    + "  • Module d'incertitude (tachy) — pour les Coeff C/D côté RPM\n"
+                    "Pour une mesure tachymétrique ou stroboscope, il faut sélectionner DEUX modules :\n"
+                    + "  • Module d'incertitude (tachy/strobo) — pour les Coeff C/D côté RPM\n"
                     + "  • Module Fréquence (Hz) — pour les Coeff A/B côté Hz (fréquencemètre)\n\n"
                     + "Le second est manquant. Va dans la fenêtre Configuration et choisis "
                     + "le module Fréquence correspondant au compteur utilisé.",
@@ -972,7 +972,7 @@ namespace Metrologo.ViewModels
         /// Flux post-mesure : dispatch selon le type de mesure :
         /// <list type="bullet">
         ///   <item>Fréquence + Fréquencemètre → page unique fréq. lue + résolution + incert. sup.</item>
-        ///   <item>TachyContact → page minimale résolution (tr/min) uniquement.</item>
+        ///   <item>Tachy Contact/Optique et Stroboscope → page minimale résolution (tr/min) uniquement.</item>
         ///   <item>Autres types → pas de popup.</item>
         /// </list>
         /// Les valeurs saisies sont injectées dans les zones nommées du classeur via Interop.
@@ -986,8 +986,7 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            if (config.TypeMesure == TypeMesure.TachyContact
-                || config.TypeMesure == TypeMesure.TachyOptique)
+            if (EnTetesMesureHelper.EstTachymetre(config.TypeMesure))
             {
                 await SaisiePostMesureTachyAsync(config);
                 return;

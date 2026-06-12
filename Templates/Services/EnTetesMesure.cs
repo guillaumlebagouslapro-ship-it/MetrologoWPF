@@ -109,12 +109,15 @@ namespace Metrologo.Services
         };
 
         /// <summary>
-        /// Vrai pour les types de mesure tachymétriques (contact et optique).
-        /// Ces deux types partagent le template Excel METROLOGO_Tachy.xlsx et la
-        /// conversion automatique Hz → tr/min en colonne N.
+        /// Vrai pour la famille tachymétrique : contact, optique ET stroboscope.
+        /// Ces trois types partagent le template Excel METROLOGO_Tachy.xlsx (colonne de
+        /// conversion automatique Hz → tr/min, zones ZNCoeffC/ZNCoeffD côté RPM, module
+        /// affiché en G10) et requièrent le module Fréquence auxiliaire (Hz) en plus du
+        /// module principal — le stroboscope est mesuré au fréquencemètre comme les tachys.
         /// </summary>
         public static bool EstTachymetre(TypeMesure t) =>
-            t == TypeMesure.TachyContact || t == TypeMesure.TachyOptique;
+            t == TypeMesure.TachyContact || t == TypeMesure.TachyOptique
+            || t == TypeMesure.Stroboscope;
 
         /// <summary>
         /// Vrai pour les types de mesure dont l'unité opérateur est le tr/min (RPM).

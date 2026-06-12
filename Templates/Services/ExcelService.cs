@@ -227,6 +227,36 @@ namespace Metrologo.Services
                     }
 
                     _workbook = new XLWorkbook(_cheminFichier);
+
+                    // Garde-fou « famille de template » : freq.xlsx est partagé par tous les
+                    // types hors stabilité, mais sa ModFeuille vient du template qui l'a CRÉÉ.
+                    // Une feuille tachy/strobo copiée depuis une ModFeuille Fréquence (ou
+                    // l'inverse) donne un rapport incohérent : zones ZNCoeffC/D absentes,
+                    // colonne de conversion tr/min manquante, nom du module décalé (écrit en
+                    // G10 alors que le label est à côté de F10). On détecte la famille du
+                    // fichier via la zone ZNCoeffC — présente uniquement dans le template
+                    // tachy — et on refuse le mélange avec un message clair.
+                    if (!estStab && _workbook.Worksheets.Any(w => w.Name == NOM_MODELE))
+                    {
+                        var modExistant = _workbook.Worksheet(NOM_MODELE);
+                        bool fichierFamilleTachy =
+                            modExistant.DefinedNames.Contains("ZNCoeffC")
+                            || _workbook.DefinedNames.Contains("ZNCoeffC");
+                        if (fichierFamilleTachy != estTachy)
+                        {
+                            string familleFichier = fichierFamilleTachy
+                                ? "tachymètre/stroboscope" : "fréquence";
+                            string familleMesure = estTachy
+                                ? "tachymètre/stroboscope" : "fréquence";
+                            throw new InvalidOperationException(
+                                $"Le fichier « {Path.GetFileName(_cheminFichier)} » de cette FI a été créé "
+                              + $"pour des mesures de type {familleFichier} : impossible d'y ajouter "
+                              + $"une mesure de type {familleMesure}.\n\n"
+                              + "Une même FI ne peut pas mélanger ces deux familles de mesures "
+                              + "(mise en page Excel différente). Utilise une autre FI, ou "
+                              + "supprime/déplace ce fichier depuis le dossier de la FI puis relance.");
+                        }
+                    }
                 }
                 else
                 {
