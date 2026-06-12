@@ -358,22 +358,31 @@ namespace Metrologo
         /// </summary>
         private static void AttribuerOwnerAutomatique(object sender, RoutedEventArgs e)
         {
-            if (sender is not Window fenetre) return;
-            if (fenetre == Application.Current.MainWindow) return;
-            if (fenetre.Owner != null) return;
-            // Les fenêtres Topmost (toasts, bouton stop flottant, saisies post-mesure) ne
-            // peuvent pas se perdre derrière — et un Owner les fermerait avec la fenêtre
-            // qui les a ouvertes, ce qu'on ne veut pas pour un toast.
-            if (fenetre.Topmost) return;
-
             try
             {
+                if (sender is not Window fenetre) return;
+
+                // Fenêtre créée sur un thread UI SECONDAIRE (ex. StopMesureFloatingWindow,
+                // qui tourne sur son propre dispatcher pour rester réactive pendant les
+                // Interop Excel) : ne rien faire. Application.Current.MainWindow et
+                // Application.Current.Windows appartiennent au thread principal — y
+                // accéder d'ici lèverait une InvalidOperationException cross-thread
+                // (= plantage du bouton STOP au lancement d'une mesure).
+                var app = Application.Current;
+                if (app == null || app.Dispatcher != fenetre.Dispatcher) return;
+
+                if (fenetre == app.MainWindow) return;
+                if (fenetre.Owner != null) return;
+                // Les fenêtres Topmost (toasts, saisies post-mesure) ne peuvent pas se
+                // perdre derrière — et un Owner les fermerait avec la fenêtre qui les a
+                // ouvertes, ce qu'on ne veut pas pour un toast.
+                if (fenetre.Topmost) return;
                 Window? proprietaire = null;
-                foreach (Window w in Application.Current.Windows)
+                foreach (Window w in app.Windows)
                 {
                     if (w != fenetre && w.IsActive && w.IsVisible) { proprietaire = w; break; }
                 }
-                proprietaire ??= Application.Current.MainWindow;
+                proprietaire ??= app.MainWindow;
 
                 if (proprietaire == null || proprietaire == fenetre
                     || !proprietaire.IsVisible || proprietaire.Owner == fenetre)
