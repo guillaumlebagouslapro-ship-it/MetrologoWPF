@@ -51,9 +51,12 @@ namespace Metrologo.Services.Catalogue
             var defauts = new List<ModeleAppareil> { Stanford(), Racal(), Eip() };
             var profils = ChargerOuCreerFichier(defauts);
 
+            // Remplace (et non « ajoute si absent ») : si une copie corrompue d'un legacy a fui
+            // dans le catalogue principal (appareils.json), on la réécrase ici par le profil de
+            // référence chargé depuis appareils-legacy.json — auto-réparation à chaque démarrage.
             var svc = CatalogueAppareilsService.Instance;
             foreach (var m in profils)
-                svc.AjouterEnMemoireSiAbsent(m);
+                svc.RemplacerOuAjouterEnMemoire(m);
         }
 
         /// <summary>

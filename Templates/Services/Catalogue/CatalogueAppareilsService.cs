@@ -95,6 +95,30 @@ namespace Metrologo.Services.Catalogue
             return true;
         }
 
+        /// <summary>
+        /// Injecte un profil en mémoire (aucune écriture réseau) : remplace l'entrée de même Id si
+        /// elle existe déjà, sinon l'ajoute. Sert à (re)seeder les profils legacy au démarrage en
+        /// ÉCRASANT une éventuelle copie corrompue qui aurait fuité dans appareils.json — par
+        /// exemple un EIP ouvert puis sauvegardé par erreur dans l'éditeur générique, qui avait
+        /// perdu Legacy / AdresseFixeParDefaut / CommandesGateParSlot. Le profil de référence vient
+        /// de appareils-legacy.json (cf. <see cref="SeedLegacyAppareils"/>), donc on lui redonne
+        /// toujours la priorité sur ce qui traîne dans le catalogue principal.
+        /// </summary>
+        public void RemplacerOuAjouterEnMemoire(ModeleAppareil modele)
+        {
+            for (int i = 0; i < Modeles.Count; i++)
+            {
+                if (Modeles[i].Id == modele.Id)
+                {
+                    Modeles[i] = modele;   // remplacement en place (event Replace pour l'UI)
+                    NotifierChange();
+                    return;
+                }
+            }
+            Modeles.Add(modele);
+            NotifierChange();
+        }
+
         public async Task AjouterAsync(ModeleAppareil modele)
         {
             if (string.IsNullOrEmpty(modele.Id)) modele.Id = GenererId(modele.Nom);

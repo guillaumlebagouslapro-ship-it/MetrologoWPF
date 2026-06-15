@@ -23,7 +23,16 @@ namespace Metrologo.ViewModels
     {
         private readonly string _utilisateurActuel;
 
-        public ObservableCollection<ModeleAppareil> Modeles => CatalogueAppareilsService.Instance.Modeles;
+        /// <summary>
+        /// Modèles affichés et éditables ici : tout le catalogue SAUF les appareils legacy
+        /// (EIP / Racal / Stanford). L'éditeur générique de cette fenêtre ne sait pas représenter
+        /// les champs propres aux legacy (Legacy, AdresseFixeParDefaut, CommandesGateParSlot,
+        /// réglages non canoniques comme « Bande de fréquence ») : les y ouvrir puis sauvegarder
+        /// remettait ces champs à vide et écrivait la version cassée dans appareils.json, ce qui
+        /// rendait toutes leurs commandes inopérantes. Les legacy se gèrent via la fenêtre dédiée
+        /// « Adresses GPIB legacy » (GestionAdressesLegacyViewModel).
+        /// </summary>
+        public ObservableCollection<ModeleAppareil> Modeles { get; } = new();
 
         [ObservableProperty] private string _cheminCatalogue = string.Empty;
 
@@ -45,11 +54,23 @@ namespace Metrologo.ViewModels
             // les postes. On affiche le chemin effectif (résolu via paths.config.json).
             CheminCatalogue = CheminsMetrologo.FichierCatalogueAppareils;
 
-            Modeles.CollectionChanged += (_, _) =>
+            RafraichirListe();
+            // Le catalogue partagé peut changer (ajout / suppression / import) pendant que la
+            // fenêtre est ouverte : on resynchronise la liste filtrée à chaque modification.
+            CatalogueAppareilsService.Instance.Modeles.CollectionChanged += (_, _) => RafraichirListe();
+        }
+
+        /// <summary>Reconstruit la liste affichée : tout le catalogue moins les appareils legacy.</summary>
+        private void RafraichirListe()
+        {
+            Modeles.Clear();
+            foreach (var m in CatalogueAppareilsService.Instance.Modeles
+                         .Where(m => !m.Parametres.Legacy))
             {
-                OnPropertyChanged(nameof(CatalogueVide));
-                OnPropertyChanged(nameof(NbModeles));
-            };
+                Modeles.Add(m);
+            }
+            OnPropertyChanged(nameof(CatalogueVide));
+            OnPropertyChanged(nameof(NbModeles));
         }
 
         [RelayCommand]
