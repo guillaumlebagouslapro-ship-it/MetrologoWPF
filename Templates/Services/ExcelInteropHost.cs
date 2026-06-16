@@ -1557,12 +1557,14 @@ namespace Metrologo.Services
                         // laisser C21 vide sur la feuille visible. L'écriture par adresse garantit
                         // que la référence du rubidium apparaît bien. (ZNFreqRef pointe sur C21.)
                         EcrireValeurCelluleInterne(nouvelleFeuille, "C21", rubidium.FrequenceMoyenne);
-                        // 9 décimales pour rendre visible l'offset fin du rubidium (ex.
-                        // 10 000 000,00000004) que le format template (7 décimales) arrondissait.
+                        // 7 décimales : maximum FIDÈLE pour un nombre à ~10 MHz (Excel ne garde que
+                        // 15 chiffres significatifs = 8 entiers + 7 décimales). Au-delà, Excel forçait
+                        // des « 00 » parasites en fin de valeur. Les écarts Besançon usuels restent
+                        // visibles ; un offset < 1e-7 Hz est sous la précision affichable d'Excel.
                         try
                         {
                             dynamic cFmt = nouvelleFeuille.Range["C21"];
-                            try { cFmt.NumberFormat = "#,##0.000000000"; }
+                            try { cFmt.NumberFormat = "#,##0.0000000"; }
                             finally { try { Marshal.ReleaseComObject(cFmt); } catch { } }
                         }
                         catch { /* best-effort */ }

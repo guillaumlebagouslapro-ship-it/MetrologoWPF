@@ -394,10 +394,12 @@ namespace Metrologo.Services
                 // que la référence du rubidium apparaît bien sur la feuille de mesure.
                 var celluleFreqRef = _feuilleMesure.Cell("C21");
                 celluleFreqRef.SetValue(rubidium.FrequenceMoyenne);
-                // Le rubidium peut porter un offset fin (ex. 10 000 000,00000004 Hz). Le format
-                // du template (#,##0.0000000 = 7 décimales) l'arrondissait à l'affichage. On
-                // passe à 9 décimales pour rendre cet écart visible (important en métrologie).
-                celluleFreqRef.Style.NumberFormat.Format = "#,##0.000000000";
+                // 7 décimales : c'est le maximum FIDÈLE pour un nombre à ~10 MHz. Excel (comme un
+                // double) ne garde que 15 chiffres significatifs ; 8 chiffres entiers + 7 décimales
+                // = 15, pile la limite. Au-delà (8e/9e décimale), Excel forçait des « 00 » parasites
+                // qu'il ne peut pas représenter. Les écarts Besançon usuels (≥ 1e-6 Hz) restent
+                // visibles ; un offset plus fin est de toute façon sous la précision affichable.
+                celluleFreqRef.Style.NumberFormat.Format = "#,##0.0000000";
                 SetNamed("ZNFreqRef", rubidium.FrequenceMoyenne);
 
                 // Fallback hardcoded : utilisé tel quel si aucun module d'incertitude n'est
