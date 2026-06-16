@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -165,9 +166,10 @@ namespace Metrologo.Services.Ieee
             this AppareilIEEE appareil,
             IIeeeDriver driver,
             Mesure mesure,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            int mavTimeoutMs = 10000)
         {
-            string reponse = await EcrireEtLireAsync(appareil, driver, appareil.ExeMesure, ct);
+            string reponse = await EcrireEtLireAsync(appareil, driver, appareil.ExeMesure, ct, mavTimeoutMs);
 
             if (string.IsNullOrEmpty(reponse)) return 0.0;
 
@@ -269,7 +271,8 @@ namespace Metrologo.Services.Ieee
 
         /// <summary>Équivalent Delphi EcritureLectureIEEE : envoi commande + attente MAV (si SRQ géré) + lecture.</summary>
         private static async Task<string> EcrireEtLireAsync(
-            AppareilIEEE appareil, IIeeeDriver driver, string commande, CancellationToken ct)
+            AppareilIEEE appareil, IIeeeDriver driver, string commande, CancellationToken ct,
+            int mavTimeoutMs = 10000)
         {
             JournalLog.Info(CategorieLog.Mesure, "MESURE_ENVOI",
                 $"GPIB0::{appareil.Adresse} ← {commande}",
@@ -279,17 +282,41 @@ namespace Metrologo.Services.Ieee
 
             if (appareil.GereSRQ)
             {
-                // Poll du MAV jusqu'à disponibilité du résultat.
-                while (true)
+                // Attente du MAV (Message Available) AVANT bornage : certains compteurs legacy
+                // (EIP 545…) ne positionnent pas toujours le bit MAV via le serial-poll du driver
+                // VISA (comportement différent du NI488 d'origine). Un poll infini bloquait alors
+                // la mesure sur le 1er point (Excel ouvert, aucune valeur). On BORNE donc l'attente
+                // (timeout calé sur la gate) puis on lit quand même : si la donnée est déjà dans le
+                // buffer de sortie, la lecture la récupère ; sinon timeout VISA → chaîne vide → 0.0,
+                // sans jamais figer la mesure.
+                var sw = Stopwatch.StartNew();
+                bool mav = false;
+                while (sw.ElapsedMilliseconds < mavTimeoutMs)
                 {
                     ct.ThrowIfCancellationRequested();
-                    var status = await driver.LireStatusByteAsync(appareil.Adresse, ct);
-                    if ((status & BitMav) == BitMav) break;
+                    byte status;
+                    try { status = await driver.LireStatusByteAsync(appareil.Adresse, ct); }
+                    catch (OperationCanceledException) { throw; }
+                    catch { break; }   // serial-poll non supporté → on tente la lecture directe
+                    if ((status & BitMav) == BitMav) { mav = true; break; }
                     await Task.Delay(50, ct);
                 }
+                if (!mav)
+                    JournalLog.Warn(CategorieLog.Mesure, "MAV_TIMEOUT",
+                        $"GPIB0::{appareil.Adresse} : MAV non positionné après {mavTimeoutMs} ms "
+                      + $"(cmd « {commande} ») — lecture directe tentée.");
             }
 
-            return await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
+            string reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
+
+            // Trace la réponse brute (essentielle pour diagnostiquer un legacy muet) : on voit
+            // immédiatement si l'appareil renvoie une valeur, une chaîne vide ou un format inattendu.
+            string apercu = string.IsNullOrEmpty(reponse) ? "(vide)"
+                : reponse.Length > 120 ? reponse.Substring(0, 120) + "..." : reponse;
+            JournalLog.Info(CategorieLog.Mesure, "MESURE_RECEP",
+                $"GPIB0::{appareil.Adresse} → « {apercu} »");
+
+            return reponse;
         }
 
         /// <summary>
