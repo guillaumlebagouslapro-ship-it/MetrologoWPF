@@ -31,9 +31,10 @@ namespace Metrologo.Services.Besancon
         /// <summary>Nom du fichier à récupérer sur le FTP (legacy : ef_utcop).</summary>
         public string FichierDistant { get; set; } = "ef_utcop";
 
-        /// <summary>Heure de déclenchement quotidien, format HH:mm. Défaut 09:38, décalé après
-        /// 09h30 pour éviter le bouchon réseau de cet horaire.</summary>
-        public string HeureDeclenchement { get; set; } = "09:38";
+        /// <summary>Heure de déclenchement quotidien, format HH:mm. Défaut 14:00 : la valeur de la
+        /// veille n'est disponible que vers 12h dans le fichier source, et le transfert baie → FTP est
+        /// fait vers 13h30 ; on récupère donc à 14h pour garder une marge confortable.</summary>
+        public string HeureDeclenchement { get; set; } = "14:00";
 
         /// <summary>Si vrai, supprime le fichier sur le FTP après téléchargement (comportement
         /// legacy). Déconseillé en multi-poste, false par défaut.</summary>
@@ -52,11 +53,14 @@ namespace Metrologo.Services.Besancon
             var cfg = ChargerBrut();
             bool modifie = false;
 
-            // migration heure : l'ancien défaut 09:50 (jamais réglable via une UI) est remonté
-            // à 09:38 pour éviter le bouchon de 09h30 ; idempotent
-            if (cfg.HeureDeclenchement == "09:50")
+            // migration heure : les anciens défauts auto (09:50, 09:38, 13:38, jamais réglés à la
+            // main à l'époque) sont remontés à 14:00. La valeur de la veille n'est dispo que vers 12h
+            // et le transfert baie → FTP est fait vers 13h30 ; on récupère donc à 14h pour la marge.
+            // Idempotent, et ne touche pas à une heure réglée volontairement via l'UI (autre valeur).
+            if (cfg.HeureDeclenchement == "09:50" || cfg.HeureDeclenchement == "09:38"
+                || cfg.HeureDeclenchement == "13:38")
             {
-                cfg.HeureDeclenchement = "09:38";
+                cfg.HeureDeclenchement = "14:00";
                 modifie = true;
             }
 
@@ -123,13 +127,13 @@ namespace Metrologo.Services.Besancon
             catch { /* best-effort */ }
         }
 
-        /// <summary>Parse HeureDeclenchement ; retombe sur 09:38 si invalide.</summary>
+        /// <summary>Parse HeureDeclenchement ; retombe sur 14:00 si invalide.</summary>
         public TimeSpan HeureParsee()
         {
             if (TimeSpan.TryParseExact(HeureDeclenchement, "hh\\:mm",
                     System.Globalization.CultureInfo.InvariantCulture, out var ts))
                 return ts;
-            return new TimeSpan(9, 38, 0);
+            return new TimeSpan(14, 0, 0);
         }
     }
 }

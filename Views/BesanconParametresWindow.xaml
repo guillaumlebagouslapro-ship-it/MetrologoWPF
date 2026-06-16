@@ -56,7 +56,7 @@
                                   Margin="0,0,0,12"/>
                         <TextBlock Text="HEURE DE DÉCLENCHEMENT (HH:mm)" Style="{StaticResource FormLabelStyle}"/>
                         <ui:TextBox Text="{Binding HeureTexte, UpdateSourceTrigger=PropertyChanged}"
-                                    PlaceholderText="09:38"
+                                    PlaceholderText="14:00"
                                     FontFamily="Cascadia Mono, Consolas"
                                     Padding="10,8">
                             <ui:TextBox.Icon>

@@ -15,7 +15,7 @@ namespace Metrologo.ViewModels
     public partial class BesanconParametresViewModel : ObservableObject
     {
         [ObservableProperty] private bool _active;
-        [ObservableProperty] private string _heureTexte = "09:38";
+        [ObservableProperty] private string _heureTexte = "14:00";
         [ObservableProperty] private string _ftpHote = "";
         [ObservableProperty] private int _ftpPort = 21;
         [ObservableProperty] private string _ftpUtilisateur = "";
@@ -51,7 +51,7 @@ namespace Metrologo.ViewModels
             string h = (HeureTexte ?? "").Trim();
             if (!TimeSpan.TryParseExact(h, "hh\\:mm", CultureInfo.InvariantCulture, out _))
             {
-                MessageErreur = "Heure invalide. Format attendu : HH:mm (ex. 09:38).";
+                MessageErreur = "Heure invalide. Format attendu : HH:mm (ex. 14:00).";
                 return;
             }
             if (FtpPort < 1 || FtpPort > 65535)

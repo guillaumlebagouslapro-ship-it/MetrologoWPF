@@ -66,13 +66,18 @@ namespace Metrologo.Services.Besancon
             Programmer(cfg);
 
             // Rattrapage au démarrage : le timer ne sert à rien si l'app n'était pas ouverte à
-            // l'heure prévue. Donc si on lance Metrologo après l'heure de déclenchement et que la
-            // récupération du jour n'a pas été faite (marqueur partagé), on la lance maintenant.
-            // On ne rattrape qu'une fois l'heure passée (le fichier Besançon n'est publié qu'à ce
-            // moment-là), et ExecuterAsync(forcer:false) respecte DejaRecupereAujourdhui() donc
-            // pas de doublon si un autre poste l'a déjà fait. Fire-and-forget.
+            // l'heure prévue. Deux cas (fire-and-forget) :
+            //  - lancé APRÈS l'heure : le fichier du jour est publié, on fait la récupération
+            //    complète tout de suite ; ExecuterAsync(forcer:false) respecte DejaRecupereAujourdhui()
+            //    donc pas de doublon si un autre poste l'a déjà fait.
+            //  - lancé AVANT l'heure : la valeur du JOUR n'est pas encore publiée, mais les jours
+            //    PASSÉS (week-end, vacances) le sont. Si on revient après une coupure, on rattrape
+            //    tout de suite ce retard sans consommer le marqueur du jour (la récupération
+            //    programmée de l'heure ira chercher la valeur du jour normalement).
             if (DateTime.Now.TimeOfDay >= cfg.HeureParsee())
                 _ = RattrapageDemarrageAsync();
+            else
+                _ = RattrapageBacklogAsync();
         }
 
         private static async Task RattrapageDemarrageAsync()
@@ -88,6 +93,35 @@ namespace Metrologo.Services.Besancon
             {
                 Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_RATTRAPAGE_KO",
                     $"Rattrapage Besançon au démarrage échoué : {ex.Message}");
+            }
+        }
+
+        /// <summary>Rattrapage AVANT l'heure de publication : si des jours passés ont été manqués
+        /// (app fermée le week-end / en vacances), va chercher ce retard sur le FTP tout de suite,
+        /// au lieu d'attendre l'heure programmée. Ne touche PAS au marqueur du jour : la récupération
+        /// planifiée à l'heure ira chercher la valeur du jour comme d'habitude. No-op si les données
+        /// sont déjà fraîches (on a au moins la valeur d'hier).</summary>
+        private static async Task RattrapageBacklogAsync()
+        {
+            try
+            {
+                var valeurs = await BesanconTxtStore.LireAsync();
+                int todayMjd = JourJulien.VersMjd(Aujourdhui);
+                int maxMjd = valeurs.Count > 0 ? valeurs.Keys.Max() : 0;
+
+                // Données déjà à jour (dernière valeur = hier ou aujourd'hui) → aucun retard à rattraper.
+                if (maxMjd >= todayMjd - 1) return;
+
+                var res = await ExecuterAsync(forcer: true, marquerJour: false);
+                if (res.Succes)
+                    Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_BACKLOG",
+                        $"Retard Besançon rattrapé au démarrage (avant l'heure de publication) : "
+                      + $"{res.Nouvelles} valeur(s) manquée(s) récupérée(s).");
+            }
+            catch (Exception ex)
+            {
+                Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_BACKLOG_KO",
+                    $"Rattrapage du retard Besançon au démarrage échoué : {ex.Message}");
             }
         }
 
@@ -143,8 +177,10 @@ namespace Metrologo.Services.Besancon
 
         /// <summary>Exécute la tâche une fois : téléchargement FTP, parsing, ajout au fichier txt
         /// cumulatif (aucune écriture SQL). Sans forcer, no-op si un poste a déjà récupéré
-        /// aujourd'hui (marqueur partagé) ; forcer=true (bouton Forcer) ignore ce garde-fou.</summary>
-        public static async Task<ResultatBesancon> ExecuterAsync(bool forcer = false)
+        /// aujourd'hui (marqueur partagé) ; forcer=true (bouton Forcer) ignore ce garde-fou.
+        /// marquerJour=false : télécharge sans écrire le marqueur du jour (rattrapage de backlog
+        /// avant l'heure) afin que la récupération programmée du jour s'exécute quand même.</summary>
+        public static async Task<ResultatBesancon> ExecuterAsync(bool forcer = false, bool marquerJour = true)
         {
             var res = new ResultatBesancon { Destination = BesanconTxtStore.CheminValeurs };
 
@@ -209,7 +245,9 @@ namespace Metrologo.Services.Besancon
             }
 
             // Marqueur partagé : signale aux autres postes que c'est fait pour aujourd'hui.
-            EcrireMarqueur(maxMjd);
+            // En mode backlog (avant l'heure) on ne l'écrit pas, pour laisser la récupération
+            // programmée du jour s'exécuter à l'heure prévue.
+            if (marquerJour) EcrireMarqueur(maxMjd);
 
             // Injecte la fréquence de référence du rubidium piloté E10-Y8 à partir de l'écart de la
             // dernière semaine COMPLÈTE mardi→lundi : 10 MHz × (1 + écart). Recalculé à chaque
