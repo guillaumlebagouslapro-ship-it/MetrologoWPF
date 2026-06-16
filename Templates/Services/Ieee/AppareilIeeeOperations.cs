@@ -280,32 +280,18 @@ namespace Metrologo.Services.Ieee
 
             await driver.EcrireAsync(appareil.Adresse, commande, appareil.WriteTerm, ct);
 
-            string reponse;
+            // Synchronisation legacy : le Delphi attendait le SRQ (l'appareil signale « mesure prête »)
+            // avant de lire UNE fois. Le serial-poll VISA ne voit pas ce SRQ sur l'EIP 545, et surtout
+            // LIRE pendant la mesure la perturbe (l'EIP reste à « 0E0 » / se re-déclenche → que des 0).
+            // On reproduit donc le comportement qui marche : après l'envoi, on laisse s'écouler le temps
+            // de mesure (gate + marge) SANS lire, puis UNE seule lecture récupère la valeur propre.
             if (appareil.GereSRQ)
             {
-                // Synchronisation pilotée par la DONNÉE. Le serial-poll MAV n'est pas exploitable sur
-                // ces compteurs legacy via VISA (l'EIP 545 ne positionne jamais le bit) ; en revanche
-                // l'appareil renvoie « 0E0 » (valeur nulle) tant que la mesure n'est pas terminée, puis
-                // la vraie valeur. On lit donc en boucle jusqu'à obtenir une valeur NON NULLE = mesure
-                // prête. Adaptatif (aussi rapide que l'appareil le permet), sans délai fixe à l'aveugle.
-                // Garde-fou temps : budget = gate + marge, au-delà on rend la dernière réponse (0.0).
-                int budgetMs = gateMs > 0 ? gateMs + 2000 : 6000;
-                int intervalleMs = Math.Min(100, Math.Max(30, gateMs / 10));
-                var sw = Stopwatch.StartNew();
-                reponse = string.Empty;
-                while (true)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
-                    if (ParserValeur(reponse, appareil.TailleHeaderReponse) != 0.0) break;  // prête
-                    if (sw.ElapsedMilliseconds >= budgetMs) break;                           // garde-fou
-                    await Task.Delay(intervalleMs, ct);
-                }
+                int delai = gateMs > 0 ? gateMs + 1000 : 2000;
+                await Task.Delay(delai, ct);
             }
-            else
-            {
-                reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
-            }
+
+            string reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
 
             // Trace la réponse brute (essentielle pour diagnostiquer un legacy muet) : on voit
             // immédiatement si l'appareil renvoie une valeur, une chaîne vide ou un format inattendu.
