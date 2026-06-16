@@ -313,10 +313,11 @@ namespace Metrologo.Services.Ieee
                 }
                 else
                 {
-                    // MAV non exploitable (déjà détecté) : la lecture immédiate reviendrait VIDE (0) car
-                    // l'EIP n'a pas fini de mesurer. On laisse s'écouler la durée de la gate (+ marge GPIB)
-                    // avant de lire → cadence = gate ET valeur valide à chaque point.
-                    int delai = gateMs > 0 ? gateMs + 80 : 1000;
+                    // MAV non exploitable (déjà détecté) : on attend que la mesure soit terminée ET sortie
+                    // avant de lire. Une marge courte (gate+80 ms) lisait une trame pas prête → valeurs
+                    // farfelues. On cale donc le délai sur ce qui marche au 1er point (gate + ~1 s), durée
+                    // observée nécessaire pour que l'EIP sorte une valeur propre après « RS ».
+                    int delai = gateMs > 0 ? gateMs + 1000 : 2000;
                     await Task.Delay(delai, ct);
                 }
             }
