@@ -749,9 +749,11 @@ namespace Metrologo.Services
                         }
                         else
                         {
-                            // Borne l'attente du MAV sur la gate (+3 s de marge) : pour un legacy à
-                            // SRQ qui ne positionne pas le MAV, on ne bloque pas indéfiniment, on lit.
-                            int mavTimeoutMs = Math.Max(5000, (int)(gateSecondes * 1000) + 3000);
+                            // Borne l'attente du MAV sur la gate (+1 s de marge) : assez pour qu'un
+                            // appareil dont le MAV fonctionne le positionne (il l'assert ~fin de gate),
+                            // mais sans plancher à 5 s. Si le MAV ne vient pas, MesurerAsync le détecte
+                            // et bascule en lecture directe pour les points suivants (cadence = gate).
+                            int mavTimeoutMs = Math.Max(1500, (int)(gateSecondes * 1000) + 1000);
                             val = await appareil.MesurerAsync(_driver, mesure, ct, mavTimeoutMs);
                         }
                         var ts = DateTime.Now;

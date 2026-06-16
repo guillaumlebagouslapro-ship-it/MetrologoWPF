@@ -280,15 +280,13 @@ namespace Metrologo.Services.Ieee
 
             await driver.EcrireAsync(appareil.Adresse, commande, appareil.WriteTerm, ct);
 
-            if (appareil.GereSRQ)
+            // Attente du MAV (Message Available) — uniquement si l'appareil gère le SRQ ET que le MAV
+            // s'est déjà avéré exploitable. Certains compteurs legacy (EIP 545…) ne positionnent pas le
+            // bit MAV via le serial-poll du driver VISA (différent du NI488 d'origine) : on le détecte au
+            // 1er timeout et on bascule en lecture directe pour tout le reste (le handshake GPIB cale alors
+            // la cadence sur la gate, au lieu d'attendre bêtement le timeout à chaque point ~> 1 val / 5 s).
+            if (appareil.GereSRQ && !appareil.MavInactif)
             {
-                // Attente du MAV (Message Available) AVANT bornage : certains compteurs legacy
-                // (EIP 545…) ne positionnent pas toujours le bit MAV via le serial-poll du driver
-                // VISA (comportement différent du NI488 d'origine). Un poll infini bloquait alors
-                // la mesure sur le 1er point (Excel ouvert, aucune valeur). On BORNE donc l'attente
-                // (timeout calé sur la gate) puis on lit quand même : si la donnée est déjà dans le
-                // buffer de sortie, la lecture la récupère ; sinon timeout VISA → chaîne vide → 0.0,
-                // sans jamais figer la mesure.
                 var sw = Stopwatch.StartNew();
                 bool mav = false;
                 while (sw.ElapsedMilliseconds < mavTimeoutMs)
@@ -302,9 +300,12 @@ namespace Metrologo.Services.Ieee
                     await Task.Delay(50, ct);
                 }
                 if (!mav)
-                    JournalLog.Warn(CategorieLog.Mesure, "MAV_TIMEOUT",
+                {
+                    appareil.MavInactif = true;   // ne plus attendre le MAV : on lira directement
+                    JournalLog.Warn(CategorieLog.Mesure, "MAV_INACTIF",
                         $"GPIB0::{appareil.Adresse} : MAV non positionné après {mavTimeoutMs} ms "
-                      + $"(cmd « {commande} ») — lecture directe tentée.");
+                      + $"(cmd « {commande} ») — passage en lecture directe (cadence = gate) pour la suite.");
+                }
             }
 
             string reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);

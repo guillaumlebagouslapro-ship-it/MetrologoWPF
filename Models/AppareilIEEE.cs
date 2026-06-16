@@ -40,6 +40,15 @@ namespace Metrologo.Models
         public string SRQOff { get; set; } = string.Empty;
 
         /// <summary>
+        /// Drapeau d'exécution (non persisté) : passé à true quand l'attente du MAV (Message Available)
+        /// a expiré sans que le bit ne se positionne — typiquement un compteur legacy (EIP 545) dont le
+        /// serial-poll n'est pas exploitable via le driver VISA. Une fois levé, les mesures suivantes ne
+        /// perdent plus de temps à attendre le MAV : elles lisent directement (le handshake GPIB cale la
+        /// cadence sur la gate). Évite la latence parasite (1 valeur toutes les ~5 s sur une gate 1 s).
+        /// </summary>
+        public bool MavInactif { get; set; }
+
+        /// <summary>
         /// Vérification d'arming après gate (commandes :FREQ:ARM:* spécifiques 53131A). true uniquement
         /// pour les modèles qui supportent cette syntaxe ; défaut false pour éviter le -113 Undefined header
         /// sur les compteurs modernes (53230A, SR620...).
