@@ -458,18 +458,22 @@
                     </Grid>
                 </Border>
 
-                <!-- Filigrane logo ASERTI en fond de ce panneau (derrière le texte, qui est
-                     transparent). Placé AVANT le TextBox pour rester en arrière-plan ; non
-                     cliquable pour ne pas gêner la sélection/scroll du texte. -->
-                <Image Grid.Row="1"
-                       Source="/Resources/logo-filigrane.png"
-                       Opacity="0.08"
-                       Stretch="Uniform"
-                       Width="460"
-                       Margin="24"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       IsHitTestVisible="False"/>
+                <!-- Filigrane logo ASERTI en fond de ce panneau (derrière le texte, transparent).
+                     Taille RELATIVE : le logo occupe ~70 % de la largeur du panneau via les colonnes
+                     en '*'. Même taille proportionnelle sur tout écran, et Stretch=Uniform garantit
+                     qu'il ne déborde jamais. Non cliquable (sélection/scroll du texte préservés). -->
+                <Grid Grid.Row="1" IsHitTestVisible="False">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="15*"/>
+                        <ColumnDefinition Width="70*"/>
+                        <ColumnDefinition Width="15*"/>
+                    </Grid.ColumnDefinitions>
+                    <Image Grid.Column="1"
+                           Source="/Resources/logo-filigrane.png"
+                           Opacity="0.12"
+                           Stretch="Uniform"
+                           IsHitTestVisible="False"/>
+                </Grid>
 
                 <TextBox Grid.Row="1"
                          Text="{Binding InformationsGenerales}"
