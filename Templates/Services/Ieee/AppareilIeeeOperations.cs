@@ -18,8 +18,6 @@ namespace Metrologo.Services.Ieee
     // réf Delphi : U_DeclarationsMETROLOGO.pas:674 (Lecture), :1047 (MesureIntervalleRacalDana), F_Main.pas:1927 (ConfigAppareil)
     public static class AppareilIeeeOperations
     {
-        // bit MAV (Message Available) du status byte IEEE-488.2
-        private const byte BitMav = 0x10;
 
         /// <summary>Envoie la chaîne d'init de l'appareil (ChaineInit du .ini).</summary>
         public static Task InitialiserAsync(
@@ -269,8 +267,9 @@ namespace Metrologo.Services.Ieee
 
         // ---------------- Interne ----------------
 
-        /// <summary>Équivalent Delphi EcritureLectureIEEE : envoi commande + attente de la mesure (MAV
-        /// si exploitable, sinon délai calé sur la gate) + lecture. gateMs = durée de gate en ms (0 = inconnu).</summary>
+        /// <summary>Équivalent Delphi EcritureLectureIEEE : envoi commande + attente que la mesure soit
+        /// prête (lecture en boucle jusqu'à une valeur non nulle pour les appareils à SRQ) + lecture.
+        /// gateMs = durée de gate en ms (0 = inconnu), sert au garde-fou temps.</summary>
         private static async Task<string> EcrireEtLireAsync(
             AppareilIEEE appareil, IIeeeDriver driver, string commande, CancellationToken ct,
             int gateMs = 0)
@@ -281,48 +280,32 @@ namespace Metrologo.Services.Ieee
 
             await driver.EcrireAsync(appareil.Adresse, commande, appareil.WriteTerm, ct);
 
+            string reponse;
             if (appareil.GereSRQ)
             {
-                if (!appareil.MavInactif)
+                // Synchronisation pilotée par la DONNÉE. Le serial-poll MAV n'est pas exploitable sur
+                // ces compteurs legacy via VISA (l'EIP 545 ne positionne jamais le bit) ; en revanche
+                // l'appareil renvoie « 0E0 » (valeur nulle) tant que la mesure n'est pas terminée, puis
+                // la vraie valeur. On lit donc en boucle jusqu'à obtenir une valeur NON NULLE = mesure
+                // prête. Adaptatif (aussi rapide que l'appareil le permet), sans délai fixe à l'aveugle.
+                // Garde-fou temps : budget = gate + marge, au-delà on rend la dernière réponse (0.0).
+                int budgetMs = gateMs > 0 ? gateMs + 2000 : 6000;
+                int intervalleMs = Math.Min(100, Math.Max(30, gateMs / 10));
+                var sw = Stopwatch.StartNew();
+                reponse = string.Empty;
+                while (true)
                 {
-                    // Attente du MAV (Message Available). Certains compteurs legacy (EIP 545…) ne le
-                    // positionnent pas via le serial-poll du driver VISA (différent du NI488 d'origine).
-                    // On le détecte ici : si le MAV ne vient pas dans la fenêtre (≈ gate + marge), on
-                    // bascule définitivement sur un DÉLAI calé sur la gate (cf. else ci-dessous).
-                    int mavTimeoutMs = gateMs > 0 ? gateMs + 1000 : 10000;
-                    var sw = Stopwatch.StartNew();
-                    bool mav = false;
-                    while (sw.ElapsedMilliseconds < mavTimeoutMs)
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        byte status;
-                        try { status = await driver.LireStatusByteAsync(appareil.Adresse, ct); }
-                        catch (OperationCanceledException) { throw; }
-                        catch { break; }   // serial-poll non supporté → délai calé sur la gate
-                        if ((status & BitMav) == BitMav) { mav = true; break; }
-                        await Task.Delay(50, ct);
-                    }
-                    if (!mav)
-                    {
-                        appareil.MavInactif = true;
-                        JournalLog.Warn(CategorieLog.Mesure, "MAV_INACTIF",
-                            $"GPIB0::{appareil.Adresse} : MAV non exploitable (cmd « {commande} ») — "
-                          + "cadence assurée par un délai calé sur la gate pour la suite.");
-                    }
-                    // Si !mav : on vient d'attendre ≈ gate+1 s, la mesure est prête → lecture directe.
-                }
-                else
-                {
-                    // MAV non exploitable (déjà détecté) : on attend que la mesure soit terminée ET sortie
-                    // avant de lire. Une marge courte (gate+80 ms) lisait une trame pas prête → valeurs
-                    // farfelues. On cale donc le délai sur ce qui marche au 1er point (gate + ~1 s), durée
-                    // observée nécessaire pour que l'EIP sorte une valeur propre après « RS ».
-                    int delai = gateMs > 0 ? gateMs + 1000 : 2000;
-                    await Task.Delay(delai, ct);
+                    ct.ThrowIfCancellationRequested();
+                    reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
+                    if (ParserValeur(reponse, appareil.TailleHeaderReponse) != 0.0) break;  // prête
+                    if (sw.ElapsedMilliseconds >= budgetMs) break;                           // garde-fou
+                    await Task.Delay(intervalleMs, ct);
                 }
             }
-
-            string reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
+            else
+            {
+                reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
+            }
 
             // Trace la réponse brute (essentielle pour diagnostiquer un legacy muet) : on voit
             // immédiatement si l'appareil renvoie une valeur, une chaîne vide ou un format inattendu.
