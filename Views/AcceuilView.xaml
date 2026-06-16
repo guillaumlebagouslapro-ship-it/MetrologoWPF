@@ -14,6 +14,19 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
+        <!-- Filigrane logo ASERTI : habille le fond blanc, très léger et non cliquable
+             (IsHitTestVisible=False) pour ne pas gêner les boutons. ZIndex négatif = tout
+             en arrière-plan, derrière le contenu. -->
+        <Image Source="/Resources/logo-filigrane.png"
+               Grid.Row="0" Grid.RowSpan="5"
+               Opacity="0.05"
+               Width="520"
+               Stretch="Uniform"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center"
+               IsHitTestVisible="False"
+               Panel.ZIndex="-1"/>
+
         <!-- Bandeau d'en-tête -->
         <Grid Grid.Row="0" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
