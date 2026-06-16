@@ -14,19 +14,6 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Filigrane logo ASERTI : habille le fond blanc, très léger et non cliquable
-             (IsHitTestVisible=False) pour ne pas gêner les boutons. ZIndex négatif = tout
-             en arrière-plan, derrière le contenu. -->
-        <Image Source="/Resources/logo-filigrane.png"
-               Grid.Row="0" Grid.RowSpan="5"
-               Opacity="0.07"
-               Width="680"
-               Stretch="Uniform"
-               HorizontalAlignment="Center"
-               VerticalAlignment="Center"
-               IsHitTestVisible="False"
-               Panel.ZIndex="-1"/>
-
         <!-- Bandeau d'en-tête -->
         <Grid Grid.Row="0" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
@@ -470,6 +457,19 @@
                         </Button>
                     </Grid>
                 </Border>
+
+                <!-- Filigrane logo ASERTI en fond de ce panneau (derrière le texte, qui est
+                     transparent). Placé AVANT le TextBox pour rester en arrière-plan ; non
+                     cliquable pour ne pas gêner la sélection/scroll du texte. -->
+                <Image Grid.Row="1"
+                       Source="/Resources/logo-filigrane.png"
+                       Opacity="0.08"
+                       Stretch="Uniform"
+                       Width="460"
+                       Margin="24"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"/>
 
                 <TextBox Grid.Row="1"
                          Text="{Binding InformationsGenerales}"
