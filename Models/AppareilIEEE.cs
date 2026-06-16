@@ -42,9 +42,10 @@ namespace Metrologo.Models
         /// <summary>
         /// Drapeau d'exécution (non persisté) : passé à true quand l'attente du MAV (Message Available)
         /// a expiré sans que le bit ne se positionne — typiquement un compteur legacy (EIP 545) dont le
-        /// serial-poll n'est pas exploitable via le driver VISA. Une fois levé, les mesures suivantes ne
-        /// perdent plus de temps à attendre le MAV : elles lisent directement (le handshake GPIB cale la
-        /// cadence sur la gate). Évite la latence parasite (1 valeur toutes les ~5 s sur une gate 1 s).
+        /// serial-poll n'est pas exploitable via le driver VISA. Une fois levé, les mesures suivantes
+        /// n'attendent plus le MAV : elles patientent un délai calé sur la gate (le temps que l'appareil
+        /// finisse la mesure) avant de lire — sinon la lecture revient vide (0) en rafale, ou attendrait
+        /// le timeout complet (~5 s) à chaque point.
         /// </summary>
         public bool MavInactif { get; set; }
 
