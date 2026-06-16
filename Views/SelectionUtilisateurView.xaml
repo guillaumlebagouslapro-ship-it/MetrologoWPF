@@ -52,12 +52,18 @@
 
                             <!-- Header : logo + version -->
                             <StackPanel Grid.Row="0">
-                                <!-- Variante claire (navy -> blanc, orange conservé) : le logo normal
-                                     a du texte navy qui se fond dans le fond dégradé navy de ce panneau. -->
-                                <Image Source="/Resources/aserti-logo-blanc.png"
-                                       Height="48"
-                                       HorizontalAlignment="Left"
-                                       Margin="0,0,0,18"/>
+                                <!-- Logo couleur sur cartouche blanc (comme la barre de navigation) :
+                                     il ressort nettement sur le fond navy, SANS artefact de détourage
+                                     (le détourage d'un logo raster laisse des bords colorés sur fond sombre). -->
+                                <Border Background="White"
+                                        CornerRadius="8"
+                                        Padding="14,10"
+                                        HorizontalAlignment="Left"
+                                        Margin="0,0,0,18">
+                                    <Image Source="/Resources/aserti-logo.png"
+                                           Height="40"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                </Border>
                                 <Border CornerRadius="20" Padding="10,4"
                                         HorizontalAlignment="Left"
                                         Background="{StaticResource AsertiOrangeBrush}">
