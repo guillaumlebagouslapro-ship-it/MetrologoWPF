@@ -472,6 +472,7 @@
                            Source="/Resources/logo-filigrane.png"
                            Opacity="0.12"
                            Stretch="Uniform"
+                           RenderOptions.BitmapScalingMode="HighQuality"
                            IsHitTestVisible="False"/>
                 </Grid>
 
@@ -486,7 +487,17 @@
                          Padding="18,14"
                          BorderThickness="0"
                          Background="Transparent"
-                         TextChanged="LogTextBox_TextChanged"/>
+                         TextChanged="LogTextBox_TextChanged">
+                    <!-- Le style WPF-UI du TextBox rend son fond OPAQUE au survol/focus, ce qui
+                         masquait/assombrissait le filigrane derrière. On force le fond à rester
+                         transparent dans tous les états (et la bordure du soulignement de focus). -->
+                    <TextBox.Resources>
+                        <SolidColorBrush x:Key="TextControlBackground" Color="Transparent"/>
+                        <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent"/>
+                        <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent"/>
+                        <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="Transparent"/>
+                    </TextBox.Resources>
+                </TextBox>
             </Grid>
         </Border>
     </Grid>
