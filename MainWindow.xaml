@@ -70,7 +70,7 @@
                         Margin="0,0,24,0"
                         VerticalAlignment="Center">
                     <Image Source="/Resources/aserti-logo.png"
-                           Height="28"
+                           Height="40"
                            Stretch="Uniform"/>
                 </Border>
 

@@ -52,8 +52,10 @@
 
                             <!-- Header : logo + version -->
                             <StackPanel Grid.Row="0">
-                                <Image Source="/Resources/aserti-logo.png"
-                                       Height="44"
+                                <!-- Variante claire (navy -> blanc, orange conservé) : le logo normal
+                                     a du texte navy qui se fond dans le fond dégradé navy de ce panneau. -->
+                                <Image Source="/Resources/aserti-logo-blanc.png"
+                                       Height="48"
                                        HorizontalAlignment="Left"
                                        Margin="0,0,0,18"/>
                                 <Border CornerRadius="20" Padding="10,4"

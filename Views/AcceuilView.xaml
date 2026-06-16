@@ -19,8 +19,8 @@
              en arrière-plan, derrière le contenu. -->
         <Image Source="/Resources/logo-filigrane.png"
                Grid.Row="0" Grid.RowSpan="5"
-               Opacity="0.05"
-               Width="520"
+               Opacity="0.07"
+               Width="680"
                Stretch="Uniform"
                HorizontalAlignment="Center"
                VerticalAlignment="Center"
