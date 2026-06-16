@@ -51,12 +51,63 @@ namespace Metrologo.Services.Catalogue
             var defauts = new List<ModeleAppareil> { Stanford(), Racal(), Eip() };
             var profils = ChargerOuCreerFichier(defauts);
 
+            // Garde-fou : appareils-legacy.json est éditable à la main et peut être périmé ou
+            // incomplet (créé par une ancienne version, ou sauvegardé alors qu'un profil était
+            // cassé). Un legacy auquel il manque un champ critique (ExeMesure, gates, init, ou
+            // l'attente SRQ pour ceux qui la gèrent) envoie sa config mais NE LIT RIEN à la mesure.
+            // On valide donc chaque profil chargé et on retombe sur le profil de référence en dur
+            // s'il est invalide — le fichier ne peut plus neutraliser silencieusement la mesure.
+            var parId = new Dictionary<string, ModeleAppareil>();
+            foreach (var d in defauts) parId[d.Id] = d;
+
+            for (int i = 0; i < profils.Count; i++)
+            {
+                var m = profils[i];
+                if (m == null) continue;
+                if (!EstProfilLegacyValide(m, parId.TryGetValue(m.Id, out var def) ? def : null)
+                    && def != null)
+                {
+                    JournalLog.Warn(CategorieLog.Configuration, "APPAREILS_LEGACY_INCOMPLET",
+                        $"Profil legacy « {m.Nom} » (Id {m.Id}) incomplet/périmé dans appareils-legacy.json "
+                      + "(ExeMesure / gates / init / SRQ manquant) — profil de référence en dur réappliqué.");
+                    profils[i] = def;
+                }
+            }
+            // Réinjecte un profil de référence absent du fichier (fichier partiel).
+            foreach (var d in defauts)
+                if (!profils.Exists(p => p != null && p.Id == d.Id)) profils.Add(d);
+
             // Remplace (et non « ajoute si absent ») : si une copie corrompue d'un legacy a fui
             // dans le catalogue principal (appareils.json), on la réécrase ici par le profil de
-            // référence chargé depuis appareils-legacy.json — auto-réparation à chaque démarrage.
+            // référence — auto-réparation à chaque démarrage.
             var svc = CatalogueAppareilsService.Instance;
             foreach (var m in profils)
                 svc.RemplacerOuAjouterEnMemoire(m);
+        }
+
+        /// <summary>
+        /// Vrai si un profil legacy chargé depuis le fichier est exploitable pour mesurer : champs
+        /// de communication critiques présents. Si <paramref name="reference"/> (profil en dur de
+        /// même Id) est fourni et qu'il gère le SRQ, on exige aussi que le profil chargé le gère
+        /// (sinon la lecture part avant le MAV et ne récupère rien — cas typique de l'EIP / Racal).
+        /// </summary>
+        private static bool EstProfilLegacyValide(ModeleAppareil m, ModeleAppareil? reference)
+        {
+            var p = m.Parametres;
+            if (p == null) return false;
+            if (!p.Legacy) return false;
+            if (string.IsNullOrWhiteSpace(p.ExeMesure)) return false;
+            if (string.IsNullOrWhiteSpace(p.ChaineInit)) return false;
+            if (p.CommandesGateParSlot == null || p.CommandesGateParSlot.Count == 0) return false;
+
+            // Cohérence SRQ : un appareil qui DOIT attendre le MAV (référence GereSrq=true) mais
+            // dont le profil chargé a perdu GereSrq / SrqOn / SrqOff lirait trop tôt → valeur vide.
+            if (reference?.Parametres?.GereSrq == true)
+            {
+                if (!p.GereSrq) return false;
+                if (string.IsNullOrWhiteSpace(p.SrqOn) || string.IsNullOrWhiteSpace(p.SrqOff)) return false;
+            }
+            return true;
         }
 
         /// <summary>
