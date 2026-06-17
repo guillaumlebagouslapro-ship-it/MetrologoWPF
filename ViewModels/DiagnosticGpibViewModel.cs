@@ -78,7 +78,7 @@ namespace Metrologo.ViewModels
                     Resultats.Add(r);
                     if (r.Repond) NbAppareilsDetectes++;
                     if (!string.IsNullOrEmpty(r.Erreur)) NbErreurs++;
-                    Statut = $"Interrogation GPIB{r.Board}::{r.Adresse} — {NbAppareilsDetectes} appareil(s) détecté(s)"
+                    Statut = $"Interrogation {r.AdresseCourte} — {NbAppareilsDetectes} appareil(s) détecté(s)"
                              + (NbErreurs > 0 ? $", {NbErreurs} erreur(s)" : "");
                 });
 
@@ -103,6 +103,8 @@ namespace Metrologo.ViewModels
                         Board = r.Board,
                         Adresse = r.Adresse,
                         Ressource = r.Ressource,
+                        TypeBus = r.TypeBus,
+                        Hote = r.Hote,
                         IdnBrut = r.ReponseIdn,
                         Fabricant = r.Fabricant,
                         Modele = r.Modele,

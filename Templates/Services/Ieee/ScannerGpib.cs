@@ -17,6 +17,13 @@ namespace Metrologo.Services.Ieee
         public int Board { get; init; }
         public int Adresse { get; init; }
         public string Ressource { get; init; } = string.Empty;
+
+        /// <summary>Interface par laquelle l'appareil a répondu (GPIB ou LAN).</summary>
+        public TypeBus TypeBus { get; init; } = TypeBus.Gpib;
+
+        /// <summary>Hôte/IP d'un appareil LAN (null en GPIB).</summary>
+        public string? Hote { get; init; }
+
         public bool Repond { get; init; }
         public string? ReponseIdn { get; init; }
         public string? Erreur { get; init; }
@@ -34,8 +41,10 @@ namespace Metrologo.Services.Ieee
         /// </summary>
         public bool ConflitAdressePossible => Repond && ScannerGpib.EstIdnSuspect(ReponseIdn);
 
-        /// <summary>Étiquette courte, ex: GPIB0::15.</summary>
-        public string AdresseCourte => $"GPIB{Board}::{Adresse}";
+        /// <summary>Étiquette courte : "GPIB0::15" ou "LAN 192.168.1.50".</summary>
+        public string AdresseCourte => TypeBus == TypeBus.Lan
+            ? $"LAN {Hote}"
+            : $"GPIB{Board}::{Adresse}";
 
         public string Affichage => Repond
             ? $"{AdresseCourte} → {Fabricant} {Modele} (série {NumeroSerie}, fw {Firmware})"
@@ -83,6 +92,10 @@ namespace Metrologo.Services.Ieee
         private static readonly Regex _regexGpib =
             new(@"^GPIB(\d+)::(\d+)(?:::\d+)?::INSTR$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        // extrait l'hôte/IP d'une chaîne VISA TCPIP (ex "TCPIP0::192.168.1.50::inst0::INSTR")
+        private static readonly Regex _regexTcpip =
+            new(@"^TCPIP\d*::([^:]+)::", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         /// <summary>
         /// Scanne le bus via ResourceManager.Find() (rapide). Si Find() ne donne rien, fallback
         /// en balayage séquentiel 1..30 sur le board indiqué (appareil pas encore vu par VISA).
@@ -96,28 +109,43 @@ namespace Metrologo.Services.Ieee
             var resultats = new List<ResultatScanGpib>();
             using var rm = new ResourceManager();
 
-            // ---- Passe 1 : utilisation de Find() (méthode VISA native) ----
-            List<string> ressources;
-            try { ressources = new List<string>(rm.Find("GPIB?*INSTR")); }
-            catch (NativeVisaException) { ressources = new List<string>(); }
+            // ---- Bus GPIB : Find() VISA, sinon fallback balayage séquentiel 1..30 ----
+            List<string> ressourcesGpib;
+            try { ressourcesGpib = new List<string>(rm.Find("GPIB?*INSTR")); }
+            catch (NativeVisaException) { ressourcesGpib = new List<string>(); }
 
-            if (ressources.Count > 0)
+            if (ressourcesGpib.Count > 0)
             {
-                foreach (var res in ressources)
+                foreach (var res in ressourcesGpib)
                 {
                     ct.ThrowIfCancellationRequested();
                     var r = await Task.Run(() => InterrogerRessource(rm, res, timeoutMs), ct);
                     resultats.Add(r);
                     progress?.Report(r);
                 }
-                return resultats;
+            }
+            else
+            {
+                for (int addr = AdressePremiere; addr <= AdresseDerniere; addr++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var r = await Task.Run(() => InterrogerAdresse(rm, gpibBoard, addr, timeoutMs), ct);
+                    resultats.Add(r);
+                    progress?.Report(r);
+                }
             }
 
-            // ---- Passe 2 (fallback) : balayage séquentiel sur le board indiqué ----
-            for (int addr = AdressePremiere; addr <= AdresseDerniere; addr++)
+            // ---- Bus LAN (LXI / VXI-11) : Find() des ressources TCPIP::INSTR. Pas de balayage
+            //      séquentiel ici (on ne sonde pas une plage d'IP) : VISA ne remonte que les
+            //      appareils qu'il découvre sur le sous-réseau ou configurés dans NI-MAX. ----
+            List<string> ressourcesLan;
+            try { ressourcesLan = new List<string>(rm.Find("TCPIP?*INSTR")); }
+            catch (NativeVisaException) { ressourcesLan = new List<string>(); }
+
+            foreach (var res in ressourcesLan)
             {
                 ct.ThrowIfCancellationRequested();
-                var r = await Task.Run(() => InterrogerAdresse(rm, gpibBoard, addr, timeoutMs), ct);
+                var r = await Task.Run(() => InterrogerRessource(rm, res, timeoutMs), ct);
                 resultats.Add(r);
                 progress?.Report(r);
             }
@@ -157,6 +185,16 @@ namespace Metrologo.Services.Ieee
                 int.TryParse(m.Groups[2].Value, out addr);
             }
 
+            // type de bus + hôte LAN d'après la chaîne VISA
+            bool estLan = resource.StartsWith("TCPIP", StringComparison.OrdinalIgnoreCase);
+            TypeBus typeBus = estLan ? TypeBus.Lan : TypeBus.Gpib;
+            string? hote = null;
+            if (estLan)
+            {
+                var ml = _regexTcpip.Match(resource);
+                if (ml.Success) hote = ml.Groups[1].Value;
+            }
+
             try
             {
                 using var session = (IMessageBasedSession)rm.Open(resource);
@@ -172,6 +210,8 @@ namespace Metrologo.Services.Ieee
                     Board = board,
                     Adresse = addr,
                     Ressource = resource,
+                    TypeBus = typeBus,
+                    Hote = hote,
                     Repond = !string.IsNullOrWhiteSpace(reponse),
                     ReponseIdn = reponse,
                     Fabricant = fab,
@@ -182,13 +222,13 @@ namespace Metrologo.Services.Ieee
             }
             catch (IOTimeoutException)
             {
-                return new ResultatScanGpib { Board = board, Adresse = addr, Ressource = resource, Repond = false };
+                return new ResultatScanGpib { Board = board, Adresse = addr, Ressource = resource, TypeBus = typeBus, Hote = hote, Repond = false };
             }
             catch (NativeVisaException ex)
             {
                 return new ResultatScanGpib
                 {
-                    Board = board, Adresse = addr, Ressource = resource,
+                    Board = board, Adresse = addr, Ressource = resource, TypeBus = typeBus, Hote = hote,
                     Repond = false,
                     Erreur = $"VISA {ex.ErrorCode}: {ex.Message.Split('\n')[0]}"
                 };
@@ -197,7 +237,7 @@ namespace Metrologo.Services.Ieee
             {
                 return new ResultatScanGpib
                 {
-                    Board = board, Adresse = addr, Ressource = resource,
+                    Board = board, Adresse = addr, Ressource = resource, TypeBus = typeBus, Hote = hote,
                     Repond = false,
                     Erreur = $"{ex.GetType().Name}: {ex.Message.Split('\n')[0]}"
                 };

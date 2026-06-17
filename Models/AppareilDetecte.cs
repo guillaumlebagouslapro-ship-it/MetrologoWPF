@@ -7,6 +7,13 @@ namespace Metrologo.Models
         public int Board { get; init; }
         public int Adresse { get; init; }
         public string Ressource { get; init; } = string.Empty;
+
+        /// <summary>Interface par laquelle l'appareil a répondu (GPIB ou LAN).</summary>
+        public TypeBus TypeBus { get; init; } = TypeBus.Gpib;
+
+        /// <summary>Hôte/IP d'un appareil LAN (null en GPIB).</summary>
+        public string? Hote { get; init; }
+
         public string? IdnBrut { get; init; }
         public string? Fabricant { get; init; }
         public string? Modele { get; init; }
@@ -25,7 +32,9 @@ namespace Metrologo.Models
         /// partageant la même adresse GPIB (collision de bus). C'est le scan qui le renseigne.</summary>
         public bool ConflitAdressePossible { get; init; }
 
-        public string AdresseCourte => $"GPIB{Board}::{Adresse}";
+        public string AdresseCourte => TypeBus == TypeBus.Lan
+            ? $"LAN {Hote}"
+            : $"GPIB{Board}::{Adresse}";
 
         public string Libelle => ModeleReconnu?.Nom
             ?? (Modele is null ? $"Inconnu ({AdresseCourte})" : $"{Modele} ({AdresseCourte})");

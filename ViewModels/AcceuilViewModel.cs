@@ -199,6 +199,8 @@ namespace Metrologo.ViewModels
                             Board = r.Board,
                             Adresse = r.Adresse,
                             Ressource = r.Ressource,
+                            TypeBus = r.TypeBus,
+                            Hote = r.Hote,
                             IdnBrut = r.ReponseIdn,
                             Fabricant = r.Fabricant,
                             Modele = r.Modele,

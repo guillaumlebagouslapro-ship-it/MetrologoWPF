@@ -39,4 +39,11 @@ namespace Metrologo.Models
         B,
         C
     }
+
+    /// <summary>Interface physique par laquelle un appareil est joignable.</summary>
+    public enum TypeBus
+    {
+        Gpib,
+        Lan
+    }
 }
