@@ -275,6 +275,7 @@ namespace Metrologo.ViewModels
             if (MesureConfig.TypeMesure == TypeMesure.Interval && !MesureConfig.InitManu)
                 MesureConfig.InitManu = true;
 
+            SyncIntervalleTexte();   // aligne les champs texte sur la config restaurée
             RefreshAll();
         }
 
@@ -696,36 +697,56 @@ namespace Metrologo.ViewModels
             set { MesureConfig.IntervImp50_2 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp50_2)); }
         }
 
-        // Seuils (V) et hold-off (ns) : champs texte (gèrent virgule/point)
+        // Seuils (V) et hold-off (ns) : champs texte.
+        // IMPORTANT : on garde le texte saisi tel quel dans un champ de backing (et on ne le
+        // reformate PAS depuis le double à chaque frappe), sinon le getter écrase la saisie en
+        // cours (impossible de taper "1.", "-", "0,5"…). Le double n'est mis à jour que quand le
+        // texte est parsable. SyncIntervalleTexte() resynchronise depuis le modèle au chargement.
+        private string _intervSeuilStartTexte = "1";
+        private string _intervSeuilStopTexte = "1";
+        private string _intervHoldoffTexte = "0";
+
         public string IntervSeuilStartTexte
         {
-            get => MesureConfig.IntervSeuilStart.ToString(CultureInfo.InvariantCulture);
+            get => _intervSeuilStartTexte;
             set
             {
-                if (double.TryParse((value ?? "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                _intervSeuilStartTexte = value ?? string.Empty;
+                if (double.TryParse(_intervSeuilStartTexte.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
                     MesureConfig.IntervSeuilStart = v;
                 OnPropertyChanged();
             }
         }
         public string IntervSeuilStopTexte
         {
-            get => MesureConfig.IntervSeuilStop.ToString(CultureInfo.InvariantCulture);
+            get => _intervSeuilStopTexte;
             set
             {
-                if (double.TryParse((value ?? "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                _intervSeuilStopTexte = value ?? string.Empty;
+                if (double.TryParse(_intervSeuilStopTexte.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
                     MesureConfig.IntervSeuilStop = v;
                 OnPropertyChanged();
             }
         }
         public string IntervHoldoffTexte
         {
-            get => MesureConfig.IntervHoldoffNs.ToString(CultureInfo.InvariantCulture);
+            get => _intervHoldoffTexte;
             set
             {
-                if (double.TryParse((value ?? "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                _intervHoldoffTexte = value ?? string.Empty;
+                if (double.TryParse(_intervHoldoffTexte.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
                     MesureConfig.IntervHoldoffNs = v < 0 ? 0 : v;
                 OnPropertyChanged();
             }
+        }
+
+        /// <summary>Resynchronise les champs texte intervalle depuis le modèle (au chargement d'une
+        /// config). À ne PAS appeler pendant la frappe, sinon on écrase la saisie en cours.</summary>
+        private void SyncIntervalleTexte()
+        {
+            _intervSeuilStartTexte = MesureConfig.IntervSeuilStart.ToString(CultureInfo.InvariantCulture);
+            _intervSeuilStopTexte = MesureConfig.IntervSeuilStop.ToString(CultureInfo.InvariantCulture);
+            _intervHoldoffTexte = MesureConfig.IntervHoldoffNs.ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>Notifie l'UI de tout l'état du panneau intervalle (visibilités + valeurs).</summary>
