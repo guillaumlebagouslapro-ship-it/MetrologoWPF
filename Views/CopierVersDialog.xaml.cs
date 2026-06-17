@@ -8,9 +8,9 @@ using Wpf.Ui.Controls;
 namespace Metrologo.Views
 {
     /// <summary>
-    /// Dialog minimal pour choisir la catégorie cible quand on copie un module
-    /// d'incertitude d'un sous-dossier vers un autre. Exclut la catégorie source
-    /// pour éviter une copie no-op.
+    /// Petite boîte de dialogue pour choisir la catégorie de destination lorsqu'on
+    /// copie un module d'incertitude d'un sous-dossier à un autre. On retire la
+    /// catégorie source de la liste, copier un module sur lui-même n'aurait aucun sens.
     /// </summary>
     public partial class CopierVersDialog : FluentWindow
     {
@@ -25,7 +25,7 @@ namespace Metrologo.Views
                 + "Choisis la catégorie cible. Si un module portant le même n° y existe déjà, "
                 + "il sera écrasé après confirmation.";
 
-            // Toutes les catégories sauf la source.
+            // On propose toutes les catégories, sauf celle d'où vient le module.
             var options = new[]
             {
                 new OptionTypeMesure(TypeMesure.Frequence,       EnTetesMesureHelper.LibelleType(TypeMesure.Frequence)),

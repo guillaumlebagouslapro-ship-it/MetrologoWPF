@@ -15,9 +15,9 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// Sert aussi pour le renommage : pré-remplit les champs et change le titre +
-        /// libellé du bouton + texte d'intro. Le ViewModel appelle ensuite Renommer()
-        /// au lieu d'Ajouter().
+        /// Le même dialogue sert aussi à renommer : on pré-remplit les champs et on adapte
+        /// le titre, le libellé du bouton et le texte d'intro. Du coup le ViewModel appelle
+        /// Renommer() plutôt qu'Ajouter().
         /// </summary>
         public void ConfigurerPourRenommage(string nomActuel, string prenomActuel)
         {

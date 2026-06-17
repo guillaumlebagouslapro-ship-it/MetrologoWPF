@@ -8,8 +8,9 @@ namespace Metrologo.Views
     public partial class ConfigurationWindow : FluentWindow
     {
         /// <summary>
-        /// Évite la récursion infinie quand le handler TextChanged modifie lui-même
-        /// le contenu du TextBox (ce qui re-déclenche TextChanged).
+        /// Garde-fou : quand le handler TextChanged retouche lui-même le contenu du
+        /// TextBox, ça relance un TextChanged. Ce drapeau coupe la boucle pour ne pas
+        /// tourner en rond.
         /// </summary>
         private bool _miseAJourNumFI;
 
@@ -31,16 +32,16 @@ namespace Metrologo.Views
 
         private void TypeMesure_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            // On appelle la logique du ViewModel
+            // On laisse le ViewModel faire son travail
             (DataContext as ConfigurationViewModel)?.OnTypeMesureChanged();
         }
 
         /// <summary>
-        /// Auto-format de la saisie du N° FI au format <c>XX_NNNNN</c> (8 caractères) :
+        /// Met en forme la saisie du N° FI à la volée, au format <c>XX_NNNNN</c> (8 caractères) :
         /// <list type="bullet">
-        ///   <item>1ère lettre forcée en MAJUSCULE (les FI sont stockées en majuscule en BDD).</item>
-        ///   <item>Insère automatiquement <c>_</c> après les 2 premiers caractères saisis.</item>
-        ///   <item>Ne se ré-insère PAS si l'utilisateur efface (backspace OK pour corriger).</item>
+        ///   <item>la 1ère lettre passe en MAJUSCULE (c'est ainsi que les FI sont stockées en BDD).</item>
+        ///   <item>le <c>_</c> s'insère tout seul après les 2 premiers caractères.</item>
+        ///   <item>mais on ne le remet pas quand l'utilisateur efface, pour qu'il puisse corriger au backspace.</item>
         /// </list>
         /// </summary>
         private void OnNumFITextChanged(object sender, TextChangedEventArgs e)
@@ -48,9 +49,9 @@ namespace Metrologo.Views
             if (_miseAJourNumFI) return;
             if (sender is not System.Windows.Controls.TextBox tb) return;
 
-            // Détecte si l'utilisateur vient de SUPPRIMER (backspace, delete) :
-            // dans ce cas on ne ré-insère pas le _, sinon il serait impossible
-            // d'éditer le champ après avoir tapé 2 caractères.
+            // Est-ce que l'utilisateur vient d'effacer (backspace, delete) ? Si oui,
+            // on s'abstient de remettre le _, faute de quoi le champ deviendrait
+            // impossible à éditer une fois les 2 premiers caractères tapés.
             bool suppression = false;
             foreach (var ch in e.Changes)
             {
@@ -60,16 +61,16 @@ namespace Metrologo.Views
             string texte = tb.Text ?? string.Empty;
             string nouveau = texte;
 
-            // 1ère lettre en majuscule (D, E, F, G…) — pas d'effet si déjà majuscule
+            // Première lettre en majuscule (D, E, F, G…) ; on ne touche à rien si elle l'est déjà
             if (nouveau.Length >= 1 && char.IsLetter(nouveau[0]) && !char.IsUpper(nouveau[0]))
             {
                 nouveau = char.ToUpper(nouveau[0]) + (nouveau.Length > 1 ? nouveau.Substring(1) : string.Empty);
             }
 
-            // Gestion du séparateur _ en position 3 :
-            //   - on vient de taper le 3e caractère → l'ajouter en bout
-            //   - l'utilisateur a effacé le _ alors qu'il y a du texte derrière → le réinsérer
-            //     (sinon le format XX_NNNNN serait cassé silencieusement)
+            // Le séparateur _ va en 3e position :
+            //   - si on vient de taper le 3e caractère, on l'accroche au bout
+            //   - si l'utilisateur a effacé le _ mais qu'il reste du texte derrière, on le remet
+            //     (sans ça, le format XX_NNNNN se casserait sans prévenir)
             if (!nouveau.Contains('_'))
             {
                 if (nouveau.Length == 2 && !suppression)
@@ -86,11 +87,12 @@ namespace Metrologo.Views
             {
                 _miseAJourNumFI = true;
                 tb.Text = nouveau;
-                tb.CaretIndex = nouveau.Length;   // place le curseur en fin
+                tb.CaretIndex = nouveau.Length;   // on remet le curseur à la fin
                 _miseAJourNumFI = false;
             }
 
-            // Re-évalue l'étape 1 (FI valide) qui pilote l'affichage des sections suivantes.
+            // On redemande l'évaluation de l'étape 1 (FI valide), c'est elle qui décide
+            // de l'affichage des sections suivantes.
             (DataContext as ConfigurationViewModel)?.NotifierEtapes();
         }
     }

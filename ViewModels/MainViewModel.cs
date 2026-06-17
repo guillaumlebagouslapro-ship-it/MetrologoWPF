@@ -37,8 +37,8 @@ namespace Metrologo.ViewModels
 
         private readonly AccueilViewModel _accueilViewModel = new();
 
-        /// <summary>Exposé pour que le bandeau de navigation (MainWindow.xaml) puisse binder
-        /// les commandes/propriétés GPIB remontées hors de la zone de mesure (scan, badge nb appareils...).</summary>
+        /// <summary>Rendu accessible pour que le bandeau de navigation (MainWindow.xaml) puisse se binder
+        /// aux commandes et propriétés GPIB sorties de la zone de mesure (scan, badge du nombre d'appareils, etc.).</summary>
         public AccueilViewModel Accueil => _accueilViewModel;
         private readonly AdminViewModel _adminViewModel = new();
         private readonly SelectionPosteViewModel _selectionPosteViewModel = new();
@@ -50,8 +50,8 @@ namespace Metrologo.ViewModels
         public bool EstEnSelectionScanMode => VueActuelle is SelectionScanModeViewModel;
         public bool EstEnSelectionUtilisateur => VueActuelle is SelectionUtilisateurViewModel;
 
-        /// <summary>Faux tant que l'utilisateur n'a pas choisi son identité + son poste : on masque
-        /// la nav et la barre de statut pour empêcher de sauter ces étapes via le bouton Accueil.</summary>
+        /// <summary>Reste faux tant que l'utilisateur n'a pas choisi son identité ET son poste : on
+        /// cache la navigation et la barre de statut pour l'empêcher de court-circuiter ces étapes via le bouton Accueil.</summary>
         public bool NavigationActive => !EstEnSelectionPoste && !EstEnSelectionScanMode && !EstEnSelectionUtilisateur;
 
         public string TexteMode => EstEnModeAdmin ? "Mode : Administration" : "Mode : Exploitation";
@@ -68,14 +68,14 @@ namespace Metrologo.ViewModels
         }
         public string RubidiumActifTexte => _accueilViewModel.RubidiumActifTexte;
 
-        // changements admin reçus depuis un AUTRE poste (indicateur triangle d'alerte persistant)
+        // changements admin qui nous arrivent d'un AUTRE poste (matérialisés par le triangle d'alerte persistant)
         private readonly List<EntreeJournalAdmin> _changementsAdmin = new();
 
         /// <summary>Vrai tant qu'un changement admin reçu n'a pas été acquitté
-        /// (triangle d'alerte dans le bandeau, disparaît au clic).</summary>
+        /// (c'est le triangle d'alerte du bandeau, qui s'efface au clic).</summary>
         [ObservableProperty] private bool _aChangementsAdminEnAttente;
 
-        /// <summary>Badge sur le triangle : nombre de changements non acquittés.</summary>
+        /// <summary>Le badge affiché sur le triangle : combien de changements restent à acquitter.</summary>
         [ObservableProperty] private int _nbChangementsAdmin;
 
         /// <summary>Texte de l'infobulle du triangle.</summary>

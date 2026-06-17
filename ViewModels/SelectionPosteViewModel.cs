@@ -9,8 +9,8 @@ namespace Metrologo.ViewModels
         public Action<bool>? OnPosteSelectionne { get; set; }
 
         /// <summary>
-        /// Invoqué quand l'utilisateur veut revenir à l'écran de connexion (ex. mauvais
-        /// utilisateur sélectionné au démarrage) sans avoir à redémarrer l'application.
+        /// Appelé lorsque l'utilisateur souhaite retourner à l'écran de connexion — par exemple
+        /// s'il s'est trompé de compte au démarrage — sans devoir relancer l'application.
         /// </summary>
         public Action? OnRetour { get; set; }
 

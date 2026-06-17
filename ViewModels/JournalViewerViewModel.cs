@@ -11,10 +11,11 @@ using System.Threading.Tasks;
 namespace Metrologo.ViewModels
 {
     /// <summary>
-    /// Journal d'activité Admin — vue par fiche d'intervention (FI). Chaque FI possède son propre
-    /// fichier log (<c>Journal_&lt;FI&gt;.txt</c>) dans son dossier ; cette vue liste les FI avec
-    /// quelques infos (opérateurs, dernière activité, nb de mesures) et un accès rapide pour ouvrir
-    /// le fichier log ou son dossier. Remplace l'ancien journal SQL centralisé.
+    /// Journal d'activité Admin, organisé par fiche d'intervention (FI). Chaque FI a son
+    /// propre fichier log (<c>Journal_&lt;FI&gt;.txt</c>) rangé dans son dossier ; cet écran
+    /// dresse la liste des FI avec l'essentiel (opérateurs, dernière activité, nombre de
+    /// mesures) et permet d'ouvrir d'un clic le fichier log ou son dossier. C'est le
+    /// successeur de l'ancien journal SQL centralisé.
     /// </summary>
     public partial class JournalViewerViewModel : ObservableObject
     {
@@ -24,7 +25,7 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _recherche = string.Empty;
         [ObservableProperty] private string _statut = "Prêt.";
 
-        /// <summary>Dossier racine (Mesures) scanné — affiché en pied de fenêtre.</summary>
+        /// <summary>Dossier racine (Mesures) qu'on parcourt ; rappelé en pied de fenêtre.</summary>
         public string DossierRacine => JournalFIListeService.DossierRacine;
 
         public JournalViewerViewModel()
@@ -65,7 +66,7 @@ namespace Metrologo.ViewModels
             foreach (var f in src) Fiches.Add(f);
         }
 
-        /// <summary>Ouvre le fichier <c>Journal_&lt;FI&gt;.txt</c> avec l'application par défaut.</summary>
+        /// <summary>Ouvre le fichier <c>Journal_&lt;FI&gt;.txt</c> dans l'application associée par Windows.</summary>
         [RelayCommand]
         private void OuvrirFichier(FicheJournalInfo? fiche)
         {
@@ -84,7 +85,7 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>Ouvre l'explorateur sur le dossier de la FI (fichier log sélectionné si présent).</summary>
+        /// <summary>Ouvre l'explorateur sur le dossier de la FI, en pré-sélectionnant le fichier log s'il existe.</summary>
         [RelayCommand]
         private void OuvrirDossier(FicheJournalInfo? fiche)
         {

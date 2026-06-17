@@ -7,8 +7,8 @@ using System.Text;
 namespace Metrologo.Services.Journal
 {
     /// <summary>
-    /// Résumé d'une fiche d'intervention (FI) pour le journal Admin : accès rapide au fichier
-    /// log de la FI + quelques infos (opérateurs ayant travaillé dessus, dernière activité).
+    /// Résumé d'une fiche d'intervention (FI) pour le journal Admin : un accès rapide au fichier
+    /// log de la FI, plus quelques infos (qui a travaillé dessus, dernière activité).
     /// </summary>
     public sealed class FicheJournalInfo
     {
@@ -26,15 +26,15 @@ namespace Metrologo.Services.Journal
     }
 
     /// <summary>
-    /// Liste les fiches d'intervention (FI) à partir des dossiers présents sous
-    /// <see cref="CheminsMetrologo.MesuresLocal"/> (= emplacement Mesures configuré, par défaut le
-    /// partage réseau). Pour chaque FI, lit son <c>Journal_&lt;FI&gt;.txt</c> pour en extraire les
-    /// opérateurs et la dernière activité. Remplace l'ancien journal SQL dans la vue Admin :
-    /// chaque FI a désormais son propre fichier log, on n'offre qu'un accès rapide à ce fichier.
+    /// Dresse la liste des fiches d'intervention (FI) à partir des dossiers présents sous
+    /// <see cref="CheminsMetrologo.MesuresLocal"/> (l'emplacement Mesures configuré, par défaut le
+    /// partage réseau). Pour chaque FI, on lit son <c>Journal_&lt;FI&gt;.txt</c> pour en tirer les
+    /// opérateurs et la dernière activité. Cela remplace l'ancien journal SQL de la vue Admin :
+    /// chaque FI a maintenant son propre fichier log, et on se contente d'y donner un accès rapide.
     /// </summary>
     public static class JournalFIListeService
     {
-        /// <summary>Dossier racine contenant un sous-dossier par FI.</summary>
+        /// <summary>Dossier racine, avec un sous-dossier par FI.</summary>
         public static string DossierRacine => CheminsMetrologo.MesuresLocal;
 
         public static List<FicheJournalInfo> Lister()
@@ -50,7 +50,7 @@ namespace Metrologo.Services.Journal
                 {
                     string numFI = Path.GetFileName(dossier);
 
-                    // Fichier journal attendu : Journal_<FI>.txt ; à défaut, tout Journal_*.txt.
+                    // On attend un Journal_<FI>.txt ; à défaut, on prend le premier Journal_*.txt venu.
                     string logAttendu = Path.Combine(dossier, $"Journal_{numFI}.txt");
                     string? log = File.Exists(logAttendu)
                         ? logAttendu
@@ -70,13 +70,13 @@ namespace Metrologo.Services.Journal
 
                     resultats.Add(info);
                 }
-                catch { /* dossier illisible → ignoré */ }
+                catch { /* dossier illisible : on l'ignore */ }
             }
 
             return resultats.OrderByDescending(f => f.DerniereActivite).ToList();
         }
 
-        /// <summary>Extrait les opérateurs (en-têtes « Utilisateur : … ») et le nombre de mesures.</summary>
+        /// <summary>Récupère les opérateurs (lignes d'en-tête « Utilisateur : … ») et le nombre de mesures.</summary>
         private static void AnalyserLog(string chemin, FicheJournalInfo info)
         {
             try
@@ -103,7 +103,7 @@ namespace Metrologo.Services.Journal
                 info.Operateurs = operateurs;
                 info.NbMesures = nbMesures;
             }
-            catch { /* lecture partielle → on garde ce qui a été lu */ }
+            catch { /* lecture interrompue : on garde ce qu'on a déjà lu */ }
         }
     }
 }

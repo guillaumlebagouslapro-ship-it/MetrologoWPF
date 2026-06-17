@@ -27,7 +27,7 @@ namespace Metrologo.Views
             Close();
         }
 
-        /// <summary>Ouvre le lien de téléchargement dans le navigateur par défaut.</summary>
+        /// <summary>Ouvre le lien de téléchargement dans le navigateur par défaut de l'utilisateur.</summary>
         private void OnHyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             try
@@ -41,7 +41,7 @@ namespace Metrologo.Views
             }
             catch
             {
-                // Best-effort : si le browser n'est pas configuré, on laisse tomber.
+                // Pas grave : si aucun navigateur n'est configuré sur le poste, on n'insiste pas.
             }
         }
     }

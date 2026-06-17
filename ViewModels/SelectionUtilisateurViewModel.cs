@@ -10,9 +10,9 @@ using System.Linq;
 namespace Metrologo.ViewModels
 {
     /// <summary>
-    /// Premier écran affiché au démarrage : un menu déroulant qui liste les comptes
-    /// locaux. L'utilisateur choisit qui se connecte (pas de mot de passe à ce stade),
-    /// puis on enchaîne sur la sélection Baie / Paillasse.
+    /// C'est le tout premier écran au démarrage : un menu déroulant qui présente les comptes
+    /// locaux. L'utilisateur indique simplement qui se connecte (aucun mot de passe à ce
+    /// stade), puis on enchaîne sur le choix Baie / Paillasse.
     /// </summary>
     public partial class SelectionUtilisateurViewModel : ObservableObject
     {
@@ -28,19 +28,19 @@ namespace Metrologo.ViewModels
 
         public bool ListeVide => Utilisateurs.Count == 0;
 
-        /// <summary>Date du jour formatée en français (ex. « mardi 22 mai 2026 »).
-        /// Rafraîchie en continu par le timer (l'écran de lancement peut rester
-        /// affiché des heures — la date/heure doit suivre).</summary>
+        /// <summary>Date du jour mise en forme à la française (ex. « mardi 22 mai 2026 »).
+        /// Le timer la rafraîchit en permanence : l'écran d'accueil peut rester ouvert des
+        /// heures, et la date comme l'heure doivent rester justes.</summary>
         public string DateActuelle =>
             CultureInfo.GetCultureInfo("fr-FR").TextInfo.ToTitleCase(
                 DateTime.Now.ToString("dddd d MMMM yyyy", CultureInfo.GetCultureInfo("fr-FR")));
 
-        /// <summary>Heure du jour formatée HH:mm, rafraîchie en continu.</summary>
+        /// <summary>Heure courante au format HH:mm, elle aussi rafraîchie en continu.</summary>
         public string HeureActuelle => DateTime.Now.ToString("HH:mm");
 
-        // Timer UI qui notifie DateActuelle/HeureActuelle chaque seconde — l'affichage
-        // ne change visuellement qu'au changement de minute, mais le tick fin évite un
-        // décalage perceptible juste après l'ouverture de l'écran.
+        // Timer UI qui renotifie DateActuelle/HeureActuelle à chaque seconde. À l'écran
+        // rien ne bouge avant le changement de minute, mais ce tick rapproché évite le
+        // petit décalage qu'on percevrait juste après l'ouverture de l'écran.
         private readonly System.Windows.Threading.DispatcherTimer _horloge;
 
         public string NombreComptesTexte => Utilisateurs.Count switch
@@ -71,13 +71,13 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Recharge la liste depuis le service local. À appeler après un retour de la
-        /// fenêtre Gestion des utilisateurs si on veut refléter une création récente.
+        /// Recharge la liste à partir du service local. À déclencher au retour de la fenêtre
+        /// Gestion des utilisateurs pour que les comptes fraîchement créés apparaissent.
         /// </summary>
         public void Recharger()
         {
-            // Relit le JSON à jour (cache mémoire invalidé) — indispensable pour voir un compte
-            // tout juste créé, y compris depuis un autre poste, sans redémarrer l'application.
+            // On invalide le cache mémoire pour relire le JSON à jour. C'est ce qui permet de
+            // voir un compte tout juste créé, même depuis un autre poste, sans relancer l'appli.
             Preferences.InvaliderCacheUtilisateurs();
 
             Utilisateurs.Clear();

@@ -7,10 +7,10 @@ using Metrologo.Views;
 namespace Metrologo.Services.Journal
 {
     /// <summary>
-    /// Surveille le journal d'audit administrateur partagé et affiche un toast non-bloquant sur
-    /// CE poste quand un changement de configuration a été fait depuis un AUTRE poste (rubidium,
-    /// chemins, modules d'incertitude, catalogue, utilisateurs…). Lecture incrémentale toutes les
-    /// 12 s. Démarré au lancement de l'app (thread UI).
+    /// Garde un œil sur le journal d'audit administrateur partagé et fait apparaître un toast
+    /// (sans bloquer) sur CE poste dès qu'un AUTRE poste a modifié la configuration : rubidium,
+    /// chemins, modules d'incertitude, catalogue, utilisateurs… On relit le fichier de façon
+    /// incrémentale toutes les 12 s. Démarré au lancement de l'app, sur le thread UI.
     /// </summary>
     public static class NotificationsAdminWatcher
     {
@@ -19,8 +19,8 @@ namespace Metrologo.Services.Journal
         private static readonly string _machine = Environment.MachineName;
 
         /// <summary>
-        /// Levé (sur le thread UI) à chaque lot de changements admin reçus depuis un AUTRE poste.
-        /// Permet à la barre de navigation d'afficher un indicateur persistant (triangle ⚠).
+        /// Déclenché (sur le thread UI) à chaque lot de changements admin venus d'un AUTRE poste.
+        /// La barre de navigation s'en sert pour afficher un indicateur persistant (triangle ⚠).
         /// </summary>
         public static event Action<IReadOnlyList<EntreeJournalAdmin>>? ChangementsRecus;
 
@@ -28,8 +28,8 @@ namespace Metrologo.Services.Journal
         {
             if (_timer != null) return;
 
-            // Baseline : on part de la fin du fichier → on ne notifie pas pour ce qui s'est
-            // passé AVANT le lancement de ce poste, seulement les changements à venir.
+            // Point de départ : on se cale sur la fin du fichier, pour ne pas notifier ce qui
+            // s'est passé AVANT le lancement de ce poste, mais seulement ce qui arrivera ensuite.
             _position = JournalAdminService.Position();
 
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
@@ -44,15 +44,15 @@ namespace Metrologo.Services.Journal
             catch { return; }
             if (nouvelles.Count == 0) return;
 
-            // Ne notifie que les CHANGEMENTS faits par un AUTRE poste (pas soi-même), en
-            // excluant les simples accès admin (login) qui ne modifient pas la configuration.
+            // On ne notifie que les CHANGEMENTS d'un AUTRE poste (pas les nôtres), et on laisse
+            // de côté les simples accès admin (login) qui ne touchent pas à la configuration.
             var autres = nouvelles
                 .Where(e => !string.Equals(e.Machine, _machine, StringComparison.OrdinalIgnoreCase))
                 .Where(e => !e.Action.StartsWith("ACCES_ADMIN", StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (autres.Count == 0) return;
 
-            // Indicateur persistant dans le bandeau (en plus du toast éphémère).
+            // Indicateur qui reste affiché dans le bandeau (en plus du toast passager).
             try { ChangementsRecus?.Invoke(autres); } catch { }
 
             if (autres.Count == 1)

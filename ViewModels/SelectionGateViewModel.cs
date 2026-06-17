@@ -13,16 +13,17 @@ using System.Windows;
 namespace Metrologo.ViewModels
 {
     /// <summary>
-    /// ViewModel de la sélection du temps de porte.
+    /// ViewModel de l'écran de choix du temps de porte.
     /// <para>
-    /// Pour les types non-Stabilité, expose une combo des gates disponibles et renvoie
-    /// un unique indice dans <see cref="IndicesGatesResultats"/> (1 élément).
+    /// Hors Stabilité, on présente une combo des gates disponibles et on ne renvoie qu'un
+    /// seul indice dans <see cref="IndicesGatesResultats"/> (la liste ne contient alors qu'un élément).
     /// </para>
     /// <para>
-    /// Pour la Stabilité, expose les gates disponibles en cases à cocher : l'utilisateur
-    /// peut en cocher plusieurs pour balayer la liste séquentiellement (équivalent moderne
-    /// des « procédures auto » historiques). Les combinaisons fréquentes sont stockées
-    /// comme presets dans <see cref="PresetsStabiliteService"/>, éditables sans recompiler.
+    /// En Stabilité, les gates s'affichent sous forme de cases à cocher : l'utilisateur peut
+    /// en sélectionner plusieurs pour les balayer l'une après l'autre — c'est la version
+    /// moderne des anciennes « procédures auto ». Les combinaisons qui reviennent souvent sont
+    /// conservées comme presets dans <see cref="PresetsStabiliteService"/>, modifiables sans
+    /// avoir à recompiler.
     /// </para>
     /// </summary>
     public partial class SelectionGateViewModel : ObservableObject
@@ -31,13 +32,13 @@ namespace Metrologo.ViewModels
 
         [ObservableProperty] private TypeMesure _typeMesure;
 
-        /// <summary>Indice sélectionné en mode "gate fixe" (types non-Stabilité). -1 = aucun.</summary>
+        /// <summary>Indice retenu en mode "gate fixe" (hors Stabilité). -1 signifie : rien de sélectionné.</summary>
         [ObservableProperty] private int _gateSelectionneIndex = -1;
 
-        /// <summary>Cases à cocher des gates disponibles pour le mode Stabilité.</summary>
+        /// <summary>Les gates disponibles, présentées en cases à cocher pour le mode Stabilité.</summary>
         public ObservableCollection<GateCochable> GatesDisponibles { get; } = new();
 
-        /// <summary>Presets de balayage chargés depuis <see cref="PresetsStabiliteService"/>.</summary>
+        /// <summary>Les presets de balayage, lus depuis <see cref="PresetsStabiliteService"/>.</summary>
         public ObservableCollection<PresetStabilite> Presets => PresetsStabiliteService.Instance.Presets;
 
         [ObservableProperty]
@@ -55,7 +56,7 @@ namespace Metrologo.ViewModels
         public bool HasError => !string.IsNullOrEmpty(MessageErreur);
         public string PresetSelectionneNomCourt => PresetSelectionne?.Nom ?? "(aucun)";
 
-        /// <summary>Résultat final : 1 indice pour les mesures simples, N indices pour la stabilité.</summary>
+        /// <summary>Le résultat renvoyé : un seul indice pour une mesure simple, plusieurs pour la stabilité.</summary>
         public List<int> IndicesGatesResultats { get; private set; } = new();
 
         public Action<bool>? CloseAction { get; set; }
@@ -69,24 +70,24 @@ namespace Metrologo.ViewModels
 
             if (IsStabilite)
             {
-                // Pré-sélectionne le 1er preset (≈ procédure Auto historique) pour que l'utilisateur
-                // ait quelque chose de cohérent dès l'ouverture, sans devoir cocher manuellement.
+                // On présélectionne le 1er preset (l'équivalent de l'ancienne procédure Auto) pour
+                // que l'écran s'ouvre déjà sur un choix cohérent, sans que l'utilisateur ait à cocher.
                 PresetSelectionne = Presets.FirstOrDefault();
                 if (PresetSelectionne != null) AppliquerPreset(PresetSelectionne);
             }
             else
             {
-                // Valeur par défaut conforme à l'ancien comportement : 10 s pour FreqAvantInterv,
-                // 1 s sinon. On vise l'index canonique correspondant dans GatesDisponibles.
+                // Valeur par défaut, reprise du comportement d'origine : 10 s pour FreqAvantInterv,
+                // 1 s dans les autres cas. On cherche l'index canonique correspondant dans GatesDisponibles.
                 int defaut = TypeMesure == TypeMesure.FreqAvantInterv ? 9 : 6;
                 GateSelectionneIndex = TrouverPositionListePourSlot(defaut);
             }
         }
 
         /// <summary>
-        /// Construit la liste des gates affichées : restreinte à celles cochées dans le catalogue
-        /// pour l'appareil sélectionné (cf. <see cref="ConfigurationViewModel.GateTimes"/>). Si
-        /// aucun appareil catalogue ne correspond, on tombe sur l'échelle canonique complète.
+        /// Monte la liste des gates à afficher. On la limite à celles cochées dans le catalogue
+        /// pour l'appareil sélectionné (voir <see cref="ConfigurationViewModel.GateTimes"/>). Et si
+        /// aucun appareil du catalogue ne correspond, on retombe sur l'échelle canonique complète.
         /// </summary>
         private void ConstruireGatesDisponibles()
         {
@@ -113,9 +114,9 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Convertit un slot canonique (0..15) en position dans la liste affichée
-        /// <see cref="GatesDisponibles"/> (qui peut être un sous-ensemble). -1 si le slot
-        /// n'est pas exposé pour l'appareil courant.
+        /// Traduit un slot canonique (0..15) en sa position dans la liste affichée
+        /// <see cref="GatesDisponibles"/>, qui n'en contient parfois qu'une partie. Renvoie -1
+        /// quand le slot n'est pas proposé pour l'appareil courant.
         /// </summary>
         private int TrouverPositionListePourSlot(int slotCanonique)
         {
@@ -129,7 +130,7 @@ namespace Metrologo.ViewModels
             if (value != null && IsStabilite) AppliquerPreset(value);
         }
 
-        /// <summary>Coche les cases qui correspondent aux libellés du preset, décoche les autres.</summary>
+        /// <summary>Coche les cases dont le libellé figure dans le preset et décoche tout le reste.</summary>
         private void AppliquerPreset(PresetStabilite preset)
         {
             var attendus = new HashSet<string>(
@@ -205,8 +206,9 @@ namespace Metrologo.ViewModels
                     .OrderBy(i => i)
                     .ToList();
 
-                // Trace ce qui est réellement transmis à l'orchestrator — utile pour diagnostiquer
-                // les désynchros UI/modèle (ex: cases visuelles décochées mais EstCoche encore à true).
+                // On journalise ce qui part réellement vers l'orchestrator. Pratique pour traquer
+                // les désynchros entre l'UI et le modèle (typiquement une case décochée à l'écran
+                // alors que EstCoche est resté à true).
                 int nbCochees = GatesDisponibles.Count(g => g.EstCoche);
                 Services.Journal.Journal.Info(Services.Journal.CategorieLog.Configuration,
                     "STAB_GATES_VALIDEES",

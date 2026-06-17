@@ -6,10 +6,11 @@ using Metrologo.Models;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Lit Mesures_Config.txt (LocalAppData\Metrologo) : n° de module et fonction par type
-    /// de mesure, écrits en colonnes A/B de la feuille de mesure (la col C = temps de gate
-    /// vient de la sélection utilisateur). Format INI simple éditable par l'admin,
-    /// créé avec les valeurs livrées au premier démarrage s'il n'existe pas.
+    /// Lit Mesures_Config.txt (dans LocalAppData\Metrologo) : pour chaque type de mesure, le
+    /// n° de module et la fonction, qu'on recopie dans les colonnes A et B de la feuille de
+    /// mesure (la colonne C, le temps de gate, vient elle du choix de l'utilisateur). C'est un
+    /// simple format INI que l'admin peut éditer ; s'il n'existe pas encore, on le crée au
+    /// premier démarrage avec les valeurs livrées d'origine.
     /// </summary>
     public static class MesureConfigService
     {
@@ -17,8 +18,9 @@ namespace Metrologo.Services
         private static Dictionary<string, (string Module, string Fonction)>? _cache;
 
         /// <summary>
-        /// (Module, Fonction) pour un type de mesure ; les sections du fichier portent le nom
-        /// du TypeMesure. Si la section manque on retourne ("", ""), cellules vides côté Excel.
+        /// Renvoie le couple (Module, Fonction) pour un type de mesure donné ; chaque section du
+        /// fichier porte le nom du TypeMesure correspondant. Quand la section n'existe pas, on
+        /// renvoie ("", ""), ce qui laissera les cellules vides côté Excel.
         /// </summary>
         public static (string Module, string Fonction) ObtenirPourType(TypeMesure type)
         {
@@ -26,7 +28,7 @@ namespace Metrologo.Services
             return _cache!.TryGetValue(type.ToString(), out var v) ? v : ("", "");
         }
 
-        /// <summary>Force la relecture du fichier au prochain appel (si l'admin l'a modifié en cours de session).</summary>
+        /// <summary>Vide le cache pour qu'on relise le fichier au prochain appel — utile si l'admin l'a modifié en cours de session.</summary>
         public static void Recharger() => _cache = null;
 
         public static string CheminFichier =>
@@ -73,7 +75,7 @@ namespace Metrologo.Services
             }
             catch (Exception)
             {
-                // fichier mal formé : on garde le cache vide, ça donnera des cellules vides côté Excel
+                // Fichier mal formé : on laisse le cache vide, ce qui se traduira par des cellules vides côté Excel.
             }
         }
 

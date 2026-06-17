@@ -10,15 +10,15 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Views
 {
     /// <summary>
-    /// Modale d'accès à la zone administrateur : login + mot de passe.
-    /// Vérifie les identifiants via <see cref="ComptesLocauxService.AuthentifierAdmin"/>
-    /// et expose le compte authentifié dans <see cref="AdminAuthentifie"/> en cas de succès.
+    /// Fenêtre modale qui demande un login et un mot de passe avant d'ouvrir la zone admin.
+    /// Les identifiants sont contrôlés par <see cref="ComptesLocauxService.AuthentifierAdmin"/> ;
+    /// si tout est bon, le compte connecté est mis à disposition dans <see cref="AdminAuthentifie"/>.
     /// </summary>
     public partial class SaisieMdpAdminWindow : FluentWindow
     {
         public SaisieMdpAdminVM ViewModel { get; } = new();
 
-        /// <summary>Compte authentifié — null tant que la validation n'a pas réussi.</summary>
+        /// <summary>Le compte connecté ; reste à null tant qu'aucune saisie valide n'a abouti.</summary>
         public Utilisateur? AdminAuthentifie { get; private set; }
 
         public SaisieMdpAdminWindow()

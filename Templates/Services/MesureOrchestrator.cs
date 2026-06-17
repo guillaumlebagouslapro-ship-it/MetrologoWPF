@@ -24,8 +24,9 @@ namespace Metrologo.Services
         public string? CheminExcel { get; set; }
 
         /// <summary>
-        /// Transfert du dossier FI vers M:\ en fin de mesure : null = non tenté, true = ok,
-        /// false = échec (FI mise en liste de reprise pour le prochain démarrage).
+        /// État du transfert du dossier FI vers M:\ à la fin de la mesure : null si on n'a pas
+        /// essayé, true si ça s'est bien passé, false en cas d'échec (auquel cas la FI est mise
+        /// dans la liste de reprise pour le prochain démarrage).
         /// </summary>
         public bool? TransfertReseauOk { get; set; }
 
@@ -65,8 +66,9 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Débloque la mesure GPIB en cours (bouton Arrêter) : Cancel() seul ne suffit pas, le ReadString
-        /// NI-VISA bloque jusqu'à la fin de la gate (jusqu'à 1000 s), le SDC le fait rendre la main en quelques ms.
+        /// Débloque la mesure GPIB en cours quand on appuie sur Arrêter. Un simple Cancel() ne suffit
+        /// pas : le ReadString NI-VISA reste bloqué jusqu'à la fin de la gate (qui peut durer 1000 s),
+        /// alors qu'un SDC lui fait rendre la main en quelques ms.
         /// </summary>
         public void AborterMesureEnCours() => _driver.AborterToutesSessions();
 
@@ -79,34 +81,35 @@ namespace Metrologo.Services
         {
             var result = new ResultatMesure();
 
-            // Profiling accumulé en mémoire (Stopwatch + List.Add, ~10 ns par marqueur).
-            // Avant, les 30+ Perf() par gate écrivaient en SQL en live : 5-10 ms l'écriture,
-            // jusqu'à 300 ms d'overhead par gate sur les mesures rapides.
+            // On accumule le profiling en mémoire (Stopwatch + List.Add, environ 10 ns par marqueur).
+            // Avant, les 30 et quelques Perf() par gate écrivaient en SQL au fil de l'eau : 5 à 10 ms
+            // par écriture, ce qui finissait par coûter jusqu'à 300 ms par gate sur les mesures rapides.
             var profiler = new ProfilerSession();
             void Perf(string label) => profiler.Mark(label);
 
-            // déclarées avant le try : le nettoyage d'annulation (catch/finally) en a besoin
+            // On les déclare avant le try parce que le nettoyage d'annulation (catch/finally) en a besoin.
             string? derniereFeuille = null;
-            // vrai entre la création de la feuille d'une gate et la fin de son acquisition :
-            // en cas d'arrêt utilisateur, on sait si la feuille courante est incomplète (à
-            // supprimer) ou si c'est une gate déjà finie (à garder)
+            // Vrai entre le moment où on crée la feuille d'une gate et la fin de son acquisition.
+            // Comme ça, en cas d'arrêt utilisateur, on sait si la feuille courante est incomplète
+            // (donc à supprimer) ou si c'est une gate déjà terminée (donc à garder).
             bool feuilleCouranteIncomplete = false;
-            // chemin du .xlsx, visible dans le finally pour la suppression sur disque après un stop
+            // Chemin du .xlsx, qu'on garde sous la main dans le finally pour pouvoir supprimer la
+            // feuille sur disque après un stop.
             string? cheminFichier = null;
-            // valeur hors domaine du module d'incertitude : on supprime la feuille courante
-            // comme pour un arrêt utilisateur
+            // Passe à vrai si une valeur sort du domaine du module d'incertitude : on supprime alors
+            // la feuille courante, exactement comme pour un arrêt utilisateur.
             bool horsModule = false;
 
             try
             {
                 Perf("START");
 
-                // 0. Reset des sessions GPIB cachées par le driver VISA : évite les timeouts
-                //    quand un appareil a été éteint/rallumé entre deux mesures.
+                // 0. On remet à zéro les sessions GPIB que le driver VISA garde en cache : ça évite
+                //    les timeouts quand un appareil a été éteint puis rallumé entre deux mesures.
                 _driver.ReinitialiserSessions();
                 Perf("ReinitialiserSessions");
 
-                // 1. Résolution de l'appareil via le catalogue local.
+                // 1. On résout l'appareil à partir du catalogue local.
                 if (string.IsNullOrWhiteSpace(mesure.IdModeleCatalogue))
                 {
                     result.Erreur = "Aucun appareil sélectionné pour la mesure. "
@@ -121,7 +124,7 @@ namespace Metrologo.Services
                     return result;
                 }
 
-                // 2. Initialisation de l'appareil + config (IFC, ConfEntree, SRQ on, rejeu SCPI)
+                // 2. On initialise et on configure l'appareil (IFC, ConfEntree, SRQ on, puis rejeu SCPI).
                 progress?.Report(new ProgressionMesure
                 {
                     Message = $"Initialisation du {appareil.Nom} (GPIB {appareil.Adresse})...",
@@ -134,8 +137,8 @@ namespace Metrologo.Services
                 }
                 else
                 {
-                    // init manuelle : pas de *RST/*CLS, ça remettrait l'appareil aux défauts
-                    // et écraserait la config faite à la main par l'opérateur
+                    // En init manuelle, on ne fait pas de *RST/*CLS : ça remettrait l'appareil
+                    // à ses valeurs par défaut et écraserait la config que l'opérateur a faite à la main.
                     JournalLog.Info(CategorieLog.Mesure, "INIT_MANUELLE",
                         $"Init manuelle : *RST/*CLS et config non envoyés à {appareil.Nom} " +
                         "(configuration assurée à la main par l'opérateur).");
@@ -151,12 +154,12 @@ namespace Metrologo.Services
                     result.FNominale = fNominaleOuReference.Value;
                 }
 
-                // 3. Boucle de balayage : 1 itération pour la plupart des mesures, N pour une
-                //    stabilité multi-gate. Chaque itération crée sa propre feuille Excel et
-                //    sa propre ligne dans Récap.
+                // 3. Boucle de balayage : une seule itération pour la plupart des mesures, mais N pour
+                //    une stabilité multi-gate. Chaque itération crée sa propre feuille Excel et sa
+                //    propre ligne dans Récap.
                 var gates = mesure.GateIndices.Count > 0
                     ? mesure.GateIndices.ToList()
-                    : new List<int> { 6 };  // Sécurité : 1 s par défaut si la liste est vide.
+                    : new List<int> { 6 };  // Par sécurité, on retombe sur 1 s par défaut si la liste est vide.
 
                 int nbIterations = gates.Count;
                 int totalEtapes = nbIterations * (mesure.NbMesures + 3);
@@ -164,46 +167,50 @@ namespace Metrologo.Services
 
                 bool bulkDejaEchoue = false;
 
-                // Mode Excel invisible (historique Stabilité) : tout en mémoire via ClosedXML,
-                // le classeur n'est ouvert dans Excel qu'à la fin du balayage. Gain : ~150 ms
-                // d'open Interop + ~80 ms de close par gate, soit 4-5 s sur 8 gates.
-                // OPTION A : désormais tous les types (Freq + Stab) passent en mode visible avec
-                // finalisation 100% COM, plus de fenêtre Frame grise en fin de mesure. Le graphe
-                // Stab est patché via le Chart Object Model COM, le chemin invisible ne sert plus.
+                // Mode Excel invisible (l'ancien chemin pour la Stabilité) : tout se passe en mémoire
+                // via ClosedXML, et le classeur n'est ouvert dans Excel qu'une fois le balayage fini.
+                // Ce qu'on y gagnait : environ 150 ms d'open Interop plus 80 ms de close par gate,
+                // soit 4 à 5 s sur 8 gates.
+                // OPTION A : désormais tous les types (Freq + Stab) passent en mode visible avec une
+                // finalisation 100 % COM, ce qui supprime la fenêtre Frame grise en fin de mesure. Le
+                // graphe Stab est patché via le Chart Object Model COM, donc le chemin invisible ne
+                // sert plus.
                 bool excelInvisible = false;
                 if (mesure.TypeMesure == TypeMesure.Stabilite)
                 {
-                    // Reset des sigmas accumulés (calibration axe Y graphe Stab à la dernière gate).
+                    // On remet à zéro les sigmas accumulés (ils servent à calibrer l'axe Y du graphe
+                    // Stab lors de la dernière gate).
                     ExcelInteropHost.Instance.ReinitialiserSigmasStab();
                 }
 
                 for (int g = 0; g < nbIterations; g++)
                 {
-                    // Stop utilisateur entre deux gates : on ne démarre pas la suivante.
-                    // Sans ce check, un balayage stab 8 gates peut continuer à enchaîner les
-                    // gates restantes même après Cancel() si le ReadString de la gate courante
-                    // a déjà rendu la main avant le Device Clear.
+                    // Si l'utilisateur a stoppé entre deux gates, on ne démarre pas la suivante.
+                    // Sans ce check, un balayage stab de 8 gates pourrait continuer à enchaîner les
+                    // gates restantes même après un Cancel(), dans le cas où le ReadString de la gate
+                    // courante a déjà rendu la main avant le Device Clear.
                     ct.ThrowIfCancellationRequested();
 
                     bool isDernier = g == nbIterations - 1;
                     int gateIdx = gates[g];
                     Perf($"--- Gate {g + 1}/{nbIterations} ({EnTetesMesureHelper.LibelleGate(gateIdx)}) ---");
 
-                    // --- Décision : voie COM pure (option A v2) ou voie ClosedXML (chemin historique) ---
-                    // En mode visible, si Excel a déjà un classeur ouvert pour CETTE FI, on ajoute la
-                    // nouvelle feuille via COM pur au lieu de fermer/rouvrir (la fermeture provoque la
-                    // shell SDI grise visible 1-3 s entre 2 mesures). Le Workbook ne se ferme jamais,
-                    // donc plus de moment 0-Workbook ni de shell parasite.
-                    // Conditions pour la voie COM :
-                    //   1. mode visible (excelInvisible=false) : la Stabilité a son chemin ClosedXML
-                    //      en mémoire qui n'a pas ce problème ;
-                    //   2. un classeur est déjà ouvert dans Excel COM (mesure 2+ ou multi-gates) ;
-                    //   3. ce classeur correspond à la mesure en cours :
+                    // --- On choisit ici entre la voie COM pure (option A v2) et la voie ClosedXML
+                    // (le chemin historique). En mode visible, si Excel a déjà un classeur ouvert pour
+                    // CETTE FI, on ajoute la nouvelle feuille directement via COM plutôt que de
+                    // fermer/rouvrir : la fermeture fait apparaître la shell SDI grise pendant 1 à 3 s
+                    // entre deux mesures. Du coup le Workbook ne se ferme jamais, et on n'a plus ni le
+                    // moment où aucun Workbook n'est ouvert ni la shell parasite.
+                    // Pour partir sur la voie COM, il faut que :
+                    //   1. on soit en mode visible (excelInvisible=false) : la Stabilité, elle, a son
+                    //      chemin ClosedXML en mémoire qui ne souffre pas de ce problème ;
+                    //   2. un classeur soit déjà ouvert dans Excel COM (mesure 2+ ou multi-gates) ;
+                    //   3. ce classeur corresponde bien à la mesure en cours :
                     //      - Stab : la 1ère gate (g=0) peut générer un fichier _v2 si une session
-                    //        précédente existait, donc ClosedXML obligatoire ; les gates suivantes
-                    //        restent dans le même classeur, COM OK.
+                    //        précédente existait, donc on passe forcément par ClosedXML ; les gates
+                    //        suivantes restent dans le même classeur, où COM convient.
                     //      - autres types : on compare le chemin du classeur actif au chemin attendu
-                    //        pour cette FI (rejet si l'utilisateur a changé de FI).
+                    //        pour cette FI, et on rejette si l'utilisateur a changé de FI entre-temps.
                     bool memeMesureEnCours = false;
                     if (ExcelInteropHost.Instance.AClasseurActif)
                     {
@@ -215,9 +222,9 @@ namespace Metrologo.Services
                         {
                             string cheminAttendu = _excel.CalculerCheminFichierAttendu(mesure);
                             string cheminActif = ExcelInteropHost.Instance.CheminClasseurActif;
-                            // Path.GetFullPath lève ArgumentException si l'un est vide, d'où le
-                            // guard (cas 1ère mesure de la session : AClasseurActif peut être true
-                            // sans que _cheminClasseurActif soit encore alimenté).
+                            // Path.GetFullPath lève une ArgumentException si l'un des deux est vide,
+                            // d'où ce garde-fou : lors de la 1ère mesure de la session, AClasseurActif
+                            // peut déjà être true alors que _cheminClasseurActif n'est pas encore rempli.
                             if (!string.IsNullOrEmpty(cheminActif) && !string.IsNullOrEmpty(cheminAttendu))
                             {
                                 try
@@ -227,20 +234,21 @@ namespace Metrologo.Services
                                         Path.GetFullPath(cheminAttendu),
                                         StringComparison.OrdinalIgnoreCase);
                                 }
-                                catch { /* path invalide → on retombe sur voie ClosedXML */ }
+                                catch { /* chemin invalide : on retombe sur la voie ClosedXML */ }
                             }
                         }
                     }
-                    // Voie COM v2 DÉSACTIVÉE : retour à la voie ClosedXML pour toutes les mesures,
+                    // Voie COM v2 DÉSACTIVÉE : on est revenu à la voie ClosedXML pour toutes les mesures,
                     // plus robuste (pas de 0x800A03EC sur les formules métier, pas de strikethrough
-                    // conditionnel visible, perf équivalente). Le moment 0-Workbook-visible (cause
-                    // de la shell SDI grise) est protégé par _excel.Visible=false dans
-                    // FermerClasseurActifInterne + Visible=true en fin d'OuvrirEtAfficherAsync,
-                    // comme à l'ouverture initiale (mesure 1) qui marche parfaitement.
+                    // conditionnel visible, et des perfs équivalentes). Le moment où aucun Workbook
+                    // visible n'est ouvert (la cause de la shell SDI grise) est couvert par
+                    // _excel.Visible=false dans FermerClasseurActifInterne, puis Visible=true en fin
+                    // d'OuvrirEtAfficherAsync, exactement comme à l'ouverture initiale (mesure 1) qui
+                    // marche parfaitement.
                     bool voieCom = false;
 
-                    // log de diagnostic : permet de vérifier dans le journal Admin (mode debug)
-                    // quel chemin (COM ou ClosedXML) a été pris pour la mesure 2+ sur la même FI
+                    // Log de diagnostic : il permet de vérifier dans le journal Admin (mode debug)
+                    // quel chemin (COM ou ClosedXML) a été pris pour la mesure 2+ sur la même FI.
                     JournalLog.Info(CategorieLog.Excel, "BRANCHEMENT_OPTION_A_V2",
                         $"Décision branchement : voieCom={voieCom} "
                         + $"(excelInvisible={excelInvisible}, "
@@ -261,7 +269,7 @@ namespace Metrologo.Services
                     string nomFeuille;
                     if (voieCom)
                     {
-                        // option A v2 : voie COM pure (Workbook reste ouvert, pas de shell grise)
+                        // Option A v2 : voie COM pure, le Workbook reste ouvert et la shell grise n'apparaît pas.
                         nomFeuille = await ExcelInteropHost.Instance.AjouterFeuilleMesureAsync(
                             mesure, rubidium, gateIdx);
                         Perf("Interop.AjouterFeuilleMesureAsync (COM pur, Workbook gardé ouvert)");
@@ -270,21 +278,22 @@ namespace Metrologo.Services
                     }
                     else
                     {
-                        // Chemin historique : ClosedXML init + Sauvegarder + Ouvrir Excel
+                        // Chemin historique : init ClosedXML, puis Sauvegarder, puis Ouvrir Excel.
                         if (!excelInvisible)
                         {
                             await ExcelInteropHost.Instance.FermerClasseurActifAsync();
                             Perf("Interop.FermerClasseurActif (avant init ClosedXML)");
-                            // Excel COM relâche son handle fichier de façon asynchrone : sans cette
-                            // attente, FichierEstVerrouille dans InitialiserRapportAsync retourne
-                            // true (cache MRU Excel) et on part en fallback timestamp.
+                            // Excel COM relâche son handle de fichier de façon asynchrone. Sans cette
+                            // petite attente, FichierEstVerrouille dans InitialiserRapportAsync renvoie
+                            // true (à cause du cache MRU d'Excel) et on part en fallback timestamp.
                             await Task.Delay(500);
                         }
 
-                        // 3.a Création d'une nouvelle feuille de mesure (Stab1, Stab2, … selon le slot dispo).
+                        // 3.a On crée une nouvelle feuille de mesure (Stab1, Stab2, … selon le slot dispo).
                         // À la 1ère gate d'une session Stab, on signale "nouvelle session" pour qu'un
-                        // suffixe _v2, _v3… soit appliqué si le fichier précédent existe déjà : évite
-                        // que le graphe Stab traîne les 7 valeurs de la mesure précédente sur le même FI.
+                        // suffixe _v2, _v3… soit ajouté si le fichier précédent existe déjà. Ça évite
+                        // que le graphe Stab traîne encore les 7 valeurs de la mesure précédente sur le
+                        // même FI.
                         bool nouvelleSession = (g == 0 && mesure.TypeMesure == TypeMesure.Stabilite);
                         await _excel.InitialiserRapportAsync(mesure.NumFI, mesure, rubidium, gateIdx, nouvelleSession);
                         Perf("ClosedXML.InitialiserRapportAsync");
@@ -296,9 +305,9 @@ namespace Metrologo.Services
                         nomFeuille = _excel.NomFeuilleMesure;
                         derniereFeuille = nomFeuille;
 
-                        // En mode visible : on ferme ClosedXML et on ouvre Excel pour l'utilisateur.
-                        // En mode invisible (Stabilité) : ClosedXML reste prêt en mémoire, on
-                        // remplit le tableau de mesures dedans, sans toucher à Excel.
+                        // En mode visible, on ferme ClosedXML et on ouvre Excel pour l'utilisateur.
+                        // En mode invisible (Stabilité), ClosedXML reste prêt en mémoire et on y remplit
+                        // le tableau de mesures sans jamais toucher à Excel.
                         if (!excelInvisible)
                         {
                             _excel.FermerExcel();
@@ -308,12 +317,12 @@ namespace Metrologo.Services
                         }
                     }
 
-                    // La feuille de cette gate vient d'être créée mais ses valeurs ne sont pas
-                    // encore acquises : si l'utilisateur stoppe maintenant, il faudra la supprimer
-                    // (cf. catch OperationCanceledException). Repassé à false en fin de gate.
+                    // La feuille de cette gate vient d'être créée mais ses valeurs ne sont pas encore
+                    // acquises : si l'utilisateur stoppe maintenant, il faudra la supprimer
+                    // (cf. catch OperationCanceledException). On le repasse à false en fin de gate.
                     feuilleCouranteIncomplete = true;
 
-                    // 3.b Programmation de la gate de cette itération
+                    // 3.b On programme la gate de cette itération.
                     progress?.Report(new ProgressionMesure
                     {
                         Message = nbIterations > 1
@@ -323,12 +332,12 @@ namespace Metrologo.Services
                         EtapesTotales = totalEtapes
                     });
 
-                    // Entre deux gates d'un balayage : on aborte la mesure en cours et clear
-                    // le statut pour repartir d'un buffer d'output vide. Sans ça, le 53131A
-                    // (et la plupart des compteurs) gardent l'état FETCH de la gate précédente
-                    // et le :READ:FREQ? suivant timeout (l'instrument croit qu'il a déjà répondu).
-                    // Diagnostic empirique : la 1ère gate (post-*RST) marche, les suivantes
-                    // timeout systématiquement sans cette séquence de réinit légère.
+                    // Entre deux gates d'un balayage, on aborte la mesure en cours et on clear le
+                    // statut pour repartir avec un buffer d'output vide. Sans ça, le 53131A (et la
+                    // plupart des compteurs) gardent l'état FETCH de la gate précédente, et le
+                    // :READ:FREQ? suivant part en timeout parce que l'instrument croit avoir déjà
+                    // répondu. Constat empirique : la 1ère gate (juste après le *RST) marche, mais
+                    // les suivantes timeoutent systématiquement sans cette petite réinit.
                     if (g > 0)
                     {
                         try
@@ -348,34 +357,36 @@ namespace Metrologo.Services
                         Perf("Inter-gate reset (:ABORT + *CLS)");
                     }
 
-                    // Skip la vérification d'arming dans les balayages stab (déjà éprouvée par
-                    // les itérations précédentes, ~200 ms de gain par gate). Reste activée pour
-                    // les autres types de mesure et pour la 1ère gate d'un balayage.
+                    // On saute la vérification d'arming dans les balayages stab : les itérations
+                    // précédentes l'ont déjà éprouvée, et ça fait gagner environ 200 ms par gate.
+                    // Elle reste active pour les autres types de mesure et pour la 1ère gate d'un balayage.
                     bool verifierArming = !(mesure.TypeMesure == TypeMesure.Stabilite && g > 0);
                     await appareil.AppliquerGateAsync(_driver, gateIdx, mesure.TypeMesure, ct, verifierArming);
                     Perf($"AppliquerGateAsync (verifArming={verifierArming})");
 
-                    // Intervalle de temps : le READ? bloque jusqu'à l'évènement. AppliquerGateAsync
-                    // sort tôt en intervalle (pas de gate), donc il n'a posé aucun timeout : sans ça
-                    // un intervalle long échoue au timeout par défaut (~10 s). L'intervalle mesurable
-                    // va jusqu'à 3600 s, on cale donc le timeout VISA dessus + marge. UNIQUEMENT en
-                    // intervalle : les autres types gardent leur timeout basé sur la gate.
+                    // En mesure d'intervalle de temps, le READ? bloque jusqu'à l'évènement.
+                    // AppliquerGateAsync sort tôt dans ce cas (il n'y a pas de gate) et n'a donc posé
+                    // aucun timeout : sans intervention, un intervalle long échouerait sur le timeout
+                    // par défaut (environ 10 s). Comme l'intervalle mesurable peut aller jusqu'à 3600 s,
+                    // on cale le timeout VISA dessus, plus une marge. Uniquement en intervalle : les
+                    // autres types gardent leur timeout basé sur la gate.
                     if (mesure.TypeMesure == TypeMesure.Interval)
                     {
-                        const int timeoutIntervalleMs = (3600 + 300) * 1000;   // 3600 s max + 5 min de marge
+                        const int timeoutIntervalleMs = (3600 + 300) * 1000;   // 3600 s max, plus 5 min de marge
                         _driver.DefinirTimeout(appareil.Adresse, timeoutIntervalleMs);
                         Perf($"Timeout intervalle = {timeoutIntervalleMs} ms");
                     }
 
-                    // 3.c Boucle de N mesures.
-                    //   - Stabilité avec gate COURTE (< 500 ms) : on accumule en RAM pour écrire
-                    //     en bloc à la fin de la gate. À 10 ms de gate la boucle dure ~1 s, l'œil
-                    //     ne suit pas l'affichage cellule par cellule, et chaque écriture COM live
-                    //     coûte ~300 ms (re-render Excel visible). Gain typique : 22 s → 3-4 s.
-                    //   - Stabilité avec gate LONGUE (≥ 500 ms) : écriture live, la mesure dure
-                    //     plusieurs secondes de toute façon donc l'overhead (~300 ms par mesure)
-                    //     est marginal, autant que l'utilisateur voie les valeurs arriver.
-                    //   - Autres types (Fréquence, Interval…) : toujours en live, cadence humaine.
+                    // 3.c Boucle des N mesures.
+                    //   - Stabilité avec gate COURTE (< 500 ms) : on accumule en RAM pour tout écrire
+                    //     en bloc à la fin de la gate. À 10 ms de gate, la boucle ne dure qu'environ 1 s,
+                    //     l'œil ne suivrait de toute façon pas un affichage cellule par cellule, et
+                    //     chaque écriture COM en live coûte environ 300 ms (re-render d'Excel visible).
+                    //     On passe typiquement de 22 s à 3-4 s.
+                    //   - Stabilité avec gate LONGUE (≥ 500 ms) : on écrit en live. La mesure dure de
+                    //     toute façon plusieurs secondes, donc l'overhead (environ 300 ms par mesure)
+                    //     reste marginal — autant laisser l'utilisateur voir les valeurs arriver.
+                    //   - Autres types (Fréquence, Interval…) : toujours en live, à cadence humaine.
                     double gateSecondes = EnTetesMesureHelper.SecondesGate(gateIdx);
                     bool ecritureBatch = mesure.TypeMesure == TypeMesure.Stabilite
                                          && gateSecondes < 0.5;
@@ -383,68 +394,69 @@ namespace Metrologo.Services
                     var bufferBatch = ecritureBatch ? new List<(DateTime, double)>(mesure.NbMesures) : null;
                     const int LIGNE_DEBUT_MESURES = 9;
 
-                    // Stratégie d'acquisition (3 niveaux, du plus rapide au plus standard) :
-                    //   1. Bulk    : CommandeMesureMultiple (avec {N}), l'instrument fait
-                    //                les N mesures en interne et les retourne en CSV.
-                    //                ~0,5 s pour 30 mesures à 10 ms (vs ~6 s en :FETCh?).
-                    //   2. Rapide  : :INIT:CONT ON + boucle :FETCh?, évite le ré-arming
-                    //                de :READ? (~180 ms/mesure vs ~670 ms).
-                    //   3. Classic : :READ? à chaque mesure (ré-arme à chaque appel).
-                    // Le choix se fait depuis le catalogue (champ CommandeMesureMultiple),
-                    // aucune logique spécifique à un modèle d'appareil dans ce code.
+                    // On a trois stratégies d'acquisition, de la plus rapide à la plus standard :
+                    //   1. Bulk    : CommandeMesureMultiple (avec {N}). L'instrument fait les N mesures
+                    //                en interne et les renvoie en CSV. Environ 0,5 s pour 30 mesures à
+                    //                10 ms, contre environ 6 s en :FETCh?.
+                    //   2. Rapide  : :INIT:CONT ON puis boucle :FETCh?, ce qui évite le ré-arming du
+                    //                :READ? (environ 180 ms/mesure contre 670 ms).
+                    //   3. Classic : un :READ? à chaque mesure (qui ré-arme à chaque appel).
+                    // Le choix vient du catalogue (champ CommandeMesureMultiple) : il n'y a aucune
+                    // logique spécifique à un modèle d'appareil dans ce code.
                     string? cmdFetch = AppareilIeeeOperations.DeriverCommandeFetch(appareil.ExeMesure);
 
-                    // Si l'utilisateur a renseigné une commande "fetch fresh" (qui bloque jusqu'à
-                    // nouvelle mesure dispo), on l'utilise prioritairement et on supprime tout
-                    // Task.Delay : c'est l'instrument qui pace, pas nous.
+                    // Si l'utilisateur a renseigné une commande "fetch fresh" (qui bloque jusqu'à ce
+                    // qu'une nouvelle mesure soit dispo), on l'utilise en priorité et on enlève tout
+                    // Task.Delay : c'est l'instrument qui donne la cadence, pas nous.
                     bool fetchBloquant = !string.IsNullOrWhiteSpace(appareil.CommandeFetchFresh);
                     string? cmdFetchUsed = fetchBloquant ? appareil.CommandeFetchFresh : cmdFetch;
 
-                    // Toute mesure avec NbMesures > 1 = série exploitable par streaming/mode
-                    // rapide. Cas spécial NbMesures == 1 : streaming/rapide n'apportent rien
-                    // (overhead bulk init pour 1 mesure), on garde le path :READ? classique.
+                    // Dès que NbMesures > 1, on a une série exploitable par le streaming ou le mode
+                    // rapide. Cas particulier NbMesures == 1 : ni le streaming ni le rapide n'apportent
+                    // rien (l'init bulk coûte plus cher que la seule mesure), donc on garde le :READ?
+                    // classique.
                     //
-                    // Les sécurités cumulatives en dessous (CommandeBulkInit/FetchFresh non
-                    // vides côté catalogue, gateSecondes ≥ 1 s, bulkDejaEchoue) font de toute
-                    // façon le tri : un instrument qui ne supporte pas le streaming pour un
-                    // type donné n'engage pas le mode, on retombe sur le fallback classique.
+                    // Les garde-fous cumulés un peu plus bas (CommandeBulkInit/FetchFresh renseignées
+                    // côté catalogue, gateSecondes ≥ 1 s, bulkDejaEchoue) font de toute façon le tri :
+                    // un instrument qui ne supporte pas le streaming pour un type donné n'active pas le
+                    // mode et on retombe sur le fallback classique.
                     bool typeFaitSeries = mesure.NbMesures > 1;
 
-                    // Mode streaming : acquisition gap-free + lecture une-par-une via
-                    // CommandeFetchFresh (typ. ":DATA:REM? 1,WAIT" sur 53230A). Compatible
-                    // avec live UI ET Stab batch. Réservé aux gates ≥ 1 s : sous ce seuil,
-                    // chaque DATA:REM coûte ~30-50 ms de roundtrip GPIB qui polluerait la
-                    // cadence de mesures rapides, on préfère le bulk classique.
+                    // Mode streaming : acquisition gap-free, avec une lecture une par une via
+                    // CommandeFetchFresh (typiquement ":DATA:REM? 1,WAIT" sur 53230A). Il marche aussi
+                    // bien avec l'UI en live qu'avec le batch Stab. On le réserve aux gates ≥ 1 s :
+                    // en dessous, chaque DATA:REM coûte 30 à 50 ms de roundtrip GPIB, ce qui polluerait
+                    // la cadence des mesures rapides, donc on préfère le bulk classique.
                     bool modeStreamingPossible = !string.IsNullOrWhiteSpace(appareil.CommandeBulkInit)
                         && !string.IsNullOrWhiteSpace(appareil.CommandeFetchFresh)
                         && gateSecondes >= 1.0
                         && typeFaitSeries
                         && !bulkDejaEchoue;
 
-                    // Mode bulk : timestamps simulés (l'instrument fait les mesures en interne sans
-                    // nous prévenir), incompatible avec l'écriture live Excel cellule par cellule.
-                    // On le réserve donc à la Stabilité (où on bufferise de toute façon).
-                    // Désactivé si le streaming est utilisé (les 2 sont mutuellement exclusifs).
+                    // Mode bulk : les timestamps sont simulés (l'instrument fait les mesures en interne
+                    // sans nous prévenir), ce qui est incompatible avec l'écriture live Excel cellule
+                    // par cellule. On le réserve donc à la Stabilité, où on bufferise de toute façon.
+                    // Désactivé dès que le streaming est utilisé : les deux s'excluent mutuellement.
                     bool modeBulk = !modeStreamingPossible
                         && !string.IsNullOrWhiteSpace(appareil.CommandeMesureMultiple)
                         && mesure.TypeMesure == TypeMesure.Stabilite
                         && !bulkDejaEchoue;
-                    // Mode rapide :FETCh? : applicable à tout type avec NbMesures > 1 dès lors
-                    // que l'appareil l'autorise via ModeRapideActif du catalogue. Compatible
-                    // avec l'écriture live Excel. Gain ~3× vs :READ? classique sur le 53131A.
+                    // Mode rapide :FETCh? : utilisable pour tout type avec NbMesures > 1, du moment que
+                    // l'appareil l'autorise via le ModeRapideActif du catalogue. Compatible avec
+                    // l'écriture live Excel, et environ 3× plus rapide que le :READ? classique sur le 53131A.
                     bool modeRapide = !modeBulk
                         && !modeStreamingPossible
                         && !string.IsNullOrEmpty(cmdFetchUsed)
                         && typeFaitSeries
-                        && appareil.ModeRapideActif;   // bloqué pour 53230A & co (cf. catalogue)
+                        && appareil.ModeRapideActif;   // bloqué pour le 53230A et consorts (cf. catalogue)
 
-                    // Délai inter-fetch :
-                    //   - 0 si la commande est bloquante (l'instrument fait l'attente)
-                    //   - Sinon : gate - 100 ms (plancher 5 ms). Le write+read GPIB prend
-                    //     ~150 ms, donc Delay+150 ≥ gate garantit une nouvelle mesure dispo
-                    //     au moment du :FETCh?. Pour gates ≤ 100 ms le plancher 5 ms suffit
-                    //     (write+read masque la gate). Pour gates ≥ 200 ms on attend juste
-                    //     ce qu'il faut, sans gaspiller comme ferait un gate × 0.5 trop court.
+                    // Délai entre deux fetch :
+                    //   - 0 si la commande est bloquante (c'est l'instrument qui attend).
+                    //   - Sinon : gate - 100 ms (avec un plancher à 5 ms). Le write+read GPIB prend
+                    //     environ 150 ms, donc Delay + 150 ≥ gate garantit qu'une nouvelle mesure est
+                    //     dispo au moment du :FETCh?. Pour les gates ≤ 100 ms, le plancher de 5 ms
+                    //     suffit (le write+read masque la gate). Pour les gates ≥ 200 ms, on attend
+                    //     juste ce qu'il faut, sans gaspiller comme le ferait un gate × 0.5 trop court.
                     int delayFetchMs;
                     if (!modeRapide) delayFetchMs = 0;
                     else if (fetchBloquant) delayFetchMs = 0;

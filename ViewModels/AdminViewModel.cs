@@ -95,7 +95,7 @@ namespace Metrologo.ViewModels
                     });
                 }
             }
-            catch { /* silencieux */ }
+            catch { /* on ignore, pas grave si l'ouverture echoue */ }
         }
 
         [RelayCommand]
@@ -132,8 +132,8 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Ouvre le journal d'AUDIT administrateur (actions de configuration : rubidium,
-        /// modules d'incertitude, catalogue appareils, utilisateurs…). Hors consultations.
+        /// Ouvre le journal d'AUDIT admin : il trace les actions de configuration (rubidium,
+        /// modules d'incertitude, catalogue appareils, utilisateurs…), pas les simples consultations.
         /// </summary>
         [RelayCommand]
         private void OuvrirJournalAdmin()
@@ -143,9 +143,9 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Force l'archivage du mois précédent immédiatement (sans attendre que l'app
-        /// redémarre le 1er du mois). Utile pour test ou pour rattraper un mois qui
-        /// aurait été manqué (PC éteint pendant plusieurs jours).
+        /// Lance tout de suite l'archivage du mois précédent, sans attendre le redémarrage de
+        /// l'app au 1er du mois. Pratique pour tester, ou pour rattraper un mois passé à la trappe
+        /// (PC resté éteint plusieurs jours).
         /// </summary>
         [RelayCommand]
         private async System.Threading.Tasks.Task ArchiverMaintenantAsync()
@@ -179,9 +179,9 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Déclenche manuellement la récupération Besançon (téléchargement FTP du fichier
-        /// corrigé + extraction des valeurs + ajout au fichier texte cumulatif), sans attendre
-        /// l'horaire quotidien. Aucune écriture en base SQL. Le détail va dans le Journal (Système).
+        /// Déclenche à la main la récupération Besançon (téléchargement FTP du fichier corrigé,
+        /// extraction des valeurs, ajout au fichier texte cumulatif), sans attendre l'heure
+        /// quotidienne. Rien n'est écrit en base SQL ; le détail part dans le Journal (Système).
         /// </summary>
         [RelayCommand]
         private async System.Threading.Tasks.Task RecupererBesanconMaintenantAsync()
@@ -196,7 +196,7 @@ namespace Metrologo.ViewModels
 
             try
             {
-                // Déclenchement manuel → on force (ignore le garde-fou « déjà fait aujourd'hui »).
+                // C'est un lancement manuel : on force, donc on passe outre le garde-fou « deja fait aujourd'hui ».
                 var r = await Metrologo.Services.Besancon.BesanconScheduler.ExecuterAsync(forcer: true);
 
                 if (!r.Succes)
@@ -224,7 +224,7 @@ namespace Metrologo.ViewModels
         }
 
 
-        /// <summary>Ouvre les paramètres de la récupération automatique Besançon (Active, heure, FTP).</summary>
+        /// <summary>Ouvre les reglages de la recuperation automatique Besancon (activation, heure, FTP).</summary>
         [RelayCommand]
         private void OuvrirParametresBesancon()
         {
@@ -250,17 +250,17 @@ namespace Metrologo.ViewModels
                 "Accès à la gestion du catalogue d'appareils.");
 
             string utilisateur = Journal.Utilisateur ?? "admin";
-            // Cette commande est dans AdminViewModel, donc forcément lancée par un admin
-            // (la nav vers AdminView n'est exposée qu'aux comptes Administrateur).
+            // On est dans AdminViewModel : forcement un admin derriere (l'acces a AdminView
+            // n'est propose qu'aux comptes Administrateur).
             var vm = new GestionAppareilsViewModel(utilisateur, estAdmin: true);
             var win = new GestionAppareilsWindow(vm) { Owner = Application.Current.MainWindow };
             win.ShowDialog();
         }
 
         /// <summary>
-        /// Ouvre la fenêtre d'édition des adresses GPIB des appareils legacy (EIP / Racal /
-        /// Stanford). Réservé à l'admin : permet de fixer une adresse distincte par appareil
-        /// pour les brancher simultanément. Enregistré sur le réseau (appareils-legacy.json).
+        /// Ouvre l'editeur des adresses GPIB des appareils legacy (EIP / Racal / Stanford).
+        /// Reserve a l'admin : on y attribue une adresse distincte a chaque appareil pour pouvoir
+        /// les brancher en meme temps. Tout est enregistre sur le reseau (appareils-legacy.json).
         /// </summary>
         [RelayCommand]
         private void OuvrirAdressesLegacy()
@@ -274,11 +274,10 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Ouvre la fenêtre de configuration des chemins de stockage. Permet à l'admin
-        /// de surcharger les emplacements par défaut (locaux) pour pointer vers un partage
-        /// réseau commun à tous les postes du site (modules d'incertitude, presets,
-        /// archives logs, etc.). La BDD SQL Server reste centralisée et n'est pas
-        /// configurable ici (cf. CheminsMetrologo + paths.config.json).
+        /// Ouvre la configuration des chemins de stockage. L'admin peut y remplacer les
+        /// emplacements par defaut (locaux) par un partage reseau commun a tous les postes du
+        /// site (modules d'incertitude, presets, archives logs, etc.). La base SQL Server, elle,
+        /// reste centralisee et ne se configure pas ici (voir CheminsMetrologo + paths.config.json).
         /// </summary>
         [RelayCommand]
         private void OuvrirCheminsStockage()

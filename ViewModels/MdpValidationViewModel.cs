@@ -6,7 +6,7 @@ namespace Metrologo.ViewModels
 {
     public partial class MdpValidationViewModel : ObservableObject
     {
-        // Mots de passe hérités de l'ancien code
+        // Mots de passe repris tels quels de l'ancienne version
         public const string MdpValidation = "METROL";
         public const string MdpIncertitudes = "1135";
 

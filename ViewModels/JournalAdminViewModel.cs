@@ -11,10 +11,10 @@ using System.Threading.Tasks;
 namespace Metrologo.ViewModels
 {
     /// <summary>
-    /// Journal d'audit administrateur : liste des actions de configuration (changement de
-    /// rubidium, modules d'incertitude, catalogue appareils, utilisateurs, mots de passe…).
-    /// Lit le fichier partagé <see cref="JournalAdminService.Chemin"/>. Les consultations
-    /// d'écrans / de FI ne sont pas tracées ici.
+    /// Journal d'audit administrateur. On y retrouve les actions de configuration : changement
+    /// de rubidium, modules d'incertitude, catalogue appareils, utilisateurs, mots de passe, etc.
+    /// Les données proviennent du fichier partagé <see cref="JournalAdminService.Chemin"/>. À noter :
+    /// la simple consultation d'un écran ou d'une FI n'y laisse aucune trace.
     /// </summary>
     public partial class JournalAdminViewModel : ObservableObject
     {

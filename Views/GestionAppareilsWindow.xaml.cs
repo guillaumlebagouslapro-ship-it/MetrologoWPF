@@ -13,8 +13,8 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// Ouvre la fiche d'aide (même contenu que pour EnregistrementAppareilWindow).
-        /// Pure UI, modale, ne touche rien du catalogue.
+        /// Affiche la fiche d'aide (la même que celle d'EnregistrementAppareilWindow).
+        /// C'est une fenêtre modale purement visuelle, elle ne modifie rien dans le catalogue.
         /// </summary>
         private void OnOuvrirAide(object sender, RoutedEventArgs e)
         {

@@ -7,10 +7,10 @@ using System.Globalization;
 namespace Metrologo.ViewModels
 {
     /// <summary>
-    /// Saisie post-mesure consolidée pour Fréquence + source Fréquencemètre :
-    /// fréquence lue sur l'afficheur, résolution du compteur et incertitude
-    /// supplémentaire relative (dégradation). Page unique injectée dans Excel
-    /// via les zones nommées ZNFreqRef / ZNIncertResol / ZNIncertSup.
+    /// Saisie post-mesure regroupée pour le cas Fréquence avec source Fréquencemètre :
+    /// la fréquence relevée sur l'afficheur, la résolution du compteur et l'incertitude
+    /// supplémentaire relative (la dégradation). Tout tient sur une seule page, injectée
+    /// dans Excel via les zones nommées ZNFreqRef / ZNIncertResol / ZNIncertSup.
     /// </summary>
     public partial class SaisiePostMesureFreqViewModel : ObservableObject
     {

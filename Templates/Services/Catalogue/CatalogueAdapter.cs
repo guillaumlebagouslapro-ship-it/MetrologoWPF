@@ -7,21 +7,23 @@ using Metrologo.Models;
 namespace Metrologo.Services.Catalogue
 {
     /// <summary>
-    /// Convertit un <see cref="ModeleAppareil"/> du catalogue local en <see cref="AppareilIEEE"/>
-    /// utilisable par <see cref="MesureOrchestrator"/>. Permet à l'orchestrator de piloter un
-    /// appareil enregistré par l'utilisateur (ex: Agilent 53131A) sans qu'il soit dans l'enum
-    /// historique Stanford/Racal/EIP.
+    /// Fait le pont entre un <see cref="ModeleAppareil"/> du catalogue local et un
+    /// <see cref="AppareilIEEE"/> que <see cref="MesureOrchestrator"/> sait piloter. Grâce à ça,
+    /// l'orchestrator peut piloter n'importe quel appareil que l'utilisateur a enregistré
+    /// (un Agilent 53131A, par exemple) même s'il n'apparaît pas dans le vieil enum
+    /// Stanford/Racal/EIP.
     ///
-    /// L'adresse GPIB provient de la détection sur le bus (pas du catalogue, qui reste portable
-    /// entre postes : un même modèle peut être à des adresses différentes selon le banc).
+    /// L'adresse GPIB, elle, vient de la détection sur le bus et pas du catalogue : on veut
+    /// que le catalogue reste portable d'un poste à l'autre, sachant qu'un même modèle peut
+    /// très bien se retrouver à des adresses différentes selon le banc.
     /// </summary>
     public static class CatalogueAdapter
     {
         /// <summary>
-        /// Construit un <see cref="AppareilIEEE"/> à partir du modèle catalogue et de l'adresse
-        /// détectée sur le bus. Les gates sont construites en parsant les libellés texte
-        /// (ex: "100 ms", "1 s") et en injectant la valeur dans le template <c>CommandeGate</c>
-        /// du modèle (ex: <c>:FREQ:ARM:STOP:TIM {0}</c>).
+        /// Construit l'<see cref="AppareilIEEE"/> à partir du modèle catalogue et de l'adresse
+        /// trouvée sur le bus. Pour les gates, on lit les libellés en texte (par ex. "100 ms",
+        /// "1 s") et on injecte la valeur dans le template <c>CommandeGate</c> du modèle
+        /// (du genre <c>:FREQ:ARM:STOP:TIM {0}</c>).
         /// </summary>
         public static AppareilIEEE VersAppareilIEEE(ModeleAppareil modele, int adresse)
         {
@@ -52,10 +54,10 @@ namespace Metrologo.Services.Catalogue
             return appareil;
         }
 
-        // Échelle canonique 0..12 utilisée par l'UI (ConfigurationViewModel.GateTimes,
-        // SelectionGateViewModel.GateTimes) et par ConfigAppareilsLoader._gates pour les
-        // appareils legacy. Les gates du catalogue doivent se ranger dans ces mêmes slots,
-        // sinon Mesure.GateIndex venant de l'UI ne tombe pas sur l'entrée correspondante.
+        // L'échelle de référence 0..12, celle que l'UI utilise partout (ConfigurationViewModel.GateTimes,
+        // SelectionGateViewModel.GateTimes) et que ConfigAppareilsLoader._gates utilise pour les
+        // appareils legacy. Les gates du catalogue doivent absolument se ranger dans ces mêmes
+        // slots : sinon le Mesure.GateIndex qui arrive de l'UI ne retombe pas sur la bonne entrée.
         private static readonly double[] _secondesSlotsUi =
         {
             0.010, 0.020, 0.050, 0.100, 0.200, 0.500,
@@ -64,13 +66,13 @@ namespace Metrologo.Services.Catalogue
         };
 
         /// <summary>
-        /// Transforme la liste de libellés (ex: <c>["10 ms", "100 ms", "1 s"]</c>) en dictionnaire
-        /// dont les clés sont les indices de l'échelle UI à 13 slots (0=10 ms … 12=100 s).
-        /// Un libellé "1 s" du catalogue va dans le slot 6, "10 s" dans le slot 9, etc. — comme
-        /// les appareils legacy. Sans cet alignement, l'index envoyé par la UI ne correspond pas
-        /// aux clés du dict et <c>AppliquerGateAsync</c> ne trouve pas la gate.
-        /// Si <c>CommandeGate</c> est vide, la commande reste vide (l'orchestrator sautera la
-        /// programmation — cas Racal en mode Interval par ex.).
+        /// Prend la liste de libellés (par ex. <c>["10 ms", "100 ms", "1 s"]</c>) et la range dans un
+        /// dictionnaire dont les clés sont les indices de l'échelle UI à 13 slots (0=10 ms … 12=100 s).
+        /// Un "1 s" du catalogue atterrit dans le slot 6, "10 s" dans le slot 9, etc. — exactement
+        /// comme les appareils legacy. Si on ne fait pas cet alignement, l'index que la UI envoie
+        /// ne retrouve pas les clés du dict et <c>AppliquerGateAsync</c> passe à côté de la gate.
+        /// Quand <c>CommandeGate</c> est vide, on laisse la commande vide elle aussi (l'orchestrator
+        /// sautera la programmation — c'est le cas du Racal en mode Interval, par exemple).
         /// </summary>
         private static Dictionary<int, GateConfig> ConstruireGates(
             List<string> libellesGates, string templateCommande,
@@ -81,10 +83,11 @@ namespace Metrologo.Services.Catalogue
             {
                 double secondes = ParserGateEnSecondes(libelle);
                 int slot = TrouverSlotUi(secondes);
-                if (slot < 0) continue;  // Valeur non-standard, pas mappable sur l'UI.
+                if (slot < 0) continue;  // Valeur hors standard : impossible à caser dans l'UI.
 
-                // Appareils legacy : commande de gate discrète par slot (non templatable),
-                // prioritaire sur le template {0}. Sinon fallback sur le template (modernes).
+                // Cas legacy : une commande de gate figée pour chaque slot (pas de template
+                // possible), qui prend le pas sur le template {0}. À défaut, on retombe sur le
+                // template (les appareils modernes).
                 string commande;
                 if (commandesParSlot != null && commandesParSlot.TryGetValue(slot, out var cmdLegacy)
                     && !string.IsNullOrWhiteSpace(cmdLegacy))
@@ -114,8 +117,8 @@ namespace Metrologo.Services.Catalogue
         }
 
         /// <summary>
-        /// Parse une chaîne comme "10 ms", "1 s", "100 s" en secondes. Accepte <c>ms</c> et <c>s</c>
-        /// avec ou sans espace. Retourne 1.0 par défaut si non reconnu.
+        /// Convertit en secondes une chaîne du genre "10 ms", "1 s", "100 s". On accepte <c>ms</c>
+        /// comme <c>s</c>, avec ou sans espace. Si on ne reconnaît rien, on renvoie 1.0 par défaut.
         /// </summary>
         private static double ParserGateEnSecondes(string libelle)
         {

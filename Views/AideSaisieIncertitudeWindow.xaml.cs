@@ -4,9 +4,9 @@ using Wpf.Ui.Controls;
 namespace Metrologo.Views
 {
     /// <summary>
-    /// Fenêtre d'aide statique expliquant la saisie des coefficients A et B
-    /// (notation scientifique, séparateurs, ordres de grandeur typiques). Pure
-    /// documentation — affichée à la demande depuis GestionModulesIncertitudeWindow.
+    /// Fenêtre d'aide qui explique comment saisir les coefficients A et B : notation
+    /// scientifique, séparateurs, ordres de grandeur courants. Juste de la doc, qu'on
+    /// ouvre au besoin depuis GestionModulesIncertitudeWindow.
     /// </summary>
     public partial class AideSaisieIncertitudeWindow : FluentWindow
     {

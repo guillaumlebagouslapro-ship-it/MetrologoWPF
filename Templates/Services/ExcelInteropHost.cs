@@ -13,13 +13,14 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Hôte Excel partagé : une seule instance Excel.Application cachée, lancée au démarrage,
-    /// que toutes les mesures réutilisent pour l'affichage live.
+    /// Hôte Excel partagé : on garde une seule instance Excel.Application, cachée et lancée au
+    /// démarrage, que toutes les mesures réutilisent pour l'affichage live.
     /// </summary>
-    // COM en late-binding (dynamic + GetTypeFromProgID) plutôt que la PIA Microsoft.Office.Interop :
-    // office.dll n'est pas installée avec toutes les versions d'Office et plante l'assembly loader
-    // ("Could not load file or assembly 'office'"). Tout objet COM passe par Marshal.ReleaseComObject,
-    // sinon EXCEL.EXE reste en zombie après fermeture de Metrologo.
+    // On fait du COM en late-binding (dynamic + GetTypeFromProgID) plutôt que de passer par la PIA
+    // Microsoft.Office.Interop : office.dll n'est pas toujours installée selon la version d'Office,
+    // et son absence fait planter l'assembly loader ("Could not load file or assembly 'office'").
+    // Pense bien à relâcher chaque objet COM avec Marshal.ReleaseComObject, faute de quoi EXCEL.EXE
+    // survit en zombie après la fermeture de Metrologo.
     public sealed class ExcelInteropHost : IDisposable
     {
         private static readonly Lazy<ExcelInteropHost> _instance = new(() => new ExcelInteropHost());
@@ -31,22 +32,25 @@ namespace Metrologo.Services
         private string _cheminClasseurActif = string.Empty;
 
         /// <summary>
-        /// Chemin du Metrologo.xla pré-ouvert dans Excel (résout les formules [1]!Cal_xxx des rapports).
-        /// Stocké pour l'exempter du nettoyage des classeurs parasites. Vide tant que pas pré-chargé.
+        /// Chemin du Metrologo.xla qu'on pré-ouvre dans Excel : c'est lui qui résout les formules
+        /// [1]!Cal_xxx des rapports. On le mémorise pour le mettre à l'abri du nettoyage des classeurs
+        /// parasites. Reste vide tant qu'il n'a pas été pré-chargé.
         /// </summary>
         private string _cheminXlaPreCharge = string.Empty;
 
         /// <summary>
-        /// Sigma relatif (n-1) par gate, accumulé pendant une session Stab : sert à calibrer
-        /// l'axe Y log du graphe à la dernière gate. Reset à chaque nouvelle session.
+        /// Sigma relatif (n-1) par gate, qu'on accumule au fil d'une session Stab : il sert à
+        /// calibrer l'axe Y log du graphe à la dernière gate. On le remet à zéro au début de
+        /// chaque nouvelle session.
         /// </summary>
         private readonly Dictionary<int, double> _sigmasRelatifsParGate = new();
 
         public void ReinitialiserSigmasStab() => _sigmasRelatifsParGate.Clear();
 
         /// <summary>
-        /// Liste les EXCEL.EXE en cours, sauf notre instance cachée (_excelPid). Sert à détecter
-        /// les Excel ouverts par l'utilisateur qui verrouillent le .xlsx de mesure (échec ClosedXML).
+        /// Liste les EXCEL.EXE en cours d'exécution, en excluant notre instance cachée (_excelPid).
+        /// Ça nous permet de repérer les Excel ouverts par l'utilisateur qui verrouillent le .xlsx
+        /// de mesure et font échouer ClosedXML.
         /// </summary>
         public List<Process> ListerExcelsExternes()
         {
@@ -62,7 +66,7 @@ namespace Metrologo.Services
                             liste.Add(p);
                         }
                     }
-                    catch { /* process déjà mort entre Get et test */ }
+                    catch { /* le process est mort entre le Get et notre test */ }
                 }
             }
             catch (Exception ex)
@@ -74,13 +78,13 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Tue tous les EXCEL.EXE externes (à appeler après confirmation utilisateur) pour libérer
-        /// un .xlsx verrouillé. Retourne le nombre de process fermés, best-effort.
+        /// Tue tous les EXCEL.EXE externes pour libérer un .xlsx verrouillé — à n'appeler qu'après
+        /// confirmation de l'utilisateur. Best-effort, renvoie le nombre de process fermés.
         /// </summary>
         public int FermerExcelsExternes() => FermerExcels(ListerExcelsExternes());
 
         /// <summary>
-        /// Kill les process EXCEL.EXE fournis. Best-effort, retourne le nombre fermés.
+        /// Termine les process EXCEL.EXE qu'on lui passe. Best-effort, renvoie le nombre fermés.
         /// </summary>
         public int FermerExcels(IEnumerable<Process> procs)
         {
@@ -114,11 +118,11 @@ namespace Metrologo.Services
             out System.Runtime.InteropServices.ComTypes.IBindCtx ppbc);
 
         /// <summary>
-        /// Ferme — dans TOUTES les instances Excel ouvertes — uniquement les classeurs de MESURE
-        /// (nom <c>freq</c>/<c>stab</c> sous <c>…\Metrologo\</c>), repérés PAR LEUR NOM via la
-        /// Running Object Table, et SANS tuer aucun process Excel. Les autres fichiers ouverts par
-        /// l'utilisateur (même non sauvegardés) restent intacts. Le classeur de mesure actif de
-        /// notre propre instance hôte est épargné. Best-effort. Retourne le nombre de classeurs fermés.
+        /// Parcourt TOUTES les instances Excel ouvertes et ferme uniquement les classeurs de MESURE
+        /// (nom <c>freq</c>/<c>stab</c> sous <c>…\Metrologo\</c>), qu'on repère PAR LEUR NOM via la
+        /// Running Object Table, sans tuer le moindre process Excel. Les autres fichiers ouverts par
+        /// l'utilisateur restent intacts, même non sauvegardés. On épargne aussi le classeur de mesure
+        /// actif de notre propre instance hôte. Best-effort, renvoie le nombre de classeurs fermés.
         /// </summary>
         public int FermerClasseursMesureOuvertsExternes()
         {
@@ -144,11 +148,11 @@ namespace Metrologo.Services
                             moniker.GetDisplayName(ctx, null, out nomAffiche);
                             Marshal.ReleaseComObject(ctx);
                         }
-                        catch { /* moniker non nommable → ignoré */ }
+                        catch { /* moniker non nommable : on l'ignore */ }
 
-                        // Le nom affiché d'un classeur Excel dans la ROT est son chemin complet.
-                        // On ne ferme QUE les fichiers de mesure (freq/stab sous \Metrologo\), et
-                        // jamais le classeur actif de notre instance hôte.
+                        // Dans la ROT, le nom affiché d'un classeur Excel correspond à son chemin
+                        // complet. On ne ferme QUE les fichiers de mesure (freq/stab sous \Metrologo\),
+                        // et surtout jamais le classeur actif de notre instance hôte.
                         if (string.IsNullOrEmpty(nomAffiche)
                             || !EstClasseurDeMesure(nomAffiche)
                             || ChemPathEgal(nomAffiche, _cheminClasseurActif))
@@ -162,7 +166,7 @@ namespace Metrologo.Services
                         dynamic wb = comObj;
                         try
                         {
-                            wb.Close(false);   // pas de sauvegarde : rapport régénéré par la mesure
+                            wb.Close(false);   // on ne sauvegarde pas : la mesure régénère le rapport
                             fermes++;
                             JournalLog.Info(CategorieLog.Excel, "EXCEL_MESURE_FERME_PARNOM",
                                 $"Classeur de mesure « {nomAffiche} » fermé (par nom) avant la mesure.");
@@ -191,20 +195,20 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Classe les EXCEL.EXE externes en deux catégories :
-        ///   - <c>visibles</c> : possèdent une fenêtre principale (MainWindowHandle != 0) =
-        ///     un vrai classeur ouvert par l'utilisateur, susceptible de contenir un travail
-        ///     non sauvegardé → ne JAMAIS fermer sans confirmation.
-        ///   - <c>fantomes</c> : aucun fenêtre = reliquat de pilotage COM (session Metrologo
-        ///     précédente, complément, crash). Non visible par l'utilisateur, donc fermable
+        /// Range les EXCEL.EXE externes en deux catégories :
+        ///   - <c>visibles</c> : ils ont une fenêtre principale (MainWindowHandle != 0), donc c'est
+        ///     un vrai classeur ouvert par l'utilisateur, qui peut contenir un travail non sauvegardé.
+        ///     On ne les ferme JAMAIS sans confirmation.
+        ///   - <c>fantomes</c> : aucune fenêtre, c'est un reliquat de pilotage COM (session Metrologo
+        ///     précédente, complément, crash). Comme l'utilisateur ne les voit pas, on peut les fermer
         ///     en silence pour libérer un éventuel verrou de fichier.
         /// </summary>
         /// <summary>
-        /// Photographie l'ensemble des PID EXCEL.EXE actuellement en cours. À appeler
-        /// JUSTE avant <c>Activator.CreateInstance("Excel.Application")</c> pour pouvoir,
-        /// après création, identifier de façon fiable le PID de NOTRE nouvelle instance
-        /// (cf. <see cref="ResoudrePidExcelCree"/>). Plus robuste que la lecture du HWND,
-        /// qui échoue quand l'instance cachée n'a pas (encore) de fenêtre exploitable.
+        /// Prend une photo de tous les PID EXCEL.EXE actuellement en cours. À appeler JUSTE avant
+        /// <c>Activator.CreateInstance("Excel.Application")</c> : ça nous permet, une fois l'instance
+        /// créée, de retrouver de façon fiable le PID de NOTRE nouvelle instance (voir
+        /// <see cref="ResoudrePidExcelCree"/>). C'est plus robuste que de lire le HWND, qui échoue
+        /// tant que l'instance cachée n'a pas (encore) de fenêtre exploitable.
         /// </summary>
         private static HashSet<int> SnapshotPidsExcel()
         {
@@ -213,18 +217,18 @@ namespace Metrologo.Services
             {
                 foreach (var p in Process.GetProcessesByName("EXCEL"))
                 {
-                    try { set.Add(p.Id); } catch { /* process mourant */ }
+                    try { set.Add(p.Id); } catch { /* process en train de mourir */ }
                 }
             }
-            catch { /* énumération impossible : on retournera un set vide */ }
+            catch { /* énumération impossible : tant pis, on renvoie un set vide */ }
             return set;
         }
 
         /// <summary>
-        /// Renvoie le PID du process EXCEL.EXE apparu depuis <paramref name="avant"/>
-        /// (le snapshot pris avant <c>CreateInstance</c>) — c'est notre instance COM.
-        /// Retourne 0 si rien de neuf (timing/échec), auquel cas l'appelant retombe sur
-        /// la lecture du HWND comme solution de repli.
+        /// Renvoie le PID du process EXCEL.EXE qui est apparu depuis <paramref name="avant"/>
+        /// (le snapshot pris avant <c>CreateInstance</c>) : c'est notre instance COM. Renvoie 0
+        /// si rien de neuf n'est apparu (souci de timing ou échec), et dans ce cas l'appelant
+        /// se rabat sur la lecture du HWND.
         /// </summary>
         private static int ResoudrePidExcelCree(HashSet<int> avant)
         {
@@ -250,35 +254,36 @@ namespace Metrologo.Services
                     if (p.MainWindowHandle != IntPtr.Zero) visibles.Add(p);
                     else fantomes.Add(p);
                 }
-                catch { fantomes.Add(p); /* process mourant : traité comme fantôme */ }
+                catch { fantomes.Add(p); /* process en train de mourir : on le compte comme fantôme */ }
             }
             return (visibles, fantomes);
         }
 
         /// <summary>
-        /// Vrai si un classeur de mesure est actuellement ouvert dans l'instance Excel.
-        /// Utilisé par <see cref="MesureOrchestrator"/> pour décider du chemin :
-        ///   - false (= 1ère mesure de la session app) → ClosedXML init + OuvrirEtAfficher
-        ///   - true (= mesure 2+ sur même FI ou multi-gates) → <see cref="AjouterFeuilleMesureAsync"/>
-        ///     en pur COM sans jamais fermer le classeur (élimine la fenêtre grise SDI).
+        /// Vrai s'il y a actuellement un classeur de mesure ouvert dans l'instance Excel.
+        /// <see cref="MesureOrchestrator"/> s'en sert pour choisir son chemin :
+        ///   - false (1ère mesure de la session app) → init ClosedXML + OuvrirEtAfficher
+        ///   - true (mesure 2 et suivantes sur le même FI, ou multi-gates) →
+        ///     <see cref="AjouterFeuilleMesureAsync"/> en pur COM, sans jamais fermer le classeur,
+        ///     ce qui évite la fenêtre grise SDI.
         /// </summary>
         public bool AClasseurActif
         {
             get { lock (_sync) { return _classeurActif != null; } }
         }
 
-        /// <summary>Chemin du classeur actuellement ouvert dans Excel (vide si aucun).</summary>
+        /// <summary>Chemin du classeur actuellement ouvert dans Excel, ou vide s'il n'y en a aucun.</summary>
         public string CheminClasseurActif
         {
             get { lock (_sync) { return _cheminClasseurActif; } }
         }
 
         /// <summary>
-        /// Désactive le rendu Excel (ScreenUpdating=false) le temps d'une transition
-        /// fermeture/réouverture du classeur. Évite que la fenêtre Excel ne s'affiche
-        /// brièvement vide (shell SDI grise) entre deux mesures. À appeler avant
-        /// <c>FermerClasseurActifAsync</c> + init ClosedXML ; le rendu est restauré
-        /// automatiquement par <c>OuvrirEtAfficherAsync</c> en fin de transition.
+        /// Coupe le rendu Excel (ScreenUpdating=false) le temps d'une transition
+        /// fermeture/réouverture du classeur, pour éviter que la fenêtre Excel ne s'affiche
+        /// brièvement vide (le shell SDI gris) entre deux mesures. À appeler avant
+        /// <c>FermerClasseurActifAsync</c> + l'init ClosedXML ; le rendu est rétabli tout seul
+        /// par <c>OuvrirEtAfficherAsync</c> à la fin de la transition.
         /// </summary>
         public Task GelerAffichageAsync() => Task.Run(() =>
         {
@@ -291,11 +296,11 @@ namespace Metrologo.Services
 
 
         /// <summary>
-        /// Déplace toutes les fenêtres top-level Excel du process hôte hors de l'écran visible
-        /// (-32000, -32000) en mémorisant leur position pour restauration ultérieure.
-        /// Utilisé pendant la transition fermeture/réouverture du Workbook entre 2 mesures :
-        /// évite que la « shell SDI grise » apparaisse à l'écran pendant l'init ClosedXML,
-        /// sans avoir à toggler Application.Visible (qui causait clignotement + perte de focus).
+        /// Pousse toutes les fenêtres top-level Excel du process hôte hors de l'écran visible
+        /// (-32000, -32000), en mémorisant leur position pour pouvoir les remettre en place ensuite.
+        /// On s'en sert pendant la transition fermeture/réouverture du Workbook entre 2 mesures :
+        /// ça évite que la « shell SDI grise » apparaisse à l'écran pendant l'init ClosedXML, et sans
+        /// avoir à jouer sur Application.Visible (qui provoquait clignotement et perte de focus).
         /// </summary>
         public Task DeplacerExcelHorsEcranAsync() => Task.Run(() =>
         {
@@ -312,7 +317,7 @@ namespace Metrologo.Services
                         {
                             GetWindowThreadProcessId(hWnd, out uint pid);
                             if (pid != (uint)_excelPid) return true;
-                            if (GetParent(hWnd) != IntPtr.Zero) return true;   // pas top-level
+                            if (GetParent(hWnd) != IntPtr.Zero) return true;   // ce n'est pas une top-level
                             if (!IsWindowVisible(hWnd)) return true;
                             if (GetWindowRect(hWnd, out RECT r))
                             {
@@ -335,9 +340,9 @@ namespace Metrologo.Services
         });
 
         /// <summary>
-        /// Restaure les fenêtres Excel à leur position d'origine après une transition
-        /// hors écran. Si une fenêtre du process n'était pas mémorisée (créée pendant la
-        /// transition, ex: nouveau Workbook), on la place à (100, 100) par défaut.
+        /// Remet les fenêtres Excel à leur position d'origine après les avoir envoyées hors écran.
+        /// Si une fenêtre du process n'avait pas été mémorisée (parce qu'elle est apparue pendant la
+        /// transition, par exemple un nouveau Workbook), on la place à (100, 100) par défaut.
         /// </summary>
         public Task RemettreExcelEnEcranAsync() => Task.Run(() =>
         {
@@ -355,7 +360,7 @@ namespace Metrologo.Services
                             if (pid != (uint)_excelPid) return true;
                             if (GetParent(hWnd) != IntPtr.Zero) return true;
                             if (!IsWindowVisible(hWnd)) return true;
-                            // Si on connaît sa position d'origine, on l'y remet. Sinon défaut.
+                            // Si on connaît sa position d'origine, on l'y remet ; sinon on prend le défaut.
                             if (anciennesPositions.TryGetValue(hWnd, out var pos))
                             {
                                 SetWindowPos(hWnd, IntPtr.Zero, pos.X, pos.Y, 0, 0,
@@ -363,8 +368,8 @@ namespace Metrologo.Services
                             }
                             else
                             {
-                                // Nouvelle fenêtre apparue pendant la transition (ex: Workbook
-                                // ouvert après Open). Position d'écran par défaut.
+                                // Fenêtre apparue pendant la transition (par exemple un Workbook
+                                // ouvert après le Open). On lui donne une position d'écran par défaut.
                                 SetWindowPos(hWnd, IntPtr.Zero, 100, 100, 0, 0,
                                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                             }
@@ -383,22 +388,22 @@ namespace Metrologo.Services
         });
 
         /// <summary>
-        /// PID du process EXCEL.EXE qu'on a démarré, pour pouvoir le tuer en urgence
-        /// si les COM calls hangent (fermeture manuelle Excel par l'utilisateur pendant
-        /// une écriture en cours = appels RPC bloqués jusqu'à timeout système ~60 s).
-        /// 0 = pas démarré.
+        /// PID du process EXCEL.EXE qu'on a démarré, qu'on garde sous la main pour pouvoir le tuer
+        /// en urgence si les appels COM se bloquent — typiquement quand l'utilisateur ferme Excel
+        /// à la main pendant une écriture en cours, ce qui laisse les appels RPC suspendus jusqu'au
+        /// timeout système (~60 s). Vaut 0 tant qu'Excel n'est pas démarré.
         /// </summary>
         private int _excelPid;
 
         private readonly object _sync = new();
         private bool _disposed;
 
-        // P/Invoke pour récupérer le PID du process Excel à partir de son handle.
+        // P/Invoke pour retrouver le PID du process Excel à partir de son handle de fenêtre.
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
-        // P/Invoke pour énumérer/masquer les fenêtres top-level Excel parasites (la fenêtre
-        // « shell » d'Excel SDI qui reste visible et grise à côté du rapport).
+        // P/Invoke pour énumérer puis masquer les fenêtres top-level Excel parasites — la fameuse
+        // fenêtre « shell » d'Excel SDI qui reste visible, toute grise, à côté du rapport.
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
@@ -435,14 +440,14 @@ namespace Metrologo.Services
         private const uint SWP_NOACTIVATE = 0x0010;
         private static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
 
-        // Mémorise la position originale de la fenêtre Excel hôte avant déplacement
-        // hors écran (transition entre 2 mesures). Restaurée après la réouverture.
+        // On y mémorise la position d'origine de la fenêtre Excel hôte avant de l'envoyer hors
+        // écran (transition entre 2 mesures), pour la restaurer une fois la réouverture faite.
         private readonly Dictionary<IntPtr, (int X, int Y)> _positionsFenetresExcelSauvees = new();
 
-        // Timer de masquage continu des fenêtres shell : se déclenche toutes les 500 ms tant
-        // qu'un classeur est ouvert dans Excel. Garantit que toute shell qui apparaîtrait
-        // (1ère ouverture, race COM, etc.) est masquée dans la demi-seconde max — même si la
-        // tentative initiale a échoué pour cause de timing.
+        // Timer qui masque les fenêtres shell en continu : il se réveille toutes les 500 ms tant
+        // qu'un classeur est ouvert dans Excel. Comme ça, n'importe quelle shell qui finirait par
+        // apparaître (1ère ouverture, race COM, etc.) est masquée dans la demi-seconde — même si la
+        // toute première tentative avait raté à cause du timing.
         private System.Threading.Timer? _timerMasquageShell;
         private readonly object _timerLock = new();
 
@@ -897,7 +902,7 @@ namespace Metrologo.Services
             _feuilleMesure = null;
             _excel = null;
             _cheminClasseurActif = string.Empty;
-            _cheminXlaPreCharge = string.Empty;   // l'instance morte avait son propre .xla — invalide
+            _cheminXlaPreCharge = string.Empty;   // l'ancienne instance avait son propre .xla : il n'a plus de sens ici
 
             try
             {
@@ -911,12 +916,12 @@ namespace Metrologo.Services
                 _excel.ScreenUpdating = false;
                 _excel.AskToUpdateLinks = false;
 
-                // Re-pré-ouvre Metrologo.xla pour que les formules [1]!Cal_xxx des prochains
-                // rapports se résolvent silencieusement (cf. PreChargerXlaInterne).
+                // On rouvre Metrologo.xla d'avance, sinon les formules [1]!Cal_xxx des prochains
+                // rapports ne se résoudraient pas toutes seules (voir PreChargerXlaInterne).
                 PreChargerXlaInterne();
 
-                // Recapture le PID du NOUVEAU process Excel — sinon TuerProcessExcelAsync
-                // taperait sur un PID obsolète et ne servirait à rien. Diff fiable + repli HWND.
+                // On récupère le PID du NOUVEAU process Excel : sans ça, TuerProcessExcelAsync
+                // viserait un PID périmé et ne ferait rien. Diff fiable, avec repli sur le HWND.
                 _excelPid = ResoudrePidExcelCree(pidsAvant);
                 if (_excelPid == 0)
                 {

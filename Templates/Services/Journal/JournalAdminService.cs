@@ -20,52 +20,52 @@ namespace Metrologo.Services.Journal
     }
 
     /// <summary>
-    /// Journal d'AUDIT administrateur : trace, dans un fichier texte partagé
-    /// (<c>&lt;Logs&gt;\Journal_Administration.txt</c>), uniquement les ACTIONS de configuration
-    /// (changement de rubidium, création/modif/suppression de module d'incertitude, ajout/suppr
-    /// d'appareil au catalogue, gestion des utilisateurs, etc.). Les simples consultations
-    /// (ouverture d'écrans, lecture de FI) sont volontairement exclues.
+    /// Journal d'AUDIT administrateur : dans un fichier texte partagé
+    /// (<c>&lt;Logs&gt;\Journal_Administration.txt</c>), on ne garde trace que des ACTIONS de
+    /// configuration (changement de rubidium, création/modif/suppression de module d'incertitude,
+    /// ajout/suppression d'appareil au catalogue, gestion des utilisateurs, etc.). Les simples
+    /// consultations (ouverture d'écrans, lecture de FI) en sont volontairement exclues.
     ///
-    /// Alimenté automatiquement par la façade <see cref="Journal"/> : toute action des catégories
-    /// Administration/Rubidium dont le code figure dans <see cref="_actionsAudit"/> y est ajoutée.
+    /// Rempli automatiquement par <see cref="Journal"/> : toute action des catégories
+    /// Administration/Rubidium dont le code figure dans <see cref="_actionsAudit"/> y atterrit.
     /// </summary>
     public static class JournalAdminService
     {
         private static readonly object _sync = new();
 
-        /// <summary>Fichier d'audit, sur le partage Logs (vu par tous les postes admin).</summary>
+        /// <summary>Fichier d'audit, posé sur le partage Logs (accessible à tous les postes admin).</summary>
         public static string Chemin => Path.Combine(CheminsMetrologo.Logs, "Journal_Administration.txt");
 
         private const string Sep = " | ";
 
         /// <summary>
-        /// Codes d'action retenus comme « audit admin » (modifications). Tout le reste — en
-        /// particulier les <c>OUVERTURE_*</c> (consultations) — est ignoré.
+        /// Les codes d'action que l'on considère comme « audit admin » (des modifications). Tout
+        /// le reste — en particulier les <c>OUVERTURE_*</c> (consultations) — passe à la trappe.
         /// </summary>
         private static readonly HashSet<string> _actionsAudit = new(StringComparer.OrdinalIgnoreCase)
         {
-            // Rubidium
+            // Côté rubidium
             "SELECTION_RUBIDIUM", "CATALOGUE_RUBIDIUMS_MAJ",
-            // Rubidium — valeur de référence (écart hebdo Besançon)
+            // Rubidium : valeur de référence (l'écart hebdo Besançon)
             "RUBIDIUM_VALEUR_MAJ", "RUBIDIUM_HEBDO_SOUS_SEUIL",
             // Modules d'incertitude
             "INCERT_MODULE_SAUVE", "INCERT_MODULE_COPIE", "INCERT_MODULE_SUPPR", "INCERT_MODULE_RENOMME",
-            // Catalogue appareils
+            // Catalogue des appareils
             "CATALOGUE_MODIF", "CATALOGUE_SUPPR", "CATALOGUE_IMPORT", "CATALOGUE_IMPORT_UI",
-            // Utilisateurs / comptes
+            // Utilisateurs et comptes
             "UTILISATEUR_AJOUTE", "UTILISATEUR_SUPPRIME", "UTILISATEUR_RENOMME", "UTILISATEUR_ROLE",
             "MDP_REINITIALISE", "MDP_MODIFIE",
             // Configuration système
             "MACRO_XLA_CONFIG", "CHEMINS_SAUVE",
-            // Accès admin
+            // Accès administrateur
             "ACCES_ADMIN_OK", "ACCES_ADMIN_KO",
         };
 
         public static bool EstActionAudit(string action) =>
             !string.IsNullOrEmpty(action) && _actionsAudit.Contains(action);
 
-        /// <summary>Ajoute une entrée d'audit (best-effort, thread-safe). Enregistre aussi le nom
-        /// de la machine — utilisé pour ne pas notifier le poste qui a fait le changement.</summary>
+        /// <summary>Ajoute une entrée d'audit (au mieux, et thread-safe). On note aussi le nom de la
+        /// machine, ce qui sert à ne pas renotifier le poste qui est à l'origine du changement.</summary>
         public static void Ecrire(string action, string detail, string? utilisateur)
         {
             lock (_sync)
@@ -76,17 +76,17 @@ namespace Metrologo.Services.Journal
                     string ts = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                     string machine = Environment.MachineName;
                     string user = string.IsNullOrWhiteSpace(utilisateur) ? "?" : utilisateur;
-                    // Format parseable ET lisible : ts | machine | user | action | detail
+                    // Format à la fois lisible et facile à reparser : ts | machine | user | action | detail
                     string d = (detail ?? string.Empty).Replace("\r", " ").Replace("\n", " ");
                     string ligne = ts + Sep + machine + Sep + user + Sep + action + Sep + d;
                     File.AppendAllText(Chemin, ligne + Environment.NewLine, Encoding.UTF8);
                 }
-                catch { /* best-effort : ne jamais faire échouer une action admin à cause de l'audit */ }
+                catch { /* au mieux : une action admin ne doit jamais échouer à cause de l'audit */ }
             }
         }
 
-        /// <summary>Parse une ligne du journal. Gère le format actuel (5 champs avec machine) et
-        /// l'ancien (4 champs sans machine). Retourne null si la ligne est inexploitable.</summary>
+        /// <summary>Parse une ligne du journal. Sait lire le format actuel (5 champs, avec machine)
+        /// comme l'ancien (4 champs, sans machine). Renvoie null si la ligne est inexploitable.</summary>
         private static EntreeJournalAdmin? Parser(string ligne)
         {
             if (string.IsNullOrWhiteSpace(ligne)) return null;
@@ -101,7 +101,7 @@ namespace Metrologo.Services.Journal
                     Action = p[3].Trim(), Detail = p[4].Trim(),
                 };
 
-            // Ancien format : ts | user | action | detail (machine inconnue).
+            // Ancien format : ts | user | action | detail (pas de machine connue).
             return new EntreeJournalAdmin
             {
                 Horodatage = ts, Machine = string.Empty, Utilisateur = p[1].Trim(),
@@ -109,7 +109,7 @@ namespace Metrologo.Services.Journal
             };
         }
 
-        /// <summary>Toutes les entrées dans l'ordre chronologique (plus ancien → plus récent).</summary>
+        /// <summary>Toutes les entrées, du plus ancien au plus récent.</summary>
         public static List<EntreeJournalAdmin> LireChronologique()
         {
             var liste = new List<EntreeJournalAdmin>();
@@ -124,12 +124,12 @@ namespace Metrologo.Services.Journal
                         if (e != null) liste.Add(e);
                     }
                 }
-                catch { /* lecture partielle → on garde ce qu'on a */ }
+                catch { /* lecture interrompue : on garde ce qu'on a déjà */ }
             }
             return liste;
         }
 
-        /// <summary>Lit les entrées d'audit, les plus récentes en premier (pour le viewer).</summary>
+        /// <summary>Lit les entrées d'audit, les plus récentes d'abord (pratique pour le viewer).</summary>
         public static List<EntreeJournalAdmin> Lire(int max = 5000)
         {
             var liste = LireChronologique();
@@ -137,7 +137,7 @@ namespace Metrologo.Services.Journal
             return liste.Take(max).ToList();
         }
 
-        /// <summary>Taille actuelle du fichier (octets) — point de départ du watcher.</summary>
+        /// <summary>Taille actuelle du fichier (en octets) : sert de point de départ au watcher.</summary>
         public static long Position()
         {
             try { return File.Exists(Chemin) ? new FileInfo(Chemin).Length : 0; }
@@ -145,9 +145,9 @@ namespace Metrologo.Services.Journal
         }
 
         /// <summary>
-        /// Lit les NOUVELLES entrées ajoutées depuis la position <paramref name="position"/>
-        /// (octets). Met à jour <paramref name="position"/> à la fin. Lecture incrémentale
-        /// (seek) pour ne pas relire tout le fichier à chaque scan du watcher.
+        /// Lit uniquement les NOUVELLES entrées ajoutées depuis la position
+        /// <paramref name="position"/> (en octets), puis met <paramref name="position"/> à jour.
+        /// On fait un seek pour éviter de relire tout le fichier à chaque passage du watcher.
         /// </summary>
         public static List<EntreeJournalAdmin> LireDepuis(ref long position)
         {
@@ -158,7 +158,7 @@ namespace Metrologo.Services.Journal
                 {
                     if (!File.Exists(Chemin)) { position = 0; return nouvelles; }
                     using var fs = new FileStream(Chemin, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    if (fs.Length < position) position = 0; // fichier tronqué/recréé
+                    if (fs.Length < position) position = 0; // le fichier a été tronqué ou recréé
                     fs.Seek(position, SeekOrigin.Begin);
                     using var sr = new StreamReader(fs, Encoding.UTF8);
                     string? ligne;
@@ -169,12 +169,12 @@ namespace Metrologo.Services.Journal
                     }
                     position = fs.Length;
                 }
-                catch { /* best-effort : on réessaiera au prochain scan */ }
+                catch { /* au mieux : on retentera au prochain passage */ }
             }
             return nouvelles;
         }
 
-        /// <summary>Libellé français lisible pour un code d'action (fallback = le code brut).</summary>
+        /// <summary>Donne un libellé français lisible pour un code d'action (à défaut, le code brut).</summary>
         public static string LibelleAction(string action) => action switch
         {
             "SELECTION_RUBIDIUM"        => "Rubidium actif changé",

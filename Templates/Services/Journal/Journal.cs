@@ -3,8 +3,8 @@ using System.Threading.Tasks;
 namespace Metrologo.Services.Journal
 {
     /// <summary>
-    /// Façade statique pour journaliser depuis n'importe où dans l'application.
-    /// À initialiser avec <see cref="Configurer"/> au démarrage.
+    /// Point d'entrée statique pour journaliser depuis n'importe où dans l'application.
+    /// À initialiser au démarrage via <see cref="Configurer"/>.
     /// </summary>
     public static class Journal
     {
@@ -38,10 +38,10 @@ namespace Metrologo.Services.Journal
             => Router(cat, action, message, details, SeveriteLog.Erreur);
 
         /// <summary>
-        /// Journalise via le service, et capture en plus dans le journal d'AUDIT administrateur
-        /// les actions de configuration (catégories Administration/Rubidium dont le code est
-        /// retenu — cf. <see cref="JournalAdminService"/>). Les simples consultations
-        /// (OUVERTURE_*) ne sont pas dans la liste blanche, donc ignorées.
+        /// Écrit dans le journal via le service, et au passage recopie dans le journal d'AUDIT
+        /// administrateur les actions de configuration (catégories Administration/Rubidium dont le
+        /// code est retenu — voir <see cref="JournalAdminService"/>). Les simples consultations
+        /// (OUVERTURE_*) ne sont pas dans la liste blanche, donc on les laisse de côté.
         /// </summary>
         private static void Router(CategorieLog cat, string action, string message, object? details, SeveriteLog sev)
         {

@@ -8,36 +8,35 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Journal
 {
     /// <summary>
-    /// Archivage mensuel des fichiers de logs sur le partage réseau.
+    /// Range les fichiers de logs du mois écoulé dans un sous-dossier d'archive, sur le partage réseau.
     ///
-    /// Comportement : au 1er démarrage de Metrologo dans le mois courant (peu importe
-    /// quel poste, lequel utilisateur), les fichiers <c>entries-&lt;moisPrec&gt;.jsonl</c> et
-    /// <c>.txt</c> sont déplacés depuis <c>M:\Logs\</c> vers
-    /// <c>M:\Logs\Archives\&lt;moisPrec&gt;\</c>. Les fichiers du mois courant continuent
-    /// de s'écrire dans <c>M:\Logs\</c> normalement.
+    /// L'idée : au tout premier lancement de Metrologo dans le mois (n'importe quel poste,
+    /// n'importe quel utilisateur), on déplace les fichiers <c>entries-&lt;moisPrec&gt;.jsonl</c>
+    /// et <c>.txt</c> de <c>M:\Logs\</c> vers <c>M:\Logs\Archives\&lt;moisPrec&gt;\</c>. Les logs
+    /// du mois en cours, eux, continuent de s'écrire dans <c>M:\Logs\</c> comme d'habitude.
     ///
-    /// Multi-postes safe : verrou fichier exclusif (<c>archive-YYYY-MM.lock</c>) +
-    /// marqueur de complétion (<c>Archives\YYYY-MM\.done</c>). Si 3 postes démarrent
-    /// le matin du 1er, un seul fait l'archivage, les autres voient le .done et passent.
-    /// Si M:\ est inaccessible, opération no-op silencieuse.
+    /// Pensé pour le multi-postes : un verrou fichier exclusif (<c>archive-YYYY-MM.lock</c>) et
+    /// un marqueur de fin (<c>Archives\YYYY-MM\.done</c>). Si trois postes démarrent le matin du
+    /// 1er, un seul fait le travail ; les autres tombent sur le .done et passent leur chemin.
+    /// Et si M:\ n'est pas accessible, on ne fait rien, sans bruit.
     /// </summary>
     public static class ArchivesLogsService
     {
-        /// <summary>Pointe sur le dossier Archives à l'intérieur de Logs (sur le partage).</summary>
+        /// <summary>Le dossier Archives, situé à l'intérieur de Logs (sur le partage).</summary>
         public static string DossierArchivesRacine => Path.Combine(CheminsMetrologo.Logs, "Archives");
 
-        // ---------- API publique conservée pour les ViewModels existants ----------
+        // ---------- API publique, gardée telle quelle pour les ViewModels existants ----------
 
         /// <summary>
-        /// Liste les mois pour lesquels un fichier d'entrées existe (mois actif dans
-        /// <c>Logs/</c> + mois archivés dans <c>Logs/Archives/YYYY-MM/</c>).
+        /// Énumère les mois qui ont un fichier d'entrées : le mois actif (dans <c>Logs/</c>)
+        /// et les mois déjà archivés (dans <c>Logs/Archives/YYYY-MM/</c>).
         /// </summary>
         public static IEnumerable<DateTime> ListerMoisArchives()
         {
             var dejaVus = new HashSet<DateTime>();
             string dossierLogs = CheminsMetrologo.Logs;
 
-            // Mois actifs (entries-YYYY-MM.jsonl dans Logs/)
+            // Mois encore actifs (les entries-YYYY-MM.jsonl posés dans Logs/)
             if (Directory.Exists(dossierLogs))
             {
                 foreach (var fichier in Directory.EnumerateFiles(dossierLogs, "entries-*.jsonl"))
@@ -47,7 +46,7 @@ namespace Metrologo.Services.Journal
                 }
             }
 
-            // Mois archivés (sous-dossiers Logs/Archives/YYYY-MM/)
+            // Mois déjà archivés (un sous-dossier Logs/Archives/YYYY-MM/ par mois)
             string dossierArchives = DossierArchivesRacine;
             if (Directory.Exists(dossierArchives))
             {
@@ -78,8 +77,8 @@ namespace Metrologo.Services.Journal
         }
 
         /// <summary>
-        /// Appelé au démarrage de l'app. Archive le mois précédent s'il ne l'est pas
-        /// encore. Idempotent + multi-postes-safe.
+        /// À appeler au démarrage de l'app : archive le mois précédent s'il ne l'a pas
+        /// encore été. On peut l'appeler sans risque plusieurs fois, et depuis plusieurs postes.
         /// </summary>
         public static Task ArchiverMoisPrecedentSiNecessaireAsync()
         {
@@ -93,13 +92,13 @@ namespace Metrologo.Services.Journal
                 }
                 catch (Exception ex)
                 {
-                    // Erreur non bloquante — l'app reste utilisable même si l'archivage échoue.
+                    // On n'en fait pas un drame : même si l'archivage rate, l'app reste utilisable.
                     try
                     {
                         JournalLog.Warn(CategorieLog.Systeme, "ARCHIVE_LOGS_ERR",
                             $"Archivage mensuel échoué : {ex.Message}");
                     }
-                    catch { /* journal pas encore configuré ? */ }
+                    catch { /* le journal n'est peut-être pas encore configuré */ }
                 }
             });
         }
@@ -107,10 +106,10 @@ namespace Metrologo.Services.Journal
         // ---------- Implémentation interne ----------
 
         /// <summary>
-        /// Déplace les fichiers <c>entries-&lt;mois&gt;.jsonl</c> et <c>.txt</c> depuis
-        /// <c>Logs/</c> vers <c>Logs/Archives/&lt;mois&gt;/</c>. Multi-postes-safe via
-        /// verrou fichier exclusif. Retourne le nombre de fichiers déplacés (0 si
-        /// déjà fait ou rien à déplacer).
+        /// Déplace les fichiers <c>entries-&lt;mois&gt;.jsonl</c> et <c>.txt</c> de
+        /// <c>Logs/</c> vers <c>Logs/Archives/&lt;mois&gt;/</c>. Sûr en multi-postes grâce au
+        /// verrou fichier exclusif. Renvoie le nombre de fichiers déplacés (0 si c'était
+        /// déjà fait ou s'il n'y avait rien à bouger).
         /// </summary>
         private static int ArchiverMoisVersDossierInterne(DateTime mois)
         {
@@ -120,18 +119,18 @@ namespace Metrologo.Services.Journal
             string flagDone = Path.Combine(dossierArchive, ".done");
             string flagLock = Path.Combine(dossierLogs, $"archive-{moisStr}.lock");
 
-            // 0. Vérif basique
+            // 0. Garde-fou de base
             if (!Directory.Exists(dossierLogs)) return 0;
 
-            // 1. Déjà archivé par un autre poste ? → on passe
+            // 1. Un autre poste a déjà fait l'archivage ? On laisse tomber.
             if (File.Exists(flagDone)) return 0;
 
-            // 2. Rien à archiver pour ce mois ? → on passe
+            // 2. Rien à archiver pour ce mois ? On laisse tomber aussi.
             var fichiersAArchiver = Directory.EnumerateFiles(dossierLogs, $"entries-{moisStr}.*").ToList();
             if (fichiersAArchiver.Count == 0) return 0;
 
-            // 3. Verrou exclusif via FileMode.CreateNew (atomic à la création).
-            //    Si deux postes tentent en parallèle, un seul gagne.
+            // 3. Verrou exclusif avec FileMode.CreateNew (la création est atomique).
+            //    Si deux postes tentent leur chance en même temps, un seul l'emporte.
             FileStream? lockStream = null;
             try
             {
@@ -142,11 +141,11 @@ namespace Metrologo.Services.Journal
                 }
                 catch (IOException)
                 {
-                    // Un autre poste tient le lock — il fera l'archivage, on passe.
+                    // Un autre poste tient déjà le verrou — c'est lui qui archivera, on passe.
                     return 0;
                 }
 
-                // 4. Re-vérif sous lock (un autre poste pourrait avoir fini juste avant nous)
+                // 4. On revérifie une fois le verrou tenu (un poste a pu finir juste avant nous)
                 if (File.Exists(flagDone)) return 0;
 
                 Directory.CreateDirectory(dossierArchive);
@@ -169,7 +168,7 @@ namespace Metrologo.Services.Journal
                     }
                 }
 
-                // 5. Marqueur de complétion (les autres postes verront que c'est fait)
+                // 5. On pose le marqueur de fin (comme ça les autres postes sauront que c'est réglé)
                 File.WriteAllText(flagDone,
                     $"Archivé le {DateTime.Now:yyyy-MM-dd HH:mm:ss} par {Environment.MachineName} "
                   + $"({nbDeplaces} fichier(s) déplacé(s))");

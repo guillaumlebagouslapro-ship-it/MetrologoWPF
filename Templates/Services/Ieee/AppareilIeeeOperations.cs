@@ -12,14 +12,15 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Logique de mesure portée du Delphi (TAppareilIEEE.Lecture, ConfigAppareil, MesureIntervalleRacalDana),
-    /// via un IIeeeDriver injecté : on peut simuler sans matériel et changer de backend GPIB sans toucher ici.
+    /// Toute la logique de mesure, reprise du Delphi (TAppareilIEEE.Lecture, ConfigAppareil,
+    /// MesureIntervalleRacalDana). Elle passe par un IIeeeDriver injecté : on peut donc simuler
+    /// sans matériel et changer de backend GPIB sans rien toucher ici.
     /// </summary>
     // réf Delphi : U_DeclarationsMETROLOGO.pas:674 (Lecture), :1047 (MesureIntervalleRacalDana), F_Main.pas:1927 (ConfigAppareil)
     public static class AppareilIeeeOperations
     {
 
-        /// <summary>Envoie la chaîne d'init de l'appareil (ChaineInit du .ini).</summary>
+        /// <summary>Envoie la chaîne d'initialisation de l'appareil (le ChaineInit du .ini).</summary>
         public static Task InitialiserAsync(
             this AppareilIEEE appareil, IIeeeDriver driver, CancellationToken ct = default)
         {
@@ -28,8 +29,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Portage de TfrmMain.ConfigAppareil : IFC, puis voie MUX (si mux fourni et VoieMux valide),
-        /// ConfEntree et activation SRQ.
+        /// Reprise de TfrmMain.ConfigAppareil : on fait l'IFC, puis on sélectionne la voie MUX (si un
+        /// mux est fourni et que VoieMux est valide), on envoie ConfEntree et on active le SRQ.
         /// </summary>
         public static async Task ConfigurerAsync(
             this AppareilIEEE appareil,
@@ -59,8 +60,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Programme la gate courante sur l'appareil (sauf en mode Interval, cf. F_Main.pas:1211).
-        /// verifierArming relit l'arming après écriture (~200 ms), à couper dans les boucles de balayage.
+        /// Programme la gate en cours sur l'appareil — sauf en mode Interval (cf. F_Main.pas:1211).
+        /// Quand verifierArming est vrai, on relit l'arming après l'écriture (~200 ms) : à désactiver
+        /// dans les boucles de balayage où ce surcoût se paie cher.
         /// </summary>
         public static async Task AppliquerGateAsync(
             this AppareilIEEE appareil, IIeeeDriver driver, int gateIndex,
@@ -71,8 +73,8 @@ namespace Metrologo.Services.Ieee
 
             if (!appareil.Gates.TryGetValue(gateIndex, out var gate))
             {
-                // on loggue, sinon bug invisible : l'appareil reste en gate par défaut
-                // et la cadence ne correspond pas à ce que l'utilisateur a choisi
+                // On trace l'incident, sinon c'est un bug invisible : l'appareil reste sur sa gate
+                // par défaut et la cadence ne colle pas à ce que l'utilisateur a demandé.
                 JournalLog.Warn(CategorieLog.Mesure, "GATE_INTROUVABLE",
                     $"Gate index {gateIndex} absent de {appareil.Nom} — commande de gate non envoyée, "
                     + "l'appareil tournera en mode par défaut.",
@@ -85,18 +87,20 @@ namespace Metrologo.Services.Ieee
                 return;
             }
 
-            // le timeout VISA par défaut (5 s) est trop court dès que la gate dépasse ~3 s :
-            // le :READ? ne rend la main qu'à la fin du gate, il faut donc attendre au moins
-            // gate + marge handshake GPIB. Sinon premier READ = 0 Hz (chaîne vide après timeout)
-            // puis le Write suivant bloque, le 53131A n'ayant pas vidé son buffer de sortie.
+            // Le timeout VISA par défaut (5 s) devient trop juste dès que la gate dépasse ~3 s : le
+            // :READ? ne répond qu'une fois le gate terminé, donc il faut attendre au minimum
+            // gate + un peu de marge pour le handshake GPIB. Faute de quoi, le premier READ rend 0 Hz
+            // (chaîne vide après timeout), puis le Write suivant se bloque parce que le 53131A n'a pas
+            // vidé son buffer de sortie.
             int timeoutMs = Math.Max(5000, (int)(gate.ValeurSecondes * 1000) + 2000);
             driver.DefinirTimeout(appareil.Adresse, timeoutMs);
 
             if (string.IsNullOrEmpty(gate.Commande)) return;
 
-            // certains compteurs (le 53131A en particulier) digèrent mal les commandes SCPI
-            // chaînées par ";" dans un seul Write : la 1ère passe, les suivantes sont ignorées
-            // en silence. On scinde en writes successifs avec un petit délai entre chaque.
+            // Certains compteurs (le 53131A surtout) supportent mal plusieurs commandes SCPI
+            // enchaînées par ";" dans un même Write : la première passe, les suivantes sont
+            // ignorées sans rien dire. On les découpe donc en Writes séparés, avec un petit délai
+            // entre chacun.
             var sousCommandes = gate.Commande
                 .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -109,10 +113,11 @@ namespace Metrologo.Services.Ieee
                 await Task.Delay(50, ct);
             }
 
-            // relecture de l'arming pour confirmer la prise en compte (~200 ms, 3 paires query/read).
-            // Réservé aux modèles qui supportent :FREQ:ARM:* (HP/Agilent 53131A et compatibles) :
-            // les autres (53230A, SR620...) renvoient -113 Undefined header, qui s'affiche à
-            // l'écran de l'instrument. D'où le champ catalogue VerifArmingActive (défaut false).
+            // On relit l'arming pour vérifier qu'il a bien été pris en compte (~200 ms, 3 paires
+            // query/read). Uniquement pour les modèles qui connaissent :FREQ:ARM:* (HP/Agilent 53131A
+            // et compatibles) : les autres (53230A, SR620...) répondent -113 Undefined header, qui
+            // vient s'afficher sur l'écran de l'instrument. C'est la raison du champ catalogue
+            // VerifArmingActive (false par défaut).
             if (verifierArming && appareil.VerifArmingActive)
             {
                 await VerifierArmingAsync(appareil, driver, ct);
@@ -130,8 +135,8 @@ namespace Metrologo.Services.Ieee
                 await driver.EcrireAsync(appareil.Adresse, ":FREQ:ARM:STOP:TIM?", appareil.WriteTerm, ct);
                 var tim = (await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct))?.Trim() ?? "";
 
-                // on lit aussi la file d'erreur SCPI : une commande rejetée plus tôt
-                // y traîne encore (ex -113 Undefined header)
+                // On vide aussi la file d'erreurs SCPI au passage : une commande rejetée plus tôt
+                // y traîne peut-être encore (par exemple -113 Undefined header).
                 await driver.EcrireAsync(appareil.Adresse, ":SYST:ERR?", appareil.WriteTerm, ct);
                 var err = (await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct))?.Trim() ?? "";
 
@@ -147,8 +152,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Coupe la génération de SRQ ("QM0" sur Racal, "SR00" sur EIP) en fin de boucle de mesures.
-        /// Cf. F_Main.pas:1263 (correctif du bug Racal 10 ms / 20 ms).
+        /// Coupe la génération du SRQ en fin de boucle de mesures ("QM0" sur Racal, "SR00" sur EIP).
+        /// Cf. F_Main.pas:1263, le correctif du bug Racal 10 ms / 20 ms.
         /// </summary>
         public static Task DesactiverSrqAsync(
             this AppareilIEEE appareil, IIeeeDriver driver, CancellationToken ct = default)
@@ -158,7 +163,7 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Portage de TAppareilIEEE.Lecture : une mesure unique. Retourne 0.0 sur timeout, comme en Delphi.
+        /// Reprise de TAppareilIEEE.Lecture : une seule mesure. Comme en Delphi, on renvoie 0.0 en cas de timeout.
         /// </summary>
         public static async Task<double> MesurerAsync(
             this AppareilIEEE appareil,

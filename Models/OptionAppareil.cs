@@ -1,15 +1,15 @@
 namespace Metrologo.Models
 {
     /// <summary>
-    /// Entrée de la dropdown "Fréquencemètre" de la fenêtre Configuration.
-    /// Représente un appareil détecté sur le bus GPIB, éventuellement associé à un modèle du catalogue.
+    /// Une entrée du menu déroulant "Fréquencemètre" de la fenêtre Configuration.
+    /// Elle correspond à un appareil vu sur le bus GPIB, qu'on rattache éventuellement à un modèle du catalogue.
     /// </summary>
     public class OptionAppareil
     {
-        /// <summary>Libellé affiché dans la dropdown.</summary>
+        /// <summary>Libellé affiché dans le menu déroulant.</summary>
         public string Libelle { get; init; } = string.Empty;
 
-        /// <summary>Détails de détection sur le bus. Null si jamais détecté.</summary>
+        /// <summary>Les infos de détection sur le bus. Null si l'appareil n'a jamais été détecté.</summary>
         public AppareilDetecte? Detecte { get; init; }
 
         public bool EstDetecte => Detecte != null;
@@ -19,16 +19,16 @@ namespace Metrologo.Models
         // ---------------- mode adresses fixes (appareils legacy non détectés) ----------------
 
         /// <summary>
-        /// Modèle catalogue legacy associé en mode adresses fixes (l'appareil n'est pas sur le bus,
-        /// on le pilote à une adresse saisie). Null en mode scan.
+        /// Le modèle legacy du catalogue rattaché en mode adresses fixes (l'appareil n'est pas sur le
+        /// bus, on le pilote à une adresse qu'on a saisie). Null en mode scan.
         /// </summary>
         public ModeleAppareil? ModeleFixe { get; init; }
 
         public bool EstFixe => ModeleFixe != null;
 
         /// <summary>
-        /// Adresse GPIB éditable (mode adresses fixes), pré-remplie depuis le profil. Settable :
-        /// liée en TwoWay à un TextBox dans la fenêtre Configuration.
+        /// L'adresse GPIB éditable (mode adresses fixes), pré-remplie depuis le profil. En écriture,
+        /// car elle est liée en TwoWay à un TextBox de la fenêtre Configuration.
         /// </summary>
         public int AdresseFixe { get; set; }
 

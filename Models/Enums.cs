@@ -31,8 +31,8 @@ namespace Metrologo.Models
         Validation
     }
 
-    /// <summary>Voie sur laquelle porte la mesure. Seuls les réglages de cette voie
-    /// (impédance, couplage, filtre, trigger) sont envoyés à l'appareil.</summary>
+    /// <summary>La voie concernée par la mesure. On n'envoie à l'appareil que les réglages de
+    /// cette voie-là (impédance, couplage, filtre, trigger).</summary>
     public enum VoieActive
     {
         A,

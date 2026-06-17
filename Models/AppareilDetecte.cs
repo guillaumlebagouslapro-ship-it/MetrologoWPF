@@ -1,6 +1,6 @@
 namespace Metrologo.Models
 {
-    /// <summary>Appareil IEEE-488 découvert au scan GPIB. Simple POCO stocké dans
+    /// <summary>Un appareil IEEE-488 trouvé lors du scan GPIB. Simple POCO, rangé dans
     /// EtatApplication.AppareilsDetectes et affiché dans la fenêtre de configuration.</summary>
     public class AppareilDetecte
     {
@@ -14,15 +14,15 @@ namespace Metrologo.Models
         public string? Firmware { get; init; }
 
         /// <summary>
-        /// Modèle du catalogue local correspondant (null si l'appareil n'est pas encore enregistré).
-        /// Permet d'afficher "reconnu" dans le diagnostic et de proposer l'enregistrement si null.
+        /// Le modèle du catalogue local qui correspond (null tant que l'appareil n'est pas enregistré).
+        /// Ça permet d'afficher "reconnu" dans le diagnostic, et de proposer l'enregistrement quand c'est null.
         /// </summary>
         public ModeleAppareil? ModeleReconnu { get; set; }
 
         public bool EstReconnu => ModeleReconnu != null;
 
-        /// <summary>Vrai si la réponse *IDN? semble incohérente, symptôme probable de deux appareils
-        /// sur la même adresse GPIB (collision de bus). Renseigné par le scan.</summary>
+        /// <summary>Vrai quand la réponse à *IDN? a l'air incohérente — le signe probable de deux appareils
+        /// partageant la même adresse GPIB (collision de bus). C'est le scan qui le renseigne.</summary>
         public bool ConflitAdressePossible { get; init; }
 
         public string AdresseCourte => $"GPIB{Board}::{Adresse}";

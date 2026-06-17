@@ -10,8 +10,9 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Pilote IEEE réel sur NI-VISA (NationalInstruments.Visa). Les sessions GPIB sont mises en
-    /// cache par adresse pour éviter de les rouvrir à chaque commande ; Dispose à la fermeture de l'appli.
+    /// Le vrai pilote IEEE, posé sur NI-VISA (NationalInstruments.Visa). On garde une session GPIB
+    /// ouverte par adresse plutôt que d'en rouvrir une à chaque commande, et on fait le ménage
+    /// (Dispose) quand l'appli se ferme.
     /// </summary>
     public sealed class VisaIeeeDriver : IIeeeDriver, IDisposable
     {
@@ -21,7 +22,7 @@ namespace Metrologo.Services.Ieee
         private readonly object _lock = new();
         private bool _disposed;
 
-        /// <summary>gpibBoard : index de la carte, 0 pour GPIB0 (cas général).</summary>
+        /// <summary>gpibBoard : numéro de la carte ; en pratique c'est presque toujours 0 (GPIB0).</summary>
         public VisaIeeeDriver(int gpibBoard = 0)
         {
             _rm = new ResourceManager();
@@ -37,7 +38,7 @@ namespace Metrologo.Services.Ieee
                 using var intf = (GpibInterface)_rm.Open(resource);
                 intf.SendInterfaceClear();
             }
-            catch (Exception) { /* best-effort, certains backends refusent IFC en runtime */ }
+            catch (Exception) { /* on tente, sans plus : certains backends refusent l'IFC à chaud */ }
             return Task.CompletedTask;
         }
 
@@ -48,25 +49,25 @@ namespace Metrologo.Services.Ieee
             var session = ObtenirSession(adresse);
             AppliquerTerminateurs(session, readTerm: null);
 
-            // WriteTerm (cf. Metrologo.ini / catalogue) :
-            //   0 = rien (pas de LF, pas d'EOI)
-            //   1 = LF en fin de commande + EOI (convention Delphi la plus courante)
-            //   2 = EOI uniquement (pas de LF)
+            // Signification de WriteTerm (défini dans Metrologo.ini / le catalogue) :
+            //   0 = rien (ni LF, ni EOI)
+            //   1 = LF à la fin de la commande + EOI — c'est le cas le plus fréquent côté Delphi
+            //   2 = EOI seul, sans LF
             session.SendEndEnabled = writeTerm != 0;
             string aEcrire = writeTerm == 1 ? commande + "\n" : commande;
 
-            // Synchrone direct sur le thread d'orchestration (qui tourne déjà sur un thread pool
-            // hors UI). Évite l'overhead Task.Run/await (~10-20 ms par opération) qui se voit
-            // énormément quand on enchaîne 30 :FETCh? en mode rapide stabilité.
+            // Appel synchrone direct : on est déjà sur le thread d'orchestration (un thread du pool,
+            // hors UI), donc inutile de payer le coût d'un Task.Run/await (~10-20 ms à chaque coup).
+            // Ça se voit beaucoup quand on enchaîne 30 :FETCh? d'affilée en mode rapide stabilité.
             try
             {
                 session.RawIO.Write(aEcrire);
             }
             catch (IOTimeoutException)
             {
-                // Timeout en écriture = l'appareil refuse la commande parce qu'il a typiquement
-                // encore une réponse en attente dans son buffer de sortie. Device Clear pour
-                // remettre l'appareil dans un état propre, puis on relaie l'exception.
+                // Un timeout en écriture, ça veut généralement dire que l'appareil n'accepte pas la
+                // commande parce qu'il a encore une réponse coincée dans son buffer de sortie. On lui
+                // envoie un Device Clear pour le remettre d'aplomb, puis on relance l'exception.
                 TenterDeviceClear(session, adresse, "EcrireAsync");
                 throw;
             }
@@ -80,8 +81,8 @@ namespace Metrologo.Services.Ieee
             var session = ObtenirSession(adresse);
             AppliquerTerminateurs(session, readTerm: readTerm);
 
-            // Synchrone direct (cf. EcrireAsync). Le thread d'orchestration est dédié, on peut
-            // le bloquer pendant l'IO GPIB sans impact UI.
+            // Synchrone direct, même logique que dans EcrireAsync. Le thread d'orchestration nous
+            // appartient, on peut donc le bloquer le temps de l'IO GPIB sans gêner l'UI.
             try
             {
                 return Task.FromResult(session.RawIO.ReadString());
@@ -97,7 +98,7 @@ namespace Metrologo.Services.Ieee
         {
             try
             {
-                session.Clear();  // SDC : Selected Device Clear (IEEE-488.2)
+                session.Clear();  // SDC, le Selected Device Clear de l'IEEE-488.2
                 JournalLog.Warn(CategorieLog.Mesure, "GPIB_TIMEOUT_SDC",
                     $"Timeout sur {origine} GPIB0::{adresse} — Device Clear envoyé pour ré-aligner la session.",
                     new { Adresse = adresse, Origine = origine });
@@ -154,8 +155,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Ferme les sessions en cache sans toucher au ResourceManager (rouvertes à la demande).
-        /// Utile après un appareil éteint/rallumé ou un bus bancal suite à timeout.
+        /// Referme les sessions en cache mais laisse le ResourceManager en place ; elles seront
+        /// rouvertes au besoin. Pratique quand un appareil a été éteint puis rallumé, ou quand le
+        /// bus est resté dans un état douteux après un timeout.
         /// </summary>
         public void ReinitialiserSessions()
         {
@@ -179,7 +181,7 @@ namespace Metrologo.Services.Ieee
                 {
                     try
                     {
-                        kv.Value.Clear();   // SDC : débloque le ReadString en cours côté instrument.
+                        kv.Value.Clear();   // SDC : ça débloque le ReadString qui patiente côté instrument.
                         JournalLog.Warn(CategorieLog.Mesure, "GPIB_ABORT_SDC",
                             $"Device Clear envoyé à GPIB0::{kv.Key} (arrêt utilisateur).");
                     }
@@ -192,7 +194,7 @@ namespace Metrologo.Services.Ieee
             }
         }
 
-        // ---------------- Interne ----------------
+        // ---------------- Détails internes ----------------
 
         private GpibSession ObtenirSession(int adresse)
         {
@@ -210,8 +212,9 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// ReadTerm : 10 = LF, 13 = CR, 256 = STOPEnd (EOI uniquement).
-        /// WriteTerm est géré par VISA via le mode EOI par défaut, donc on ne le configure pas activement.
+        /// ReadTerm : 10 = LF, 13 = CR, 256 = STOPEnd (c'est-à-dire EOI seul).
+        /// Pour le WriteTerm on ne fait rien de spécial : VISA s'en occupe tout seul via son mode EOI
+        /// par défaut.
         /// </summary>
         private static void AppliquerTerminateurs(GpibSession session, int? readTerm)
         {

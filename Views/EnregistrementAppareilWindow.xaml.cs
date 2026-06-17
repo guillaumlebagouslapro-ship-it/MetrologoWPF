@@ -20,8 +20,8 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// Ouvre la fenêtre d'aide qui explique chaque paramètre de saisie. Pure UI —
-        /// aucun impact sur le ViewModel ni sur l'enregistrement en cours.
+        /// Affiche la fenêtre d'aide, celle qui détaille chacun des champs à remplir.
+        /// Purement visuel : ni le ViewModel ni l'enregistrement en cours ne sont touchés.
         /// </summary>
         private void OnOuvrirAide(object sender, RoutedEventArgs e)
         {

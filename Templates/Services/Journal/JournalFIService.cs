@@ -5,14 +5,14 @@ using System.Text;
 namespace Metrologo.Services.Journal
 {
     /// <summary>
-    /// Journal utilisateur par FI : un fichier <c>Journal_&lt;FI&gt;.txt</c> est créé dans
-    /// le dossier de la FI (à côté des <c>Mesures_*.xlsx</c>) dès que l'utilisateur valide
-    /// le numéro FI. Toutes les actions métier (configuration, mesures, relances, arrêts,
-    /// échecs) y sont consignées en format texte lisible, séparé du journal système
-    /// centralisé sur le réseau (<see cref="Journal"/>) qui reste réservé aux logs techniques.
+    /// Journal utilisateur, un par FI : dès que l'opérateur valide le numéro de FI, on crée un
+    /// fichier <c>Journal_&lt;FI&gt;.txt</c> dans le dossier de la FI (à côté des
+    /// <c>Mesures_*.xlsx</c>). Toutes les actions métier — configuration, mesures, relances,
+    /// arrêts, échecs — y sont notées en texte lisible. C'est volontairement distinct du journal
+    /// système centralisé sur le réseau (<see cref="Journal"/>), qui lui reste pour les logs techniques.
     ///
-    /// Singleton thread-safe — une seule session active à la fois (changement de FI = bascule
-    /// vers un nouveau fichier après écriture FIN_SESSION sur l'ancien).
+    /// Singleton thread-safe : une seule session ouverte à la fois. Changer de FI bascule vers un
+    /// nouveau fichier, après avoir écrit FIN_SESSION dans l'ancien.
     /// </summary>
     public static class JournalFIService
     {
@@ -23,33 +23,33 @@ namespace Metrologo.Services.Journal
         private static string _posteCourant = string.Empty;
         private static DateTime _debutSession = DateTime.MinValue;
 
-        // Compteurs cumulés sur la session (pour le récap final FIN_SESSION).
+        // Compteurs cumulés sur la durée de la session (servent au récap final FIN_SESSION).
         private static int _nbMesuresEffectuees;
         private static int _nbMesuresEchouees;
 
-        /// <summary>Numéro FI de la session en cours (vide si aucune session active).</summary>
+        /// <summary>Numéro de FI de la session en cours (vide si aucune session n'est ouverte).</summary>
         public static string NumFICourant
         {
             get { lock (_sync) { return _numFICourant; } }
         }
 
-        /// <summary>Vrai si une session journal FI est actuellement ouverte.</summary>
+        /// <summary>Vrai s'il y a une session de journal FI ouverte en ce moment.</summary>
         public static bool EstActif
         {
             get { lock (_sync) { return !string.IsNullOrEmpty(_cheminFichier); } }
         }
 
-        /// <summary>Chemin du fichier journal de la session en cours (vide si aucune).</summary>
+        /// <summary>Chemin du fichier journal de la session courante (vide s'il n'y en a pas).</summary>
         public static string CheminFichier
         {
             get { lock (_sync) { return _cheminFichier; } }
         }
 
         /// <summary>
-        /// Démarre une session journal pour la FI donnée. Crée le dossier de la FI si
-        /// absent et le fichier <c>Journal_&lt;FI&gt;.txt</c>. Si une session était déjà
-        /// ouverte sur une autre FI, elle est terminée (FIN_SESSION écrit) avant la bascule.
-        /// Idempotent si la FI demandée est déjà la session courante.
+        /// Ouvre une session de journal pour la FI indiquée. Crée au besoin le dossier de la FI
+        /// et le fichier <c>Journal_&lt;FI&gt;.txt</c>. Si une session était déjà ouverte sur une
+        /// autre FI, on la clôt proprement (FIN_SESSION) avant de basculer. Si la FI demandée est
+        /// déjà la session en cours, l'appel ne fait rien.
         /// </summary>
         public static void DemarrerSession(string numFI, string utilisateur, string poste)
         {
@@ -57,15 +57,15 @@ namespace Metrologo.Services.Journal
 
             lock (_sync)
             {
-                // Bascule depuis une autre FI ? On ferme proprement la précédente.
+                // On vient d'une autre FI ? On clôt proprement la précédente avant de continuer.
                 if (!string.IsNullOrEmpty(_cheminFichier)
                     && !string.Equals(_numFICourant, numFI, StringComparison.OrdinalIgnoreCase))
                 {
                     TerminerSessionInterne("Changement de FI");
                 }
-                // Même FI mais l'opérateur (ou le poste) a changé — ex. un collègue reprend la
-                // FI en se reconnectant sans relancer l'app. On clôt le bloc courant et on en
-                // ouvre un nouveau, pour que le journal reflète bien qui a travaillé sur la FI.
+                // Même FI, mais l'opérateur (ou le poste) a changé — typiquement un collègue qui
+                // reprend la FI en se reconnectant sans relancer l'app. On ferme le bloc en cours et
+                // on en rouvre un, pour que le journal montre bien qui a travaillé sur la FI.
                 else if (!string.IsNullOrEmpty(_cheminFichier)
                     && string.Equals(_numFICourant, numFI, StringComparison.OrdinalIgnoreCase)
                     && (!string.Equals(_utilisateurCourant, utilisateur, StringComparison.Ordinal)
@@ -73,7 +73,7 @@ namespace Metrologo.Services.Journal
                 {
                     TerminerSessionInterne("Changement d'utilisateur");
                 }
-                // Déjà sur cette FI avec le même opérateur ? Rien à faire.
+                // Déjà sur cette FI avec le même opérateur ? Alors il n'y a rien à faire.
                 if (string.Equals(_numFICourant, numFI, StringComparison.OrdinalIgnoreCase)
                     && !string.IsNullOrEmpty(_cheminFichier))
                 {
@@ -95,8 +95,8 @@ namespace Metrologo.Services.Journal
                     _nbMesuresEffectuees = 0;
                     _nbMesuresEchouees = 0;
 
-                    // Si le fichier existe déjà (ouvertures FI précédentes), on append un
-                    // séparateur de session — on perd pas l'historique des sessions précédentes.
+                    // Si le fichier existe déjà (la FI a été ouverte par le passé), on ajoute juste
+                    // un séparateur de session — comme ça on garde l'historique des sessions d'avant.
                     bool fichierExistant = File.Exists(_cheminFichier);
                     var sb = new StringBuilder();
                     if (fichierExistant)
@@ -117,8 +117,8 @@ namespace Metrologo.Services.Journal
                 }
                 catch (Exception ex)
                 {
-                    // Best-effort : si l'écriture échoue (disque plein, droits, etc.), on
-                    // logue dans le journal central et on désactive cette session FI.
+                    // Au mieux : si l'écriture échoue (disque plein, droits manquants...), on
+                    // le signale dans le journal central et on désactive cette session FI.
                     Journal.Warn(CategorieLog.Systeme, "JOURNAL_FI_DEMARRAGE_KO",
                         $"Impossible de créer le journal FI pour {numFI} : {ex.Message}");
                     _cheminFichier = string.Empty;
@@ -128,9 +128,9 @@ namespace Metrologo.Services.Journal
         }
 
         /// <summary>
-        /// Append un événement au journal de la session courante. No-op si aucune session
-        /// n'est active (ex: utilisateur n'a pas encore validé de FI). Thread-safe — peut
-        /// être appelé depuis n'importe quel thread (UI, mesure GPIB, etc.).
+        /// Ajoute un événement au journal de la session courante. Ne fait rien s'il n'y a pas de
+        /// session ouverte (par ex. l'utilisateur n'a pas encore validé de FI). Thread-safe : on
+        /// peut l'appeler depuis n'importe quel thread (UI, mesure GPIB, etc.).
         /// </summary>
         public static void Ecrire(string typeAction, string detail = "")
         {
@@ -145,7 +145,7 @@ namespace Metrologo.Services.Journal
                 try
                 {
                     string timestamp = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss");
-                    // typeAction sur 22 chars max (alignement colonne), détail à la suite.
+                    // typeAction limité à 22 caractères (pour aligner la colonne), puis le détail.
                     string typePadded = typeAction.Length > 22
                         ? typeAction.Substring(0, 22)
                         : typeAction.PadRight(22);
@@ -153,13 +153,14 @@ namespace Metrologo.Services.Journal
                         ? $"[{timestamp}]  {typePadded}\n"
                         : $"[{timestamp}]  {typePadded}{detail}\n";
                     File.AppendAllText(_cheminFichier, ligne, Encoding.UTF8);
-                    // PLUS de duplication temps-réel : le transfert vers le réseau est fait en
-                    // BLOC à la fin de chaque mesure via TransfertReseauService.TransfererDossierFIAsync.
+                    // Fini la duplication en temps réel : le transfert vers le réseau se fait
+                    // désormais en BLOC à la fin de chaque mesure, via
+                    // TransfertReseauService.TransfererDossierFIAsync.
                 }
                 catch (Exception ex)
                 {
-                    // Silencieux : ne pas faire planter une mesure si le journal échoue.
-                    // On logue dans le journal central pour traçabilité.
+                    // En silence : pas question de faire planter une mesure parce que le journal
+                    // a échoué. On garde une trace dans le journal central, c'est tout.
                     Journal.Warn(CategorieLog.Systeme, "JOURNAL_FI_ECRITURE_KO",
                         $"Écriture journal FI {_numFICourant} échouée : {ex.Message}");
                 }
@@ -167,9 +168,9 @@ namespace Metrologo.Services.Journal
         }
 
         /// <summary>
-        /// Termine la session courante en écrivant une ligne FIN_SESSION avec récap
-        /// (nombre de mesures effectuées / échouées, durée totale). Idempotent — appelable
-        /// plusieurs fois sans erreur (no-op à partir du 2e appel).
+        /// Clôt la session courante en écrivant une ligne FIN_SESSION avec un petit récap
+        /// (mesures réussies / échouées, durée totale). On peut l'appeler plusieurs fois sans
+        /// problème : à partir du deuxième appel, ça ne fait rien.
         /// </summary>
         public static void TerminerSession(string motif = "")
         {
@@ -196,7 +197,7 @@ namespace Metrologo.Services.Journal
                 string timestamp = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss");
                 string ligne = $"[{timestamp}]  {"FIN_SESSION".PadRight(22)}{detail}\n";
                 File.AppendAllText(_cheminFichier, ligne, Encoding.UTF8);
-                // PLUS de duplication temps-réel : transfert différé via TransfertReseauService.
+                // Plus de duplication en temps réel : le transfert est différé via TransfertReseauService.
             }
             catch (Exception ex)
             {
@@ -215,9 +216,9 @@ namespace Metrologo.Services.Journal
             }
         }
 
-        // Méthode DupliquerSurReseauAsync RETIRÉE — la duplication réseau temps-réel par
-        // ligne est remplacée par un transfert en bloc du dossier FI à la fin de chaque
-        // mesure (cf. TransfertReseauService.TransfererDossierFIAsync).
+        // Méthode DupliquerSurReseauAsync supprimée : on ne duplique plus ligne par ligne en
+        // temps réel sur le réseau ; on transfère tout le dossier FI en une fois à la fin de
+        // chaque mesure (voir TransfertReseauService.TransfererDossierFIAsync).
 
         private static string SanitizerNomFichier(string nom)
         {

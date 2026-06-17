@@ -16,54 +16,54 @@ namespace Metrologo.Services
 {
     public interface IExcelService
     {
-        /// <summary>Initialise une feuille de mesure dans le classeur du FI. gateIndexOverride permet
-        /// d'inscrire une autre gate dans les zones nommées (balayage stab) sans muter config.GateIndex.</summary>
+        /// <summary>Met en place une feuille de mesure dans le classeur du FI. Quand on passe gateIndexOverride,
+        /// c'est cette gate-là qu'on inscrit dans les zones nommées (utile pour le balayage stab) sans toucher à config.GateIndex.</summary>
         Task InitialiserRapportAsync(string numeroFI, Mesure configuration, Rubidium rubidium, int? gateIndexOverride = null, bool nouvelleSession = false);
 
-        /// <summary>Pré-insère les lignes de mesure au-delà des 2 du template, avec les formules
-        /// Fréq. Réelle et F(i)-F(i+1). HEURE et mesure restent vides (remplies en direct).</summary>
+        /// <summary>Ajoute à l'avance les lignes de mesure qui manquent (au-delà des 2 du template), en posant
+        /// les formules Fréq. Réelle et F(i)-F(i+1). Les colonnes HEURE et mesure restent vides : on les remplit en direct.</summary>
         Task PreparerLignesMesureAsync(int nbMesures);
 
-        /// <summary>Sauvegarde le classeur ClosedXML sur disque (sans ouvrir Excel), pour reprise
-        /// ensuite par ExcelInteropHost en écriture live.</summary>
+        /// <summary>Enregistre le classeur ClosedXML sur disque sans passer par Excel, pour qu'ExcelInteropHost
+        /// puisse le reprendre ensuite en écriture live.</summary>
         Task<string> SauvegarderSurDisqueAsync();
 
         /// <summary>Nom de la feuille créée pour cette mesure (ex: Freq1, Stab1).</summary>
         string NomFeuilleMesure { get; }
 
-        /// <summary>Chemin attendu du fichier de mesure pour une FI + type donnés, sans effet de bord.
-        /// Sert à vérifier que le classeur Excel déjà ouvert correspond à la même FI (sinon fermer/rouvrir).</summary>
+        /// <summary>Calcule, sans effet de bord, le chemin où devrait se trouver le fichier de mesure d'une FI et d'un type donnés.
+        /// On s'en sert pour vérifier que le classeur Excel déjà ouvert correspond bien à la même FI (sinon il faut le fermer et le rouvrir).</summary>
         string CalculerCheminFichierAttendu(Mesure mesure);
 
-        /// <summary>Supprime une feuille de mesure (et ses lignes Récap.) dans le .xlsx sur disque via
-        /// ClosedXML. Utilisé après un STOP (Excel tué, pas de COM possible). Best-effort avec retries, ne lève jamais.</summary>
+        /// <summary>Supprime une feuille de mesure (et ses lignes Récap.) directement dans le .xlsx sur disque, via ClosedXML.
+        /// On l'utilise après un STOP, quand Excel a été tué et qu'aucun COM n'est plus possible. C'est du best-effort : on réessaie, et on ne lève jamais.</summary>
         void SupprimerFeuilleSurDisque(string cheminFichier, string nomFeuille);
 
-        /// <summary>Écrit la moyenne et la variance dans les zones nommées, après la boucle de mesures
-        /// (nécessaire au Récap. cross-sheet).</summary>
+        /// <summary>Inscrit la moyenne et la variance dans les zones nommées, une fois la boucle de mesures terminée.
+        /// Le Récap. cross-sheet en a besoin.</summary>
         Task EcrireStatsAsync(List<double> resultats);
 
-        /// <summary>Écrit les N mesures (HEURE + valeur) dans la feuille courante via ClosedXML, sans
-        /// Interop. Mode invisible Stabilité : Excel n'est jamais ouvert, le fichier apparaît en fin de balayage.</summary>
+        /// <summary>Écrit les N mesures (HEURE + valeur) dans la feuille courante via ClosedXML, sans passer par l'Interop.
+        /// C'est le mode invisible de la Stabilité : Excel n'est jamais ouvert et le fichier n'apparaît qu'à la fin du balayage.</summary>
         Task EcrireValeursBatchClosedXMLAsync(int ligneDebut, IList<(DateTime ts, double valeur)> mesures);
 
         Task MettreAJourRecapFreqAsync(Mesure mesure);
         Task MettreAJourRecapStabAsync(Mesure mesure);
 
-        /// <summary>Duplique le fichier de mesure vers le chemin réseau configuré (CheminsMetrologo.MesuresLocal),
-        /// sans workbook ClosedXML ouvert. Appelé après la finalisation COM quand SauvegarderFinalAsync ne l'est pas.</summary>
+        /// <summary>Recopie le fichier de mesure vers le chemin réseau configuré (CheminsMetrologo.MesuresLocal),
+        /// sans avoir de workbook ClosedXML ouvert. On l'appelle après la finalisation COM, dans les cas où SauvegarderFinalAsync ne l'est pas.</summary>
         Task DupliquerSurReseauAsync();
 
-        /// <summary>Variante avec chemin source explicite, pour la voie COM pure où
-        /// _cheminFichier n'est pas initialisé (pas de ClosedXML).</summary>
+        /// <summary>Même chose, mais avec le chemin source donné explicitement : indispensable pour la voie COM pure,
+        /// où _cheminFichier n'est jamais initialisé (pas de ClosedXML).</summary>
         Task DupliquerSurReseauAsync(string cheminSourceExplicite);
 
-        /// <summary>Rouvre depuis le disque un classeur déjà initialisé, après remplissage live par Interop.
-        /// Ne crée pas de feuille : on récupère celle nommée NomFeuilleMesure.</summary>
+        /// <summary>Rouvre depuis le disque un classeur déjà initialisé, après que l'Interop l'a rempli en live.
+        /// On ne crée aucune feuille ici : on se contente de récupérer celle qui porte le nom NomFeuilleMesure.</summary>
         Task RouvrirClasseurAsync();
 
-        /// <summary>Sauvegarde finale après Recap + stats. Le fichier reste ouvert côté ExcelInteropHost
-        /// (l'utilisateur peut continuer à l'inspecter).</summary>
+        /// <summary>Sauvegarde finale, une fois le Récap et les stats posés. Le fichier reste ouvert côté ExcelInteropHost
+        /// pour que l'utilisateur puisse continuer à l'inspecter.</summary>
         Task SauvegarderFinalAsync();
 
         void FermerExcel();
@@ -71,64 +71,64 @@ namespace Metrologo.Services
 
     public class ExcelService : IExcelService
     {
-        // Nom de la feuille modèle, jamais modifiée.
+        // Nom de la feuille modèle, qu'on ne touche jamais.
         private const string NOM_MODELE = "ModFeuille";
         private const string NOM_RECAP = "Récap.";
 
-        // Première ligne de mesures dans le template
+        // Ligne où commencent les mesures dans le template.
         private const int LIGNE_DEBUT_MESURES = 9;
 
-        // Zones nommées indiquant l'emplacement d'insertion des lignes Recap (cf. template xltm).
+        // Zones nommées qui marquent l'endroit où insérer les lignes du Récap (voir le template xltm).
         private const string ZN_RECAPF_DEBZONE = "ZNRecapF_DebZone";
         private const string ZN_RECAPS_DEBZONE = "ZNRecapS_DebZone";
 
-        // Lignes de fallback si les zones ZNRecapF/S_DebZone sont absentes (valeurs par défaut du template).
+        // Lignes de repli, au cas où les zones ZNRecapF/S_DebZone seraient absentes (ce sont les valeurs par défaut du template).
         private const int LIGNE_FALLBACK_RECAPF = 19;
         private const int LIGNE_FALLBACK_RECAPS = 19;
 
         private XLWorkbook? _workbook;
-        private IXLWorksheet? _feuilleMesure;   // feuille NOUVELLEMENT créée pour cette mesure
+        private IXLWorksheet? _feuilleMesure;   // la feuille tout juste créée pour cette mesure
         private string _cheminFichier = string.Empty;
         private string _nomFeuilleMesure = string.Empty;
-        private TypeMesure _typeMesureCourant;  // mémorisé pour PreparerLignesMesureAsync (col K Tachy)
+        private TypeMesure _typeMesureCourant;  // gardé sous la main pour PreparerLignesMesureAsync (col K Tachy)
 
-        // Mémorisé à l'init pour qu'EcrireStatsAsync puisse résoudre les coefficients
-        // CoeffA/CoeffB depuis le module CSV (cf. ModulesIncertitudeService) en fonction
-        // de la moyenne calculée. Vide → on garde les hardcoded de l'init.
+        // Retenu dès l'init pour qu'EcrireStatsAsync puisse retrouver les coefficients
+        // CoeffA/CoeffB dans le module CSV (voir ModulesIncertitudeService), selon la
+        // moyenne calculée. S'il est vide, on s'en tient aux valeurs codées en dur de l'init.
         private string _numModuleIncertitudeCourant = string.Empty;
 
-        // Module Fréquence auxiliaire pour les mesures tachymètre : alimente ZNCoeffA et
-        // ZNCoeffB (côté Hz), tandis que _numModuleIncertitudeCourant alimente ZNCoeffC/D
-        // (côté RPM). Vide → A/B restent aux valeurs par défaut du template.
+        // Module Fréquence auxiliaire, pour les mesures tachymètre : c'est lui qui remplit
+        // ZNCoeffA et ZNCoeffB (côté Hz), pendant que _numModuleIncertitudeCourant s'occupe
+        // de ZNCoeffC/D (côté RPM). S'il est vide, A/B gardent les valeurs par défaut du template.
         private string _numModuleIncertitudeFreqCourant = string.Empty;
         private double _tempsGateSecondesCourant;
 
-        // Mémorisés pour reproduire en C# la conversion Indirect de la formule colonne F
-        // (Fréq. Réelle) : la moyenne C# passée à ObtenirCoefficients est ainsi identique
-        // à AVERAGE(F) calculée par Excel à la fin.
+        // Gardés pour pouvoir refaire en C# la conversion Indirect de la formule de la colonne F
+        // (Fréq. Réelle) : du coup la moyenne C# qu'on passe à ObtenirCoefficients colle
+        // exactement à l'AVERAGE(F) qu'Excel calcule à la fin.
         private int _indexMultiplicateurCourant;
         private double _fNominaleCourant;
         private ModeMesure _modeMesureCourant;
 
-        // Sigmas relatifs estimés par numéro de gate (clé = nom de la feuille parsé en int).
-        // Rempli par EcrireStatsAsync à chaque fin de gate Stab, lu par SauvegarderSurDisqueAsync
-        // pour calibrer l'axe Y log du graphe Stab. Sans cette calibration, Excel auto-scale
-        // parfois sur 1E-9..1E0 alors que les vraies données sont 1E-8..1E-6.
+        // Sigmas relatifs estimés, rangés par numéro de gate (la clé est le nom de la feuille converti en int).
+        // EcrireStatsAsync le remplit à chaque fin de gate Stab, et SauvegarderSurDisqueAsync le relit
+        // pour calibrer l'axe Y log du graphe Stab. Sans cette calibration, Excel a tendance à auto-scaler
+        // sur 1E-9..1E0 alors que les vraies données tournent autour de 1E-8..1E-6.
         private readonly Dictionary<int, double> _sigmasRelatifsParGate = new();
 
-        /// <summary>Colonne dédiée à la conversion Hz → tr/min (tachy/strobo). Placée à droite du bloc
-        /// de mesures A-D pour ne pas interférer avec la Récap, qui lit via les zones nommées.</summary>
+        /// <summary>Colonne réservée à la conversion Hz → tr/min (tachy/strobo). On l'a mise à droite du bloc
+        /// de mesures A-D pour qu'elle ne gêne pas la Récap, qui lit ses valeurs via les zones nommées.</summary>
         private const string COL_CONVERSION_TR_MIN = "K";
 
         public string NomFeuilleMesure => _nomFeuilleMesure;
 
-        /// <summary>Chemin du fichier Excel réellement utilisé (peut être stab1.xlsx, stab2.xlsx...
-        /// en cas d'itération de stabilité). Exposé pour info dans la UI.</summary>
+        /// <summary>Chemin du fichier Excel finalement utilisé. En stabilité itérée, ça peut être stab1.xlsx, stab2.xlsx, etc.
+        /// On l'expose pour l'afficher dans l'UI.</summary>
         public string CheminFichierGenere => _cheminFichier;
 
-        /// <summary>Reproduit le calcul de chemin d'InitialiserRapportAsync (Bureau\Metrologo\FI, freq.xlsx
-        /// ou stab.xlsx) sans effet de bord, pour décider si le classeur ouvert est réutilisable (même FI).
-        /// Les noms freq/stab sont imposés par le logiciel tiers d'extraction : ne pas y remettre le FI.</summary>
+        /// <summary>Refait le même calcul de chemin qu'InitialiserRapportAsync (Bureau\Metrologo\FI, puis freq.xlsx
+        /// ou stab.xlsx), mais sans effet de bord, histoire de savoir si le classeur déjà ouvert peut être réutilisé (même FI).
+        /// Attention : les noms freq/stab sont imposés par le logiciel tiers d'extraction, donc surtout pas de FI dedans.</summary>
         public string CalculerCheminFichierAttendu(Mesure mesure)
         {
             string numFISafe = SanitizerNomFichier(mesure.NumFI ?? string.Empty);
@@ -140,7 +140,7 @@ namespace Metrologo.Services
             return Path.Combine(dossier, $"{baseNom}.xlsx");
         }
 
-        /// <summary>Vrai si le fichier a dû être écrit sous un nom de fallback au lieu du nom principal.</summary>
+        /// <summary>Vrai quand on a dû écrire le fichier sous un nom de repli plutôt que sous son nom principal.</summary>
         public bool FallbackTimestampUtilise { get; private set; }
 
         public async Task InitialiserRapportAsync(string numeroFI, Mesure config, Rubidium rubidium, int? gateIndexOverride = null, bool nouvelleSession = false)
@@ -152,31 +152,32 @@ namespace Metrologo.Services
             await Task.Run(() =>
             {
                 // --- 1. Dossier et fichier ---
-                //    La Stabilité a son fichier séparé stab.xlsx (Récap 8 colonnes + itérations
-                //    stab1, stab2...). Tout le reste (fréquence ET tachy) s'écrit dans freq.xlsx,
-                //    noms imposés par le logiciel tiers d'extraction. Freq et tachy partagent donc
-                //    freq.xlsx : on ne mélange pas les deux sur une même FI.
+                //    La Stabilité a droit à son propre fichier, stab.xlsx (Récap 8 colonnes +
+                //    itérations stab1, stab2...). Tout le reste (fréquence ET tachy) atterrit dans
+                //    freq.xlsx, ces noms étant imposés par le logiciel tiers d'extraction. Freq et tachy
+                //    se partagent donc freq.xlsx, et on évite de mélanger les deux sur une même FI.
                 string numFISafe = SanitizerNomFichier(numeroFI);
 
-                // Fichier principal stocké sur le Bureau de l'utilisateur (au lieu de Documents).
-                // La duplication vers le partage réseau (M:\exe_spe\Data_Metrologo\Mesures par
-                // défaut, configurable dans Admin > Chemins d'accès) reste assurée après la
-                // mesure via DupliquerSurReseauAsync.
+                // Le fichier principal vit sur le Bureau de l'utilisateur (plutôt que dans Documents).
+                // La copie vers le partage réseau (par défaut M:\exe_spe\Data_Metrologo\Mesures,
+                // modifiable dans Admin > Chemins d'accès) se fait quand même après la mesure,
+                // via DupliquerSurReseauAsync.
                 string dossier = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
                     "Metrologo", numFISafe);
                 Directory.CreateDirectory(dossier);
 
-                // Noms imposés par le logiciel tiers d'extraction : tout sauf la stabilité
-                // s'appelle freq, la stabilité s'appelle stab. Pas de FI dans le nom de fichier,
-                // c'est le dossier qui le porte.
+                // Noms imposés par le logiciel tiers d'extraction : tout ce qui n'est pas de la
+                // stabilité s'appelle freq, la stabilité s'appelle stab. Le FI n'apparaît pas dans
+                // le nom du fichier, c'est le dossier qui le porte.
                 string baseNom = estStab ? "stab" : "freq";
                 _cheminFichier = Path.Combine(dossier, $"{baseNom}.xlsx");
                 FallbackTimestampUtilise = false;
 
-                // Stabilité + nouvelle session + fichier existant → itération stab1, stab2, etc.
-                // Évite que le graphe Stab mélange l'ancienne session et la nouvelle sur le même
-                // FI. La fréquence, elle, réutilise toujours le même freq.xlsx.
+                // Si on est en stabilité, qu'on démarre une nouvelle session et que le fichier
+                // existe déjà, on passe en itération stab1, stab2, etc. Comme ça le graphe Stab ne
+                // mélange pas l'ancienne session et la nouvelle sur le même FI. La fréquence, elle,
+                // réutilise toujours le même freq.xlsx.
                 if (estStab && nouvelleSession && File.Exists(_cheminFichier))
                 {
                     string baseSansExt = Path.Combine(dossier, "stab");
@@ -191,10 +192,10 @@ namespace Metrologo.Services
                 }
 
                 // --- 2. Ouverture : fichier existant ou copie du template ---
-                //    Template Stab dédié pour la Stabilité (Récap. 8 cols + zones nommées
-                //    ZNRecapS_*), template Tachy dédié pour Contact/Optique (col I = stats
-                //    en tr/min, zones ZNCoeffC/D et ZNIncertResolRpm spécifiques), template
-                //    Fréquence universel pour le reste.
+                //    Chaque famille a son template : un template Stab pour la Stabilité (Récap. 8 cols
+                //    + zones nommées ZNRecapS_*), un template Tachy pour Contact/Optique (col I = stats
+                //    en tr/min, zones ZNCoeffC/D et ZNIncertResolRpm spécifiques), et un template
+                //    Fréquence universel pour tout le reste.
                 string nomTemplate =
                     estStab ? "METROLOGO_Stab.xlsx" :
                     estTachy ? "METROLOGO_Tachy.xlsx" :
@@ -207,10 +208,10 @@ namespace Metrologo.Services
                 {
                     if (FichierEstVerrouille(_cheminFichier))
                     {
-                        // Le fichier mère est verrouillé, probablement notre instance Excel COM
-                        // qui n'a pas encore libéré le handle OS. On poll jusqu'à 5s. Au-delà,
-                        // on lève une erreur claire au lieu de créer un sous-fichier horodaté
-                        // (comportement demandé par l'utilisateur : tout dans le même fichier).
+                        // Le fichier mère est verrouillé, sans doute par notre propre instance Excel COM
+                        // qui n'a pas encore rendu son handle OS. On attend en pollant jusqu'à 5s. Passé ce
+                        // délai, on préfère lever une erreur explicite plutôt que de créer un sous-fichier
+                        // horodaté (l'utilisateur veut tout dans le même fichier).
                         var sw = System.Diagnostics.Stopwatch.StartNew();
                         while (FichierEstVerrouille(_cheminFichier) && sw.ElapsedMilliseconds < 5000)
                         {
@@ -228,13 +229,13 @@ namespace Metrologo.Services
 
                     _workbook = new XLWorkbook(_cheminFichier);
 
-                    // Garde-fou « famille de template » : freq.xlsx est partagé par tous les
-                    // types hors stabilité, mais sa ModFeuille vient du template qui l'a CRÉÉ.
-                    // Une feuille tachy/strobo copiée depuis une ModFeuille Fréquence (ou
-                    // l'inverse) donne un rapport incohérent : zones ZNCoeffC/D absentes,
+                    // Garde-fou sur la « famille de template » : freq.xlsx sert à tous les types
+                    // hors stabilité, mais sa ModFeuille hérite du template qui l'a CRÉÉ au départ.
+                    // Si on copie une feuille tachy/strobo depuis une ModFeuille Fréquence (ou
+                    // l'inverse), on obtient un rapport bancal : zones ZNCoeffC/D absentes,
                     // colonne de conversion tr/min manquante, nom du module décalé (écrit en
-                    // G10 alors que le label est à côté de F10). On détecte la famille du
-                    // fichier via la zone ZNCoeffC — présente uniquement dans le template
+                    // G10 alors que le label est à côté de F10). Pour repérer la famille du
+                    // fichier, on regarde la zone ZNCoeffC — qu'on ne trouve que dans le template
                     // tachy — et on refuse le mélange avec un message clair.
                     if (!estStab && _workbook.Worksheets.Any(w => w.Name == NOM_MODELE))
                     {
@@ -265,17 +266,17 @@ namespace Metrologo.Services
                 }
 
                 // --- 2b. Nettoyage des feuilles 1..N héritées du Stab1.xls historique ---
-                // Le template METROLOGO_Stab.xlsx contient 10 feuilles vides nommées "1".."10"
-                // (slots des 10 procédures auto figées du Delphi historique). Sans nettoyage,
-                // TrouverNomFeuilleUnique attribue 11, 12, 13… aux nouvelles gates et la
-                // Récap. affiche 10 lignes parasites pointant vers des feuilles vides.
-                // On ne fait ce nettoyage qu'à l'OUVERTURE du template (= nouveau fichier),
-                // jamais sur un fichier existant — sinon on détruirait des mesures précédentes.
+                // Le template METROLOGO_Stab.xlsx traîne 10 feuilles vides nommées "1".."10"
+                // (les slots des 10 procédures auto figées du Delphi historique). Si on ne les
+                // enlève pas, TrouverNomFeuilleUnique colle 11, 12, 13… aux nouvelles gates et la
+                // Récap. se retrouve avec 10 lignes parasites qui pointent vers des feuilles vides.
+                // Ce nettoyage ne se fait qu'à l'OUVERTURE du template (= fichier neuf), jamais sur
+                // un fichier existant — sinon on effacerait des mesures déjà faites.
                 if (partirDuTemplate && estStab)
                 {
                     NettoyerFeuillesNumeriquesResiduellesEtRecap();
-                    // Nouvelle session Stab → on oublie les sigmas de la session précédente
-                    // (sinon le dico accumule et la calibration de l'axe Y serait faussée).
+                    // Nouvelle session Stab : on repart de zéro sur les sigmas de la session
+                    // précédente (sinon le dico s'accumule et fausse la calibration de l'axe Y).
                     _sigmasRelatifsParGate.Clear();
                 }
 
@@ -284,23 +285,23 @@ namespace Metrologo.Services
                 // --- 3. Création d'une nouvelle feuille (copie de ModFeuille) ---
                 _nomFeuilleMesure = TrouverNomFeuilleUnique(config.TypeMesure);
 
-                // Feuilles à nom fixe (avinter / fqfinale) : à la relance d'une mesure avant
-                // intervention ou finale sur la même FI, le nom existe déjà → on ÉCRASE :
-                // suppression de l'ancienne feuille ET de sa ligne Récap (sinon doublon ou erreur
-                // de doublon au CopyTo). Pour les types numérotés, le nom est toujours libre → no-op.
+                // Pour les feuilles à nom fixe (avinter / fqfinale) : si on relance une mesure avant
+                // intervention ou finale sur la même FI, le nom existe déjà, donc on ÉCRASE — c'est-à-dire
+                // qu'on supprime l'ancienne feuille ET sa ligne Récap (sans ça, on aurait un doublon, ou
+                // une erreur de doublon au CopyTo). Pour les types numérotés, le nom est toujours neuf, donc no-op.
                 SupprimerFeuilleEtLigneRecapSiExiste(_nomFeuilleMesure);
 
                 _feuilleMesure = modFeuille.CopyTo(_nomFeuilleMesure);
 
-                // ModFeuille est cachée dans le template (modèle interne, pas pour l'utilisateur).
-                // La copie hérite de cet attribut Hidden : il faut forcer la visibilité de chaque
-                // nouvelle feuille de mesure.
+                // ModFeuille est masquée dans le template (c'est un modèle interne, pas destiné à
+                // l'utilisateur). La copie récupère cet attribut Hidden, donc il faut explicitement
+                // rendre visible chaque nouvelle feuille de mesure.
                 _feuilleMesure.Visibility = XLWorksheetVisibility.Visible;
 
                 DeprotegerFeuille(_feuilleMesure);
 
-                // Layout sans les colonnes module/fonction/condition : le tableau des mesures
-                // commence directement en colonne A (HEURE=A, Mesurée=B, Réelle=C, Delta=D).
+                // On a un layout sans les colonnes module/fonction/condition : le tableau des
+                // mesures commence directement en colonne A (HEURE=A, Mesurée=B, Réelle=C, Delta=D).
                 _feuilleMesure.Column("B").Width = 30;   // Mesurée
                 _feuilleMesure.Column("C").Width = 28;   // Réelle
                 _feuilleMesure.Column("E").Width = 30;   // bloc labels droite
@@ -323,21 +324,21 @@ namespace Metrologo.Services
                 _feuilleMesure.Cell("B31").SetValue(entetes.LabelIncertGlob);
 
                 // --- 5b. Module d'incertitude affiché une seule fois ---
-                // Les colonnes n°Module / Fonction / Condition 1 ont été retirées du template.
-                // On affiche le module sélectionné (config.NumModuleIncertitude, celui qui alimente
-                // les coefficients) dans la cellule à côté du label Module = : F10 en standard,
-                // G10 en tachy. Le Récap lit cette même cellule.
+                // Comme les colonnes n°Module / Fonction / Condition 1 ont disparu du template,
+                // on affiche le module choisi (config.NumModuleIncertitude, celui qui alimente les
+                // coefficients) dans la cellule juste à côté du label Module = : F10 en standard,
+                // G10 en tachy. C'est cette même cellule que lit le Récap.
                 string moduleSelectionne = config.NumModuleIncertitude ?? string.Empty;
                 string celluleModule = estTachy ? "G10" : "F10";
                 if (!string.IsNullOrEmpty(moduleSelectionne))
                     _feuilleMesure.Cell(celluleModule).SetValue(moduleSelectionne);
 
-                // Mémorisation pour PreparerLignesMesureAsync (col N conversion tr/min)
+                // On garde ça pour PreparerLignesMesureAsync (col N conversion tr/min).
                 _typeMesureCourant = config.TypeMesure;
 
-                // Mémorisation pour EcrireStatsAsync — la moyenne sera calculée à la fin
-                // de la boucle de mesures, à ce moment on appellera ObtenirCoefficients
-                // pour ce module avec (fonction, temps de gate, fréquence moyenne).
+                // Et ça pour EcrireStatsAsync : la moyenne ne sera connue qu'à la fin de la boucle
+                // de mesures, et c'est à ce moment-là qu'on appellera ObtenirCoefficients pour ce
+                // module avec (fonction, temps de gate, fréquence moyenne).
                 _numModuleIncertitudeCourant = config.NumModuleIncertitude ?? string.Empty;
                 _numModuleIncertitudeFreqCourant = config.NumModuleIncertitudeFreq ?? string.Empty;
                 _tempsGateSecondesCourant = EnTetesMesureHelper.SecondesGate(gateInscrite);
@@ -346,17 +347,17 @@ namespace Metrologo.Services
                 _modeMesureCourant = config.ModeMesure;
 
                 // --- 5c. Tachymétrie : colonne N dédiée à la conversion Hz → tr/min ---
-                // Le compteur GPIB mesure une fréquence d'impulsions (Hz). La conversion
-                // tr/min = Hz × 60 (1 imp/tour) est faite côté Excel pour rester visible
-                // à l'utilisateur. Colonne K choisie à droite du bloc de mesures A-D pour ne
-                // pas interférer avec la Récap (qui lit via les zones nommées).
-                // Note : la mesure brute est en col B (Mesurée).
+                // Le compteur GPIB nous donne une fréquence d'impulsions (Hz). La conversion
+                // tr/min = Hz × 60 (1 imp/tour) est laissée à Excel, pour qu'elle reste visible
+                // à l'utilisateur. On a choisi la colonne K, à droite du bloc de mesures A-D, pour
+                // ne pas gêner la Récap (qui lit via les zones nommées).
+                // Pour rappel, la mesure brute est en col B (Mesurée).
                 if (EnTetesMesureHelper.EstTachymetre(config.TypeMesure))
                 {
                     _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}7").SetValue("Vitesse (tr/min)");
                     _feuilleMesure.Column(COL_CONVERSION_TR_MIN).Width = 18;
-                    // Formules pour les 2 lignes de mesure pré-existantes du template (9 et 10).
-                    // Les lignes additionnelles (11+) seront alimentées par PreparerLignesMesureAsync.
+                    // Formules pour les 2 lignes de mesure déjà présentes dans le template (9 et 10).
+                    // Les lignes suivantes (11+) seront remplies par PreparerLignesMesureAsync.
                     _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}9").FormulaA1 = "=B9*60";
                     _feuilleMesure.Cell($"{COL_CONVERSION_TR_MIN}10").FormulaA1 = "=B10*60";
                 }

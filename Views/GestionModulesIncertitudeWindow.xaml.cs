@@ -16,9 +16,9 @@ namespace Metrologo.Views
             AppliquerVisibiliteColTemps(vm);
         }
 
-        // Masque la colonne « Temps (s) » du DataGrid quand le module sélectionné a
-        // UtiliseTempsDeMesure = false (cas tachymètre/stroboscope). DataGridColumn
-        // n'hérite pas du DataContext donc on pilote la Visibility en code-behind.
+        // On cache la colonne « Temps (s) » du DataGrid dès que le module sélectionné a
+        // UtiliseTempsDeMesure = false (typiquement tachymètre/stroboscope). Comme une
+        // DataGridColumn n'hérite pas du DataContext, on règle sa Visibility ici, en code-behind.
         private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(GestionModulesIncertitudeViewModel.ModuleSelectionne)

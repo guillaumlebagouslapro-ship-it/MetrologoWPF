@@ -10,9 +10,10 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// Auto-scroll vers la dernière ligne du journal "Informations générales" à chaque
-        /// ajout — évite à l'utilisateur de devoir faire défiler manuellement pour voir les
-        /// nouvelles entrées pendant une mesure qui s'allonge.
+        /// On garde toujours la dernière ligne du journal "Informations générales" visible :
+        /// à chaque nouvel ajout on descend automatiquement en bas. Comme ça, pendant une
+        /// mesure qui s'étire, l'utilisateur n'a pas à faire défiler à la main pour suivre ce
+        /// qui se passe.
         /// </summary>
         private void LogTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {

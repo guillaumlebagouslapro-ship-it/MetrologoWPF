@@ -6,14 +6,14 @@ using System.Linq;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Construit <c>METROLOGO_Stab.xlsx</c> à partir du template Fréquence existant.
-    /// On garde la même <c>ModFeuille</c> (mêmes zones nommées de mesure : ZNFreqMoyReel,
-    /// ZNVariance, ZNEcartType, ZNIncertResol, ZNIncertSup, ZNIncertAccreditee,
-    /// ZNIncertGlobale, etc.) et on remplace uniquement la <c>Récap.</c> par la structure
-    /// historique Stabilité (8 colonnes, 1 ligne par gate balayée, formules Max/Mini
-    /// = moyenne ± incertitude globale).
+    /// Fabrique <c>METROLOGO_Stab.xlsx</c> en partant du template Fréquence déjà présent.
+    /// On reprend telle quelle la <c>ModFeuille</c> (avec ses zones nommées de mesure :
+    /// ZNFreqMoyReel, ZNVariance, ZNEcartType, ZNIncertResol, ZNIncertSup, ZNIncertAccreditee,
+    /// ZNIncertGlobale, etc.) et la seule chose qu'on refait, c'est la <c>Récap.</c>, qu'on
+    /// remplace par la structure Stabilité d'origine (8 colonnes, une ligne par gate balayée,
+    /// formules Max/Mini = moyenne ± incertitude globale).
     ///
-    /// Appelé au démarrage de l'application : si le fichier cible existe déjà, ne fait rien.
+    /// On l'appelle au démarrage : si le fichier cible est déjà là, on ne fait rien.
     /// </summary>
     public static class StabTemplateBuilder
     {
@@ -31,13 +31,13 @@ namespace Metrologo.Services
             using var wb = new XLWorkbook(templateStabPath);
             var recap = wb.Worksheet(NomRecap);
 
-            // Déprotège (mots de passe historiques connus).
+            // On lève la protection en essayant les mots de passe historiques connus.
             try { recap.Unprotect(); }
             catch { try { recap.Unprotect("METROL"); } catch { try { recap.Unprotect("metrol"); } catch { } } }
 
-            // 1. Supprime les zones nommées workbook-scope spécifiques à Fréquence/Dérive.
-            //    On garde les zones partagées (ZNDate, ZNNoFiche, ZNFreqMoyReel, etc.) qui
-            //    pointent sur ModFeuille — elles sont valides pour les deux types de mesure.
+            // 1. On retire les zones nommées (workbook-scope) propres à Fréquence/Dérive.
+            //    Les zones partagées (ZNDate, ZNNoFiche, ZNFreqMoyReel, etc.), elles, restent :
+            //    elles pointent sur ModFeuille et valent pour les deux types de mesure.
             var aSupprimer = wb.DefinedNames
                 .Where(n =>
                     n.Name.StartsWith("ZNNoFicheRecap", StringComparison.OrdinalIgnoreCase) ||
@@ -51,20 +51,20 @@ namespace Metrologo.Services
                 .ToList();
             foreach (var nom in aSupprimer)
             {
-                try { wb.DefinedNames.Delete(nom); } catch { /* ignore */ }
+                try { wb.DefinedNames.Delete(nom); } catch { /* tant pis, on continue */ }
             }
 
-            // 2. Vide la feuille Récap. (cellules + formats).
+            // 2. On vide complètement la feuille Récap. (contenu et mises en forme).
             recap.Clear();
 
-            // 3. Écrit la structure Stab historique
-            // Ligne 1 : en-tête fiche
+            // 3. On reconstruit la structure Stab d'origine.
+            // Ligne 1 : l'en-tête de la fiche.
             recap.Cell("A1").SetValue("Fiche n° :");
             recap.Cell("A1").Style.Font.Bold = true;
             recap.Cell("C1").SetValue("Le");
             recap.Cell("C1").Style.Font.Bold = true;
 
-            // Ligne 3 : en-têtes des colonnes Stab
+            // Ligne 3 : les en-têtes des colonnes Stab.
             string[] entetes =
             {
                 "Temps (s)", "Fréq. Moyenne (Hz)", "Ecart type", "Incertitude",
@@ -79,19 +79,19 @@ namespace Metrologo.Services
                 cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
             }
 
-            // Ligne 5 : ligne template (sera dupliquée à chaque nouvelle gate insérée).
-            // Les formules Maxi/Mini se réfèrent à C5/F5 et restent cohérentes après duplication
-            // (ClosedXML translate les références relatives quand on insère).
+            // Ligne 5 : la ligne modèle, recopiée à chaque nouvelle gate insérée.
+            // Les formules Maxi/Mini renvoient à C5/F5 et restent justes après duplication,
+            // car ClosedXML décale tout seul les références relatives lors de l'insertion.
             recap.Cell("G5").FormulaA1 = "=C5+F5";
             recap.Cell("H5").FormulaA1 = "=IF(ISBLANK(C5),,IF((C5-F5)<=0,0,C5-F5))";
 
-            // Ligne 19 : Max / Min global sur la zone des données (suffisant pour 13 gates).
+            // Ligne 19 : le Max / Min global sur la zone de données (largement suffisant pour 13 gates).
             recap.Cell("A19").SetValue("Globale");
             recap.Cell("A19").Style.Font.Bold = true;
             recap.Cell("G19").FormulaA1 = "=MAX(G6:G15)";
             recap.Cell("H19").FormulaA1 = "=MIN(H6:H15)";
 
-            // 4. Zones nommées workbook-scope spécifiques à Stab
+            // 4. Les zones nommées (workbook-scope) propres à Stab.
             wb.DefinedNames.Add("ZNNoFicheRecapStab", $"{NomRecap}!$B$1");
             wb.DefinedNames.Add("ZNDateRecapStab",    $"{NomRecap}!$D$1");
             wb.DefinedNames.Add("ZNRecapS_DebZone",   $"{NomRecap}!$A$6");
@@ -99,7 +99,7 @@ namespace Metrologo.Services
             wb.DefinedNames.Add("ZNGrandeValeur",     $"{NomRecap}!$G$19");
             wb.DefinedNames.Add("ZNPetiteValeur",     $"{NomRecap}!$H$19");
 
-            // 5. Largeur des colonnes (lisibilité)
+            // 5. On élargit les colonnes pour que ce soit lisible.
             for (int c = 1; c <= 8; c++) recap.Column(c).Width = 22;
 
             wb.Save();

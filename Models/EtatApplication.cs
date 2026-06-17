@@ -5,41 +5,41 @@ using System.Globalization;
 namespace Metrologo.Models
 {
     /// <summary>
-    /// État global de l'application partagé entre les ViewModels.
-    /// Persiste automatiquement le rubidium actif dans les préférences locales.
+    /// L'état global de l'application, partagé par tous les ViewModels.
+    /// Au passage, il sauvegarde automatiquement le rubidium actif dans les préférences locales.
     /// </summary>
     public static class EtatApplication
     {
         private static Rubidium? _rubidiumActif;
         private static bool _chargeDepuisPreferences;
 
-        /// <summary>Utilisateur déclaré au démarrage via le dropdown (affichage + journal).
-        /// Pas d'authentification, sert juste à savoir qui est en face de l'app.</summary>
+        /// <summary>L'utilisateur déclaré au démarrage via le menu déroulant (pour l'affichage et le journal).
+        /// Aucune authentification ici : ça sert juste à savoir qui est devant l'app.</summary>
         public static Utilisateur? UtilisateurConnecte { get; set; }
 
         /// <summary>
-        /// Admin réellement authentifié via la modale login + mot de passe. null hors zone admin
-        /// (set au déverrouillage, clear au retour Accueil). Sert aux actions sensibles,
-        /// ex. seul un SuperAdmin gère les rôles.
+        /// L'admin vraiment authentifié via la modale login + mot de passe. Vaut null en dehors de la
+        /// zone admin (rempli au déverrouillage, remis à null au retour à l'Accueil). On s'en sert pour
+        /// les actions sensibles, par ex. seul un SuperAdmin a le droit de gérer les rôles.
         /// </summary>
         public static Utilisateur? AdminConnecte { get; set; }
 
-        /// <summary>Vrai si l'admin authentifié est SuperAdministrateur. Reflète le compte de la
-        /// modale Administration, pas le dropdown d'identité du démarrage.</summary>
+        /// <summary>Vrai quand l'admin authentifié est un SuperAdministrateur. Attention : on parle ici du
+        /// compte saisi dans la modale Administration, pas du menu déroulant d'identité du démarrage.</summary>
         public static bool EstSuperAdmin =>
             AdminConnecte?.Role == RoleUtilisateur.SuperAdministrateur;
 
-        /// <summary>Appareils détectés sur le bus GPIB (rafraîchi à chaque scan).
-        /// Alimente la liste des fréquencemètres de la fenêtre Configuration.</summary>
+        /// <summary>Les appareils détectés sur le bus GPIB (remis à jour à chaque scan).
+        /// C'est ce qui alimente la liste des fréquencemètres dans la fenêtre Configuration.</summary>
         public static ObservableCollection<AppareilDetecte> AppareilsDetectes { get; } = new();
 
-        /// <summary>Levé après chaque mise à jour de AppareilsDetectes.</summary>
+        /// <summary>Déclenché à chaque fois que AppareilsDetectes change.</summary>
         public static event EventHandler? AppareilsDetectesChange;
 
         /// <summary>
-        /// Mode adresses fixes (poste Baie). Si true, la fenêtre Configuration propose les appareils
-        /// legacy du catalogue à une adresse GPIB éditable au lieu des appareils détectés par scan.
-        /// Toujours false en Paillasse.
+        /// Mode adresses fixes (poste Baie). Quand c'est true, la fenêtre Configuration propose les
+        /// appareils legacy du catalogue à une adresse GPIB qu'on peut éditer, plutôt que les appareils
+        /// trouvés par scan. Toujours false en Paillasse.
         /// </summary>
         public static bool ModeAdressesFixes { get; set; }
 
@@ -70,8 +70,8 @@ namespace Metrologo.Models
                 AssurerChargement();
                 if (_rubidiumActif == null) return "Rubidium : non défini";
 
-                // fréquence de référence exacte (toute la précision du double), groupée par
-                // milliers pour la lisibilité ("10 000 000"). C'est la valeur reprise par ZNFreqRef dans Excel.
+                // la fréquence de référence exacte (toute la précision du double), groupée par
+                // milliers pour qu'elle reste lisible ("10 000 000"). C'est cette valeur que ZNFreqRef reprend dans Excel.
                 string freq = Metrologo.Services.SaisieHelper.FormaterFrequence(
                     _rubidiumActif.FrequenceMoyenne);
                 string libelle = _rubidiumActif.EstReglageManuel
@@ -84,9 +84,9 @@ namespace Metrologo.Models
         public static event EventHandler? RubidiumActifChange;
 
         /// <summary>
-        /// Force notification + sauvegarde du rubidium courant. À appeler quand on a modifié ses
-        /// champs en place via la gestion du catalogue : le setter short-circuit sur ReferenceEquals
-        /// et ne se déclencherait pas.
+        /// Force la notification et la sauvegarde du rubidium courant. À appeler quand on a modifié ses
+        /// champs en place depuis la gestion du catalogue : comme le setter court-circuite sur
+        /// ReferenceEquals, il ne se déclencherait pas tout seul dans ce cas.
         /// </summary>
         public static void NotifierRubidiumActifChange()
         {
@@ -103,9 +103,9 @@ namespace Metrologo.Models
         }
 
         /// <summary>
-        /// Relit le rubidium actif depuis le fichier réseau et notifie l'UI. Sans ça, le chargement
-        /// ne se fait qu'au démarrage et le rubidium resterait figé après un changement admin fait
-        /// depuis un autre poste. Appelé par l'actualisation à chaud de la configuration.
+        /// Relit le rubidium actif depuis le fichier réseau et prévient l'UI. Sans ça, le chargement
+        /// n'aurait lieu qu'au démarrage et le rubidium resterait figé après un changement fait par un
+        /// admin depuis un autre poste. C'est l'actualisation à chaud de la configuration qui l'appelle.
         /// </summary>
         public static void RechargerRubidiumActif()
         {

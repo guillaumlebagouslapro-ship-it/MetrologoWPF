@@ -7,8 +7,9 @@ namespace Metrologo.Models
         Utilisateur,
         Administrateur,
         /// <summary>
-        /// Le "chef" : tout ce que fait un Administrateur, plus la gestion des rôles et du mot de
-        /// passe admin. Il en reste toujours au moins un (impossible de supprimer ou rétrograder le dernier).
+        /// Le "chef" : il peut tout ce que fait un Administrateur, et en plus il gère les rôles et le
+        /// mot de passe admin. Il en reste toujours au moins un — impossible de supprimer ni de
+        /// rétrograder le dernier.
         /// </summary>
         SuperAdministrateur
     }
@@ -25,12 +26,12 @@ namespace Metrologo.Models
         public DateTime? DernierLogin { get; set; }
 
         /// <summary>
-        /// Hash du mot de passe d'accès à la zone admin. null pour les simples Utilisateurs.
-        /// Renseigné à la promotion en Admin/SuperAdmin, effacé à la rétrogradation.
+        /// Le hash du mot de passe qui donne accès à la zone admin. Vaut null pour les simples Utilisateurs.
+        /// On le renseigne à la promotion en Admin/SuperAdmin, et on l'efface à la rétrogradation.
         /// </summary>
         public string? PasswordHash { get; set; }
 
-        /// <summary>Affichage "Prénom Nom" pour l'UI ; repli sur le login pour les comptes hérités sans ces champs.</summary>
+        /// <summary>Affichage "Prénom Nom" pour l'UI ; à défaut, on retombe sur le login pour les vieux comptes qui n'ont pas ces champs.</summary>
         public string NomComplet =>
             !string.IsNullOrWhiteSpace(Prenom) || !string.IsNullOrWhiteSpace(Nom)
                 ? $"{Prenom} {Nom}".Trim()

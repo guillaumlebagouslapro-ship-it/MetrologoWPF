@@ -6,12 +6,12 @@ using System.Globalization;
 namespace Metrologo.ViewModels
 {
     /// <summary>
-    /// Saisie post-mesure pour TachyContact : un unique champ « Résolution (tr/min) ».
-    /// Pas d'incertitude supplémentaire (la dégradation relative est portée par les coeffs
-    /// C/D du module RPM, pas par une saisie manuelle). Valeur injectée dans la zone
-    /// nommée ZNIncertResol du classeur Excel (convertie en Hz = saisie/60 pour rester
-    /// cohérente avec les formules Hz existantes ; la cellule I25 du template tachy
-    /// affiche le retour en tr/min via la formule =ZNIncertResol*60).
+    /// Saisie post-mesure pour TachyContact : un seul champ, « Résolution (tr/min) ».
+    /// Ici pas d'incertitude supplémentaire à saisir — la dégradation relative est déjà
+    /// portée par les coefficients C/D du module RPM. La valeur part dans la zone nommée
+    /// ZNIncertResol du classeur Excel, convertie en Hz (saisie / 60) pour rester en phase
+    /// avec les formules Hz existantes ; côté template tachy, la cellule I25 réaffiche le
+    /// résultat en tr/min grâce à la formule =ZNIncertResol*60.
     /// </summary>
     public partial class SaisiePostMesureTachyViewModel : ObservableObject
     {
@@ -25,12 +25,12 @@ namespace Metrologo.ViewModels
 
         public bool HasError => !string.IsNullOrEmpty(MessageErreur);
 
-        /// <summary>Résolution saisie par l'utilisateur, en tr/min.</summary>
+        /// <summary>La résolution telle que saisie par l'utilisateur, en tr/min.</summary>
         public double ResolutionRpm { get; private set; }
 
         /// <summary>
-        /// Résolution convertie en Hz, prête à être écrite dans ZNIncertResol
-        /// (équivaut à ResolutionRpm / 60).
+        /// La même résolution, mais convertie en Hz et prête à écrire dans ZNIncertResol
+        /// (c'est simplement ResolutionRpm / 60).
         /// </summary>
         public double ResolutionHz => ResolutionRpm / 60.0;
 

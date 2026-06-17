@@ -1,6 +1,6 @@
 namespace Metrologo.Models
 {
-    /// <summary>Coefficient d'incertitude pour une plage de fréquence sur un appareil donné.</summary>
+    /// <summary>Les coefficients d'incertitude qui s'appliquent à une plage de fréquence, pour un appareil donné.</summary>
     public class IncertitudeFrequence
     {
         public string Plage { get; set; } = string.Empty;
@@ -9,14 +9,14 @@ namespace Metrologo.Models
         public double CoeffB { get; set; }
     }
 
-    /// <summary>Coefficient d'incertitude pour un temps de porte sur un appareil donné.</summary>
+    /// <summary>Le coefficient d'incertitude associé à un temps de porte, pour un appareil donné.</summary>
     public class IncertitudeStabilite
     {
         public string TempsDeMesure { get; set; } = string.Empty;
         public double Valeur { get; set; }
     }
 
-    /// <summary>Coefficient d'incertitude pour une mesure autre (intervalle, tachy, stroboscope).</summary>
+    /// <summary>Coefficients d'incertitude pour les autres types de mesure : intervalle, tachy, stroboscope.</summary>
     public class IncertitudeAutreMesure
     {
         public string Libelle { get; set; } = string.Empty;
@@ -24,7 +24,7 @@ namespace Metrologo.Models
         public double CoeffB { get; set; }
     }
 
-    /// <summary>Paramètres globaux d'incertitude (nombre de mesures accréditées, etc.).</summary>
+    /// <summary>Les réglages d'incertitude qui valent pour tout l'appareil : nombre de mesures accréditées, etc.</summary>
     public class ParametresIncertitudeGlobaux
     {
         public int NbMesAccr { get; set; } = 30;

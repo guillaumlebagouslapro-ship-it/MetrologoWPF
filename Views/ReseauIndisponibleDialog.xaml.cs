@@ -6,11 +6,11 @@ using Wpf.Ui.Controls;
 namespace Metrologo.Views
 {
     /// <summary>
-    /// Dialogue bloquant affiché au démarrage quand le partage réseau serveur
-    /// (M:\exe_spe\Data_Metrologo) est inaccessible. Deux issues :
-    ///   • « Rafraîchir » — relance le test d'accès (sans fermer la fenêtre tant
-    ///     que le partage ne répond pas) ; dès qu'il répond, DialogResult = true.
-    ///   • « Fermer l'application » — DialogResult = false, l'appelant arrête l'app.
+    /// Boîte de dialogue bloquante qu'on montre au démarrage quand le partage réseau
+    /// serveur (M:\exe_spe\Data_Metrologo) ne répond pas. L'utilisateur a deux choix :
+    ///   • « Rafraîchir » — retente l'accès et laisse la fenêtre ouverte tant que le
+    ///     partage ne répond toujours pas ; dès qu'il répond, DialogResult = true.
+    ///   • « Fermer l'application » — DialogResult = false, et l'appelant coupe l'app.
     /// </summary>
     public partial class ReseauIndisponibleDialog : FluentWindow
     {
@@ -18,8 +18,9 @@ namespace Metrologo.Views
         private int _tentatives;
 
         /// <param name="cheminPartage">Chemin du partage affiché à l'utilisateur.</param>
-        /// <param name="testerAcces">Test d'accès au partage — retourne true si joignable.
-        /// Exécuté hors thread UI (peut bloquer plusieurs secondes sur un lecteur réseau mort).</param>
+        /// <param name="testerAcces">Teste l'accès au partage et renvoie true s'il est joignable.
+        /// Tourne en dehors du thread UI, car sur un lecteur réseau mort il peut rester bloqué
+        /// plusieurs secondes.</param>
         public ReseauIndisponibleDialog(string cheminPartage, Func<bool> testerAcces)
         {
             InitializeComponent();
@@ -41,8 +42,9 @@ namespace Metrologo.Views
             bool accessible;
             try
             {
-                // Task.Run : un lecteur réseau démonté peut bloquer plusieurs secondes
-                // sur le premier accès — on ne gèle pas l'UI pendant ce temps.
+                // On passe par Task.Run parce qu'un lecteur réseau démonté peut figer
+                // plusieurs secondes au premier accès : autant ne pas geler l'UI pendant
+                // ce temps-là.
                 accessible = await Task.Run(_testerAcces);
             }
             catch

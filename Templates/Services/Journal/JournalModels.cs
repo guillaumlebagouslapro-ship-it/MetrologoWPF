@@ -34,14 +34,14 @@ namespace Metrologo.Services.Journal
         public string? Details { get; set; }
         public SeveriteLog Severite { get; set; }
 
-        // Helpers de présentation
+        // Petits helpers d'affichage
         public string TimestampAffiche => Timestamp.ToString("HH:mm:ss");
 
         /// <summary>
-        /// Version lisible des Details JSON : décode les échappements Unicode courants
-        /// (<c>"</c> → <c>"</c>, <c>+</c> → <c>+</c>, <c>></c> → <c>&gt;</c>…)
-        /// pour que les valeurs SCPI soient lisibles dans la UI au lieu d'être noyées
-        /// d'échappements JsonSerializer.
+        /// Version lisible des Details JSON : on décode les échappements Unicode les plus
+        /// courants (<c>"</c> → <c>"</c>, <c>+</c> → <c>+</c>, <c>></c> → <c>&gt;</c>…)
+        /// pour que les valeurs SCPI s'affichent proprement dans l'UI, au lieu d'être noyées
+        /// sous les échappements du JsonSerializer.
         /// </summary>
         public string? DetailsLisibles
         {
@@ -87,7 +87,7 @@ namespace Metrologo.Services.Journal
         public string SessionId { get; set; } = string.Empty;
         public string Utilisateur { get; set; } = string.Empty;
         public string Machine { get; set; } = string.Empty;
-        /// <summary>Mode de mesure choisi en début de session : « Baie » ou « Paillasse ». Null avant choix.</summary>
+        /// <summary>Mode de mesure retenu au début de la session : « Baie » ou « Paillasse ». Null tant qu'on n'a pas choisi.</summary>
         public string? Poste { get; set; }
         public DateTime Debut { get; set; }
         public DateTime? Fin { get; set; }
@@ -105,9 +105,9 @@ namespace Metrologo.Services.Journal
                 ? $"{(int)Duree.TotalMinutes} min {Duree.Seconds} s"
                 : $"{(int)Duree.TotalSeconds} s";
 
-        /// <summary>Bandeau d'en-tête montré dans la liste des sessions. Inclut le poste
-        /// (Baie/Paillasse) s'il a été choisi par l'utilisateur ; la machine est volontairement
-        /// masquée — info technique non pertinente pour la vue métier.</summary>
+        /// <summary>Le bandeau d'en-tête affiché dans la liste des sessions. Il reprend le poste
+        /// (Baie/Paillasse) s'il a été choisi ; la machine, elle, est masquée à dessein — c'est une
+        /// info technique qui n'apporte rien à la vue métier.</summary>
         public string EnteteAffiche
         {
             get
@@ -138,7 +138,7 @@ namespace Metrologo.Services.Journal
         public bool HasErreurs => NbErreurs > 0;
         public bool HasAvertissements => NbAvertissements > 0;
 
-        /// <summary>Nombre de mesures effectuées dans cette session (count des MESURE_DEBUT).</summary>
+        /// <summary>Nombre de mesures faites pendant la session (on compte les MESURE_DEBUT).</summary>
         public int NbMesures
         {
             get
@@ -150,7 +150,7 @@ namespace Metrologo.Services.Journal
             }
         }
 
-        /// <summary>Résumé visuel court pour la card compacte : 47 actions · 2 mesures · 0 erreur.</summary>
+        /// <summary>Résumé court pour la carte compacte, du genre : 47 actions · 2 mesures · 0 erreur.</summary>
         public string ResumeAffiche
         {
             get
@@ -174,10 +174,10 @@ namespace Metrologo.Services.Journal
         public string? Recherche { get; set; }
 
         /// <summary>
-        /// Si non null, ne charger que les entrées dont <see cref="LogEntry.Action"/> est
-        /// dans cette liste OU dont la sévérité est Avertissement/Erreur (toujours visible).
-        /// Permet de pré-filtrer côté SQL et éviter de charger des milliers d'entrées techniques
-        /// pour les afficher en mode normal. Null = aucune restriction (mode debug).
+        /// Si renseigné, on ne charge que les entrées dont l'<see cref="LogEntry.Action"/> figure
+        /// dans cette liste, ou dont la sévérité est Avertissement/Erreur (qui restent toujours
+        /// visibles). Ça permet de pré-filtrer en amont et d'éviter de remonter des milliers
+        /// d'entrées techniques en mode normal. Null = aucune restriction (mode debug).
         /// </summary>
         public IReadOnlyCollection<string>? ActionsMetier { get; set; }
     }

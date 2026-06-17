@@ -2,7 +2,7 @@
 
 namespace Metrologo.Models
 {
-    // config d'un temps de porte (gate)
+    // la config d'un temps de porte (gate)
     public class GateConfig
     {
         public string Libelle { get; set; } = string.Empty;
@@ -15,12 +15,12 @@ namespace Metrologo.Models
         public string Nom { get; set; } = string.Empty;
         public int Adresse { get; set; }
 
-        // terminaisons et entête de réponse
+        // les terminaisons et l'entête de réponse
         public int WriteTerm { get; set; }
         public int ReadTerm { get; set; }
         public int TailleHeaderReponse { get; set; }
 
-        // commandes SCPI ou spécifiques à l'appareil
+        // les commandes, SCPI ou propres à l'appareil
         public string ChaineInit { get; set; } = string.Empty;
         public string ConfEntree { get; set; } = string.Empty;
         public string ExeMesure { get; set; } = string.Empty;

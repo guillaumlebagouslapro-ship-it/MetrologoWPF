@@ -8,8 +8,8 @@ namespace Metrologo.Views
 {
     public partial class SaisiePostMesureTachyWindow : FluentWindow
     {
-        // Mêmes P/Invoke que SaisiePostMesureFreqWindow pour passer devant Excel
-        // après que celui-ci ait pris le foreground via Interop.
+        // On reprend les mêmes P/Invoke que SaisiePostMesureFreqWindow pour réussir à passer
+        // devant Excel une fois qu'il s'est mis au premier plan via Interop.
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
