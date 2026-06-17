@@ -355,6 +355,17 @@ namespace Metrologo.Services
                     await appareil.AppliquerGateAsync(_driver, gateIdx, mesure.TypeMesure, ct, verifierArming);
                     Perf($"AppliquerGateAsync (verifArming={verifierArming})");
 
+                    // Intervalle de temps : le READ? bloque jusqu'à l'évènement (jusqu'à 100 000 s sur
+                    // le 53230A). AppliquerGateAsync sort tôt en intervalle (pas de gate), donc il n'a
+                    // posé aucun timeout : on cale ici le timeout VISA sur la durée d'attente max
+                    // configurée, sinon un intervalle long échoue au timeout par défaut (~10 s).
+                    if (mesure.TypeMesure == TypeMesure.Interval)
+                    {
+                        int timeoutInterval = Math.Max(5000, (int)(mesure.IntervAttenteMaxSecondes * 1000) + 2000);
+                        _driver.DefinirTimeout(appareil.Adresse, timeoutInterval);
+                        Perf($"Timeout intervalle = {timeoutInterval} ms (attente max {mesure.IntervAttenteMaxSecondes} s)");
+                    }
+
                     // 3.c Boucle de N mesures.
                     //   - Stabilité avec gate COURTE (< 500 ms) : on accumule en RAM pour écrire
                     //     en bloc à la fin de la gate. À 10 ms de gate la boucle dure ~1 s, l'œil

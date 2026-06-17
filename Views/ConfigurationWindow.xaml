@@ -457,6 +457,22 @@
                                                      IsChecked="{Binding IntervModeDeuxVoies, Mode=TwoWay}"
                                                      GroupName="IntervVoies" FontWeight="SemiBold"/>
                                     </StackPanel>
+
+                                    <TextBlock Text="Durée d'attente max" Style="{StaticResource FormLabelStyle}"
+                                               Margin="0,12,0,0"/>
+                                    <Grid Margin="0,0,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ui:TextBox Grid.Column="0"
+                                                    Text="{Binding IntervAttenteMaxTexte, UpdateSourceTrigger=PropertyChanged}"
+                                                    PlaceholderText="ex: 120"/>
+                                        <TextBlock Grid.Column="1" Text="s" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <TextBlock Text="Le compteur attend l'évènement jusqu'à cette durée. À régler au-dessus de l'intervalle attendu (ex. 120 s pour un intervalle de 100 s), sinon la mesure échoue au timeout."
+                                               FontSize="10" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                                 </StackPanel>
                             </Border>
 

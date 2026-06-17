@@ -59,6 +59,12 @@ namespace Metrologo.Models
         /// front suivant (cas montant→montant). Exprimé en ns. 0 = désactivé.</summary>
         public double IntervHoldoffNs { get; set; }
 
+        /// <summary>Durée d'attente maximale (s) de la lecture en intervalle de temps : le compteur
+        /// bloque le READ? jusqu'à ce que l'évènement survienne (intervalle jusqu'à 100 000 s sur le
+        /// 53230A). Le timeout VISA est calé dessus, sinon un intervalle long échoue au timeout par
+        /// défaut (~10 s). Défaut 120 s (couvre les intervalles courants ; à augmenter au besoin).</summary>
+        public double IntervAttenteMaxSecondes { get; set; } = 120;
+
         /// <summary>
         /// Temps de porte de la mesure. Un seul élément pour Fréquence/Intervalle/Tachy ; pour la
         /// Stabilité, N gates balayées séquentiellement (une feuille Excel par gate), ce qui remplace
