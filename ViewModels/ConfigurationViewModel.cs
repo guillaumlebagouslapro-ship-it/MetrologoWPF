@@ -705,7 +705,6 @@ namespace Metrologo.ViewModels
         private string _intervSeuilStartTexte = "1";
         private string _intervSeuilStopTexte = "1";
         private string _intervHoldoffTexte = "0";
-        private string _intervAttenteMaxTexte = "120";
 
         public string IntervSeuilStartTexte
         {
@@ -740,18 +739,6 @@ namespace Metrologo.ViewModels
                 OnPropertyChanged();
             }
         }
-        public string IntervAttenteMaxTexte
-        {
-            get => _intervAttenteMaxTexte;
-            set
-            {
-                _intervAttenteMaxTexte = value ?? string.Empty;
-                if (double.TryParse(_intervAttenteMaxTexte.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v > 0)
-                    MesureConfig.IntervAttenteMaxSecondes = v;
-                OnPropertyChanged();
-            }
-        }
-
         /// <summary>Resynchronise les champs texte intervalle depuis le modèle (au chargement d'une
         /// config). À ne PAS appeler pendant la frappe, sinon on écrase la saisie en cours.</summary>
         private void SyncIntervalleTexte()
@@ -759,7 +746,6 @@ namespace Metrologo.ViewModels
             _intervSeuilStartTexte = MesureConfig.IntervSeuilStart.ToString(CultureInfo.InvariantCulture);
             _intervSeuilStopTexte = MesureConfig.IntervSeuilStop.ToString(CultureInfo.InvariantCulture);
             _intervHoldoffTexte = MesureConfig.IntervHoldoffNs.ToString(CultureInfo.InvariantCulture);
-            _intervAttenteMaxTexte = MesureConfig.IntervAttenteMaxSecondes.ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>Notifie l'UI de tout l'état du panneau intervalle (visibilités + valeurs).</summary>
@@ -786,7 +772,6 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(IntervSeuilStartTexte));
             OnPropertyChanged(nameof(IntervSeuilStopTexte));
             OnPropertyChanged(nameof(IntervHoldoffTexte));
-            OnPropertyChanged(nameof(IntervAttenteMaxTexte));
         }
 
         /// <summary>Construit la liste des commandes SCPI d'intervalle à partir des TEMPLATES du
