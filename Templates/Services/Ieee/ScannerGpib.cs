@@ -185,31 +185,53 @@ namespace Metrologo.Services.Ieee
                 int.TryParse(m.Groups[2].Value, out addr);
             }
 
-            // type de bus + hôte LAN d'après la chaîne VISA
             bool estLan = resource.StartsWith("TCPIP", StringComparison.OrdinalIgnoreCase);
             TypeBus typeBus = estLan ? TypeBus.Lan : TypeBus.Gpib;
+
+            // GPIB : interrogation directe de la ressource découverte (l'EOI gère la fin de ligne).
+            if (!estLan)
+                return TenterIdn(rm, resource, timeoutMs, terminateurLf: false, board, addr, typeBus, hote: null);
+
+            // LAN : hôte/IP d'après la chaîne VISA découverte.
             string? hote = null;
-            if (estLan)
+            var ml = _regexTcpip.Match(resource);
+            if (ml.Success) hote = ml.Groups[1].Value;
+
+            // On tente d'abord le canal découvert (VXI-11, inst0::INSTR), qui supporte tout
+            // l'IEEE-488 (Device Clear, status byte). S'il ne répond pas — fréquent quand le
+            // VXI-11 est bloqué par un pare-feu ou capricieux en link-local — on bascule sur le
+            // socket SCPI brut (port standard 5025), une simple connexion TCP. On mémorise la
+            // ressource qui a effectivement répondu : la mesure ouvrira le même canal. Ainsi un
+            // appareil dont le VXI-11 marche garde le VXI-11, sans rien coder en dur par modèle.
+            var viaVxi = TenterIdn(rm, resource, System.Math.Min(timeoutMs, 1500),
+                terminateurLf: false, board, addr, typeBus, hote);
+            if (viaVxi.Repond) return viaVxi;
+
+            if (hote != null)
             {
-                var ml = _regexTcpip.Match(resource);
-                if (ml.Success) hote = ml.Groups[1].Value;
+                var viaSocket = TenterIdn(rm, $"TCPIP0::{hote}::{PortSocketScpi}::SOCKET",
+                    timeoutMs, terminateurLf: true, board, addr, typeBus, hote);
+                if (viaSocket.Repond) return viaSocket;
             }
 
-            // En LAN, on ouvre le SOCKET SCPI brut (port 5025) plutôt que le VXI-11
-            // (inst0::INSTR) : le VXI-11 (RPC portmapper) est souvent bloqué par les pare-feux
-            // ou capricieux en link-local, alors que le socket — une simple connexion TCP — passe.
-            // C'est cette ressource socket qu'on mémorise, pour que la mesure ouvre le même canal.
-            string ressourceOuverture = (estLan && hote != null)
-                ? $"TCPIP0::{hote}::5025::SOCKET"
-                : resource;
+            return viaVxi;   // échec des deux canaux : on renvoie le 1er résultat (avec son erreur)
+        }
 
+        // Port "SCPI raw socket" standard des instruments modernes (Keysight, R&S, Tektronix...).
+        // Pourra devenir un champ du catalogue si un appareil utilise un autre port.
+        private const int PortSocketScpi = 5025;
+
+        /// <summary>Ouvre une ressource VISA, envoie *IDN? et construit le résultat. terminateurLf =
+        /// vrai pour un socket (pas d'EOI : la fin de ligne se repère sur le LF).</summary>
+        private static ResultatScanGpib TenterIdn(
+            ResourceManager rm, string resource, int timeoutMs, bool terminateurLf,
+            int board, int addr, TypeBus typeBus, string? hote)
+        {
             try
             {
-                using var session = (IMessageBasedSession)rm.Open(ressourceOuverture);
+                using var session = (IMessageBasedSession)rm.Open(resource);
                 session.TimeoutMilliseconds = timeoutMs;
-
-                // Socket : pas d'EOI sur le bus, il faut un terminateur de lecture explicite (LF).
-                if (estLan)
+                if (terminateurLf)
                 {
                     session.TerminationCharacter = (byte)'\n';
                     session.TerminationCharacterEnabled = true;
@@ -223,7 +245,7 @@ namespace Metrologo.Services.Ieee
                 {
                     Board = board,
                     Adresse = addr,
-                    Ressource = ressourceOuverture,
+                    Ressource = resource,
                     TypeBus = typeBus,
                     Hote = hote,
                     Repond = !string.IsNullOrWhiteSpace(reponse),
