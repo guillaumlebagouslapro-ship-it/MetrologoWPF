@@ -267,6 +267,13 @@ namespace Metrologo.ViewModels
             RebuildAppareils();
             RebuildReglagesDynamiques();
             RebuildModulesIncertitude();
+
+            // Si la config restaurée est déjà en intervalle de temps, l'init manuelle doit
+            // être cochée comme lors d'un switch (le Delphi forçait bInitManu à l'ouverture de
+            // la fenêtre de config, cf. OnTypeMesureChanged / F_Main.pas:987).
+            if (MesureConfig.TypeMesure == TypeMesure.Interval && !MesureConfig.InitManu)
+                MesureConfig.InitManu = true;
+
             RefreshAll();
         }
 
@@ -552,8 +559,13 @@ namespace Metrologo.ViewModels
             MesureConfig.TypeMesure == TypeMesure.FreqAvantInterv ||
             MesureConfig.TypeMesure == TypeMesure.FreqFinale;
 
-        /// <summary>Init manuelle dispo uniquement en Fréquence (conforme Delphi, TfrmConfigStanford.chkInitManu).</summary>
-        public bool InitManuDisponible => MesureConfig.TypeMesure == TypeMesure.Frequence;
+        /// <summary>Init manuelle proposée en Fréquence et en Intervalle de temps. En intervalle
+        /// elle est forcée cochée à l'entrée (cf. OnTypeMesureChanged, conforme Delphi
+        /// F_Main.pas:987 / 1025-1027 pour Racal-Dana et Stanford), mais reste visible et
+        /// décochable par l'opérateur.</summary>
+        public bool InitManuDisponible =>
+            MesureConfig.TypeMesure == TypeMesure.Frequence
+            || MesureConfig.TypeMesure == TypeMesure.Interval;
 
         /// <summary>Case "Initialisation manuelle" (wrapper sur le modèle pour notifier l'UI).
         /// Cochée : l'opérateur configure l'appareil à la main, on n'envoie rien et on masque les réglages.</summary>
@@ -626,8 +638,16 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(ShowReglagesDynamiques));
         }
 
+        /// <summary>Rappel "vérifier les paramètres du fréquencemètre" : en intervalle de temps,
+        /// le 1er clic sur Valider affiche un rappel et revient à la config sans lancer ; le clic
+        /// suivant lance réellement la mesure. Réarmé dès qu'on change de type de mesure.</summary>
+        private bool _rappelParamsIntervalleConfirme;
+
         public void OnTypeMesureChanged()
         {
+            // tout changement de type réarme le rappel intervalle (cf. ValiderAsync)
+            _rappelParamsIntervalleConfirme = false;
+
             if (MesureConfig.TypeMesure == TypeMesure.Interval)
                 MesureConfig.NbMesures = 1;
             else
@@ -651,9 +671,15 @@ namespace Metrologo.ViewModels
                 MesureConfig.GateIndex = MesureConfig.GateIndices[0]; // setter remet la liste à 1 élément
             }
 
-            // L'init manuelle n'est disponible que pour la Fréquence : on la décoche si on
-            // change de type, sinon une case cochée mais masquée resterait active.
-            if (!InitManuDisponible && MesureConfig.InitManu)
+            // En intervalle de temps, l'init manuelle est forcée cochée dès qu'on bascule
+            // sur ce type (conforme Delphi F_Main.pas:987 / 1025-1027 :
+            // bInitManu := (TypeMesure = etInterval), aussi bien pour le Racal-Dana que pour
+            // le Stanford). La case reste visible et décochable si l'opérateur préfère piloter
+            // l'init lui-même. Pour les autres types où l'init manuelle n'est pas disponible,
+            // on la décoche pour qu'une case masquée ne reste pas active.
+            if (MesureConfig.TypeMesure == TypeMesure.Interval)
+                MesureConfig.InitManu = true;
+            else if (!InitManuDisponible && MesureConfig.InitManu)
                 MesureConfig.InitManu = false;
 
             // le filtrage des modules d'incertitude dépend de TypeMesure -> relister
@@ -679,6 +705,25 @@ namespace Metrologo.ViewModels
                     "Numéro FI manquant",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
+                return;
+            }
+
+            // En intervalle de temps, l'appareil est configuré à la main (init manuelle) :
+            // Metrologo n'envoie aucune commande. On rappelle donc à l'opérateur de vérifier
+            // les réglages du fréquencemètre AVANT de lancer. Le 1er clic sur Valider affiche
+            // ce rappel et revient à la config sans lancer ; il faut re-cliquer sur Valider
+            // pour démarrer réellement la mesure (le OK du rappel ne lance pas la mesure).
+            if (MesureConfig.TypeMesure == TypeMesure.Interval && !_rappelParamsIntervalleConfirme)
+            {
+                _rappelParamsIntervalleConfirme = true;
+                MessageBox.Show(
+                    "Vérifie les paramètres du fréquencemètre avant de valider.\n\n"
+                    + "En intervalle de temps, l'appareil est configuré à la main : "
+                    + "aucune commande n'est envoyée par Metrologo.\n\n"
+                    + "Clique de nouveau sur « Valider » pour lancer la mesure.",
+                    "Vérification des paramètres",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
                 return;
             }
 
