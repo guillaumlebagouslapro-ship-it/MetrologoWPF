@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -578,12 +579,297 @@ namespace Metrologo.ViewModels
                 MesureConfig.InitManu = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(ShowReglagesDynamiques));
+                NotifierIntervalle();   // décocher l'init manuelle révèle le panneau intervalle
             }
         }
 
-        /// <summary>Réglages dynamiques affichés seulement si l'appareil en propose et que l'init
-        /// manuelle n'est pas cochée (en init manuelle l'opérateur paramètre l'appareil lui-même).</summary>
-        public bool ShowReglagesDynamiques => AReglagesDynamiques && !MesureConfig.InitManu;
+        /// <summary>Réglages dynamiques (génériques, orientés Fréquence/voies) affichés seulement si
+        /// l'appareil en propose, que l'init manuelle n'est pas cochée, et qu'on n'est PAS en intervalle
+        /// de temps (l'intervalle a son propre panneau dédié, cf. ShowIntervalleConfig).</summary>
+        public bool ShowReglagesDynamiques =>
+            AReglagesDynamiques
+            && !MesureConfig.InitManu
+            && MesureConfig.TypeMesure != TypeMesure.Interval;
+
+        // ===== Panneau de configuration Intervalle de temps (53230A) ========================
+        // Visible quand on est en Intervalle ET qu'on décoche l'init manuelle : l'opérateur règle
+        // alors la mesure depuis le logiciel (1 ou 2 voies), qui génère et envoie le SCPI.
+
+        /// <summary>Panneau intervalle affiché : type Intervalle + init manuelle décochée + l'appareil
+        /// sélectionné déclare gérer l'intervalle au catalogue (sinon un Stanford n'aurait aucune
+        /// commande à montrer, et surtout ne recevrait pas les commandes d'un autre appareil).</summary>
+        public bool ShowIntervalleConfig =>
+            MesureConfig.TypeMesure == TypeMesure.Interval
+            && !MesureConfig.InitManu
+            && ModeleCatalogueSelectionne()?.Parametres?.Intervalle?.Actif == true;
+
+        /// <summary>Bloc des réglages "1 voie" (start et stop sur la voie 1).</summary>
+        public bool ShowIntervUneVoie => ShowIntervalleConfig && !MesureConfig.IntervDeuxVoies;
+
+        /// <summary>Bloc des réglages "2 voies" (start voie 1, stop voie 2).</summary>
+        public bool ShowIntervDeuxVoies => ShowIntervalleConfig && MesureConfig.IntervDeuxVoies;
+
+        /// <summary>Hold-off : utile uniquement en 1 voie (inhiber le 1er front montant→montant).</summary>
+        public bool ShowHoldoff => ShowIntervUneVoie;
+
+        // Sélecteur 1 voie / 2 voies
+        public bool IntervModeUneVoie
+        {
+            get => !MesureConfig.IntervDeuxVoies;
+            set { if (value) { MesureConfig.IntervDeuxVoies = false; NotifierIntervalle(); } }
+        }
+        public bool IntervModeDeuxVoies
+        {
+            get => MesureConfig.IntervDeuxVoies;
+            set { if (value) { MesureConfig.IntervDeuxVoies = true; NotifierIntervalle(); } }
+        }
+
+        // Voie 1 : couplage
+        public bool IntervDc1
+        {
+            get => MesureConfig.IntervDc1;
+            set { MesureConfig.IntervDc1 = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervAc1)); }
+        }
+        public bool IntervAc1
+        {
+            get => !MesureConfig.IntervDc1;
+            set { MesureConfig.IntervDc1 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervDc1)); }
+        }
+
+        // Voie 1 : impédance
+        public bool IntervImp50_1
+        {
+            get => MesureConfig.IntervImp50_1;
+            set { MesureConfig.IntervImp50_1 = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp1M_1)); }
+        }
+        public bool IntervImp1M_1
+        {
+            get => !MesureConfig.IntervImp50_1;
+            set { MesureConfig.IntervImp50_1 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp50_1)); }
+        }
+
+        // Pente du départ
+        public bool IntervStartMontant
+        {
+            get => MesureConfig.IntervStartMontant;
+            set { MesureConfig.IntervStartMontant = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervStartDescendant)); }
+        }
+        public bool IntervStartDescendant
+        {
+            get => !MesureConfig.IntervStartMontant;
+            set { MesureConfig.IntervStartMontant = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervStartMontant)); }
+        }
+
+        // Pente de l'arrêt
+        public bool IntervStopMontant
+        {
+            get => MesureConfig.IntervStopMontant;
+            set { MesureConfig.IntervStopMontant = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervStopDescendant)); }
+        }
+        public bool IntervStopDescendant
+        {
+            get => !MesureConfig.IntervStopMontant;
+            set { MesureConfig.IntervStopMontant = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervStopMontant)); }
+        }
+
+        // Voie 2 (mode 2 voies) : couplage
+        public bool IntervDc2
+        {
+            get => MesureConfig.IntervDc2;
+            set { MesureConfig.IntervDc2 = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervAc2)); }
+        }
+        public bool IntervAc2
+        {
+            get => !MesureConfig.IntervDc2;
+            set { MesureConfig.IntervDc2 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervDc2)); }
+        }
+
+        // Voie 2 (mode 2 voies) : impédance
+        public bool IntervImp50_2
+        {
+            get => MesureConfig.IntervImp50_2;
+            set { MesureConfig.IntervImp50_2 = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp1M_2)); }
+        }
+        public bool IntervImp1M_2
+        {
+            get => !MesureConfig.IntervImp50_2;
+            set { MesureConfig.IntervImp50_2 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp50_2)); }
+        }
+
+        // Seuils (V) et hold-off (ns) : champs texte (gèrent virgule/point)
+        public string IntervSeuilStartTexte
+        {
+            get => MesureConfig.IntervSeuilStart.ToString(CultureInfo.InvariantCulture);
+            set
+            {
+                if (double.TryParse((value ?? "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                    MesureConfig.IntervSeuilStart = v;
+                OnPropertyChanged();
+            }
+        }
+        public string IntervSeuilStopTexte
+        {
+            get => MesureConfig.IntervSeuilStop.ToString(CultureInfo.InvariantCulture);
+            set
+            {
+                if (double.TryParse((value ?? "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                    MesureConfig.IntervSeuilStop = v;
+                OnPropertyChanged();
+            }
+        }
+        public string IntervHoldoffTexte
+        {
+            get => MesureConfig.IntervHoldoffNs.ToString(CultureInfo.InvariantCulture);
+            set
+            {
+                if (double.TryParse((value ?? "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                    MesureConfig.IntervHoldoffNs = v < 0 ? 0 : v;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>Notifie l'UI de tout l'état du panneau intervalle (visibilités + valeurs).</summary>
+        private void NotifierIntervalle()
+        {
+            OnPropertyChanged(nameof(ShowIntervalleConfig));
+            OnPropertyChanged(nameof(ShowIntervUneVoie));
+            OnPropertyChanged(nameof(ShowIntervDeuxVoies));
+            OnPropertyChanged(nameof(ShowHoldoff));
+            OnPropertyChanged(nameof(IntervModeUneVoie));
+            OnPropertyChanged(nameof(IntervModeDeuxVoies));
+            OnPropertyChanged(nameof(IntervDc1));
+            OnPropertyChanged(nameof(IntervAc1));
+            OnPropertyChanged(nameof(IntervImp50_1));
+            OnPropertyChanged(nameof(IntervImp1M_1));
+            OnPropertyChanged(nameof(IntervStartMontant));
+            OnPropertyChanged(nameof(IntervStartDescendant));
+            OnPropertyChanged(nameof(IntervStopMontant));
+            OnPropertyChanged(nameof(IntervStopDescendant));
+            OnPropertyChanged(nameof(IntervDc2));
+            OnPropertyChanged(nameof(IntervAc2));
+            OnPropertyChanged(nameof(IntervImp50_2));
+            OnPropertyChanged(nameof(IntervImp1M_2));
+            OnPropertyChanged(nameof(IntervSeuilStartTexte));
+            OnPropertyChanged(nameof(IntervSeuilStopTexte));
+            OnPropertyChanged(nameof(IntervHoldoffTexte));
+        }
+
+        /// <summary>Construit la liste des commandes SCPI d'intervalle à partir des TEMPLATES du
+        /// catalogue de l'appareil sélectionné (rien de codé en dur : un appareil qui ne déclare
+        /// pas l'intervalle ne génère aucune commande). Remplit les placeholders {V}/{C}/{Z}/{S}/{P}/{T}
+        /// avec les choix du panneau (1 ou 2 voies, couplage, impédance, seuils, pentes, hold-off).</summary>
+        private List<string> ConstruireCommandesIntervalle()
+        {
+            var c = new List<string>();
+            var cfg = ModeleCatalogueSelectionne()?.Parametres?.Intervalle;
+            if (cfg == null || !cfg.Actif) return c;   // appareil ne gère pas l'intervalle
+
+            string Coup(bool dc) => dc ? "DC" : "AC";
+            string Imp(bool z50) => z50 ? "50" : "1E6";
+            string Pente(bool montant) => montant ? "POS" : "NEG";
+            string V(double v) => v.ToString(CultureInfo.InvariantCulture);
+
+            // Remplit un template avec les jetons fournis ; null si template vide.
+            string? Fill(string tpl, int voie, string? coup = null, string? imp = null,
+                         string? seuil = null, string? pente = null, string? temps = null)
+            {
+                if (string.IsNullOrWhiteSpace(tpl)) return null;
+                string s = tpl.Replace("{V}", voie.ToString(CultureInfo.InvariantCulture));
+                if (coup != null) s = s.Replace("{C}", coup);
+                if (imp != null) s = s.Replace("{Z}", imp);
+                if (seuil != null) s = s.Replace("{S}", seuil);
+                if (pente != null) s = s.Replace("{P}", pente);
+                if (temps != null) s = s.Replace("{T}", temps);
+                return s;
+            }
+            void Add(string? cmd) { if (!string.IsNullOrWhiteSpace(cmd)) c.Add(cmd!); }
+
+            if (!MesureConfig.IntervDeuxVoies)
+            {
+                // 1 voie : start = voie 1 (LEV1/SLOP1), stop = voie 1 (LEV2/SLOP2)
+                Add(cfg.Conf1Voie);
+                Add(Fill(cfg.Couplage, 1, coup: Coup(MesureConfig.IntervDc1)));
+                Add(Fill(cfg.Impedance, 1, imp: Imp(MesureConfig.IntervImp50_1)));
+                Add(Fill(cfg.SeuilStart, 1, seuil: V(MesureConfig.IntervSeuilStart)));
+                Add(Fill(cfg.PenteStart, 1, pente: Pente(MesureConfig.IntervStartMontant)));
+                Add(Fill(cfg.SeuilStop1Voie, 1, seuil: V(MesureConfig.IntervSeuilStop)));
+                Add(Fill(cfg.PenteStop1Voie, 1, pente: Pente(MesureConfig.IntervStopMontant)));
+
+                // Hold-off : inhibe le 1er front (montant→montant). Peut chaîner plusieurs commandes
+                // (le mode ADVanced est inclus dans le template) -> on split pour des writes distincts.
+                if (MesureConfig.IntervHoldoffNs > 0 && !string.IsNullOrWhiteSpace(cfg.Holdoff))
+                {
+                    string sec = string.Format(CultureInfo.InvariantCulture, "{0}E-9", V(MesureConfig.IntervHoldoffNs));
+                    foreach (var cmd in SplitCommandesScpi(cfg.Holdoff.Replace("{T}", sec)))
+                        Add(cmd);
+                }
+            }
+            else
+            {
+                // 2 voies : start = voie 1, stop = voie 2 (chacune via SeuilStart/PenteStart)
+                Add(cfg.Conf2Voies);
+                Add(Fill(cfg.Couplage, 1, coup: Coup(MesureConfig.IntervDc1)));
+                Add(Fill(cfg.Impedance, 1, imp: Imp(MesureConfig.IntervImp50_1)));
+                Add(Fill(cfg.SeuilStart, 1, seuil: V(MesureConfig.IntervSeuilStart)));
+                Add(Fill(cfg.PenteStart, 1, pente: Pente(MesureConfig.IntervStartMontant)));
+                Add(Fill(cfg.Couplage, 2, coup: Coup(MesureConfig.IntervDc2)));
+                Add(Fill(cfg.Impedance, 2, imp: Imp(MesureConfig.IntervImp50_2)));
+                Add(Fill(cfg.SeuilStart, 2, seuil: V(MesureConfig.IntervSeuilStop)));
+                Add(Fill(cfg.PenteStart, 2, pente: Pente(MesureConfig.IntervStopMontant)));
+            }
+
+            return c;
+        }
+
+        /// <summary>Génère et envoie au 53230A les commandes SCPI d'intervalle (panneau dédié),
+        /// puis les mémorise pour rejeu post-*RST par l'orchestrator.</summary>
+        private async Task EnvoyerCommandesIntervalleAsync()
+        {
+            var commandes = ConstruireCommandesIntervalle();
+            MesureConfig.CommandesScpiReglages = new List<string>(commandes);
+            if (commandes.Count == 0) return;
+
+            var modele = ModeleCatalogueSelectionne();
+            var det = AppareilSelectionne?.Detecte;
+            bool estFixe = AppareilSelectionne?.EstFixe == true;
+            if (modele == null || (det == null && !estFixe))
+            {
+                // Appareil non joignable (hors catalogue / pas détecté) : on garde la config locale,
+                // elle sera quand même rejouée par l'orchestrator au lancement de la mesure.
+                JournalLog.Warn(CategorieLog.Configuration, "INTERVALLE_SCPI_LOCAL",
+                    "Config intervalle conservée localement (appareil non joignable pour envoi immédiat).");
+                return;
+            }
+
+            int board = det?.Board ?? 0;
+            int adresse = det?.Adresse ?? AppareilSelectionne!.AdresseFixe;
+            string adresseCourte = det?.AdresseCourte ?? $"GPIB{board}::{adresse}";
+
+            JournalLog.Info(CategorieLog.Configuration, "INTERVALLE_SCPI_DEBUT",
+                $"Envoi de {commandes.Count} commande(s) d'intervalle à {modele.Nom} @ {adresseCourte}.");
+
+            try
+            {
+                using var driver = new VisaIeeeDriver(board);
+                await AppareilScpiService.EnvoyerAsync(modele, adresse, commandes, driver);
+
+                JournalLog.Info(CategorieLog.Configuration, "INTERVALLE_SCPI_OK",
+                    $"Configuration d'intervalle envoyée à {modele.Nom}.");
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Erreur(CategorieLog.Configuration, "INTERVALLE_SCPI_ERR",
+                    $"Échec de l'envoi SCPI d'intervalle à {modele.Nom} : {ex.Message}",
+                    new { ex.GetType().Name, Commandes = commandes });
+
+                MessageBox.Show(
+                    $"Erreur lors de l'envoi des commandes d'intervalle à {modele.Nom} :\n\n{ex.Message}\n\n"
+                    + "Les réglages n'ont pas été appliqués sur l'appareil — la configuration locale "
+                    + "est quand même conservée.",
+                    "Erreur de communication GPIB",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
 
         // Source du signal : visible seulement pour le type "Fréquence"
         public bool ShowSourceMesure => MesureConfig.TypeMesure == TypeMesure.Frequence;
@@ -636,6 +922,7 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(InitManuDisponible));
             OnPropertyChanged(nameof(InitManu));
             OnPropertyChanged(nameof(ShowReglagesDynamiques));
+            NotifierIntervalle();
         }
 
         public void OnTypeMesureChanged()
@@ -754,15 +1041,21 @@ namespace Metrologo.ViewModels
                 // de toute façon sauté côté orchestrateur en init manuelle).
                 MesureConfig.CommandesScpiReglages = new List<string>();
             }
+            else if (MesureConfig.TypeMesure == TypeMesure.Interval)
+            {
+                // Intervalle piloté par le logiciel : panneau dédié (1 ou 2 voies) -> SCPI CONF:TINT.
+                await EnvoyerCommandesIntervalleAsync();
+            }
             else
             {
                 await EnvoyerCommandesScpiAsync();
             }
 
-            // En intervalle de temps, l'appareil est configuré à la main (init manuelle) :
+            // En intervalle de temps AVEC init manuelle, l'appareil est configuré à la main :
             // Metrologo n'envoie aucune commande. Dernier rappel avant le lancement pour que
             // l'opérateur vérifie les réglages du fréquencemètre. OK lance la mesure.
-            if (MesureConfig.TypeMesure == TypeMesure.Interval)
+            // (Si l'init manuelle est décochée, c'est le logiciel qui a envoyé le SCPI -> pas de rappel.)
+            if (MesureConfig.TypeMesure == TypeMesure.Interval && MesureConfig.InitManu)
             {
                 MessageBox.Show(
                     "Vérifie les paramètres du fréquencemètre avant de lancer la mesure.\n\n"

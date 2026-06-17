@@ -154,5 +154,51 @@ namespace Metrologo.Models
         /// CatalogueAdapter. Vide = comportement template inchangé.
         /// </summary>
         public Dictionary<int, string> CommandesGateParSlot { get; set; } = new();
+
+        /// <summary>
+        /// Commandes SCPI de la mesure d'intervalle de temps, propres à CET appareil. Quand
+        /// <see cref="CommandesIntervalle.Actif"/> est false (défaut), l'appareil ne gère pas
+        /// l'intervalle piloté par le logiciel : le panneau intervalle reste masqué et aucune
+        /// commande n'est envoyée. Évite d'envoyer des commandes 53230A à un Stanford.
+        /// </summary>
+        public CommandesIntervalle Intervalle { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Templates SCPI d'une mesure d'intervalle de temps, stockés au catalogue par appareil.
+    /// Placeholders remplacés par le code à l'envoi :
+    /// {V}=numéro de voie (1/2), {C}=couplage (AC|DC), {Z}=impédance (50|1E6),
+    /// {S}=seuil en volts, {P}=pente (POS|NEG), {T}=hold-off en secondes.
+    /// Un template vide = commande non envoyée. Plusieurs commandes peuvent être chaînées par ";:".
+    /// </summary>
+    public class CommandesIntervalle
+    {
+        /// <summary>L'appareil gère l'intervalle piloté logiciel. false = panneau masqué, rien envoyé.</summary>
+        public bool Actif { get; set; }
+
+        public string Conf1Voie { get; set; } = string.Empty;       // ex: "CONF:TINT (@1)"
+        public string Conf2Voies { get; set; } = string.Empty;      // ex: "CONF:TINT (@1),(@2)"
+        public string Couplage { get; set; } = string.Empty;        // ex: "INP{V}:COUP {C}"
+        public string Impedance { get; set; } = string.Empty;       // ex: "INP{V}:IMP {Z}"
+        public string SeuilStart { get; set; } = string.Empty;      // ex: "INP{V}:LEV1 {S}"
+        public string PenteStart { get; set; } = string.Empty;      // ex: "INP{V}:SLOP1 {P}"
+        public string SeuilStop1Voie { get; set; } = string.Empty;  // ex: "INP1:LEV2 {S}" (mode 1 voie)
+        public string PenteStop1Voie { get; set; } = string.Empty;  // ex: "INP1:SLOP2 {P}" (mode 1 voie)
+        public string Holdoff { get; set; } = string.Empty;         // ex chaîné: "TINT:GATE:SOUR ADV;:SENS:GATE:STOP:HOLD:SOUR TIME;:SENS:GATE:STOP:HOLD:TIME {T};:SENS:GATE:STOP:SOUR IMM"
+
+        /// <summary>Jeu de commandes standard du Keysight 53230A, pour pré-remplir le formulaire.</summary>
+        public static CommandesIntervalle Defaut53230A() => new()
+        {
+            Actif = true,
+            Conf1Voie = "CONF:TINT (@1)",
+            Conf2Voies = "CONF:TINT (@1),(@2)",
+            Couplage = "INP{V}:COUP {C}",
+            Impedance = "INP{V}:IMP {Z}",
+            SeuilStart = "INP{V}:LEV1 {S}",
+            PenteStart = "INP{V}:SLOP1 {P}",
+            SeuilStop1Voie = "INP1:LEV2 {S}",
+            PenteStop1Voie = "INP1:SLOP2 {P}",
+            Holdoff = "TINT:GATE:SOUR ADV;:SENS:GATE:STAR:SOUR IMM;:SENS:GATE:STOP:HOLD:SOUR TIME;:SENS:GATE:STOP:HOLD:TIME {T};:SENS:GATE:STOP:SOUR IMM"
+        };
     }
 }

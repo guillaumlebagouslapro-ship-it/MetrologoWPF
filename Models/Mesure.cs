@@ -31,6 +31,34 @@ namespace Metrologo.Models
         public int InputIndex { get; set; }    // Gamme/Entrée
         public int CouplingIndex { get; set; } // Couplage AC/DC
 
+        // --- Intervalle de temps piloté par le logiciel (53230A) ---------------------------
+        // Config envoyée en SCPI quand on décoche l'init manuelle en mode Intervalle, pour
+        // éviter de paramétrer l'appareil dans ses sous-menus. Cf. CONF:TINT du 53230A.
+
+        /// <summary>false = mesure d'intervalle sur 1 voie (start ET stop sur la voie 1) ;
+        /// true = 2 voies (start voie 1, stop voie 2).</summary>
+        public bool IntervDeuxVoies { get; set; }
+
+        // Voie 1 (et unique en mode 1 voie)
+        public bool IntervDc1 { get; set; } = true;     // true = DC, false = AC
+        public bool IntervImp50_1 { get; set; } = true; // true = 50 ohm, false = 1 Mohm
+        /// <summary>Seuil de déclenchement du DÉPART (V), porté par la voie 1 (INP1:LEV1).</summary>
+        public double IntervSeuilStart { get; set; } = 1.0;
+        public bool IntervStartMontant { get; set; } = true; // pente départ : true = montant
+
+        // Arrêt : en 1 voie c'est la voie 1 (INP1:LEV2/SLOP2) ; en 2 voies c'est la voie 2 (INP2:LEV1/SLOP1)
+        /// <summary>Seuil de déclenchement de l'ARRÊT (V).</summary>
+        public double IntervSeuilStop { get; set; } = 1.0;
+        public bool IntervStopMontant { get; set; } = false; // pente arrêt : défaut descendant (cas largeur 1 voie)
+
+        // Voie 2 (mode 2 voies uniquement)
+        public bool IntervDc2 { get; set; } = true;
+        public bool IntervImp50_2 { get; set; } = true;
+
+        /// <summary>Hold-off (1 voie uniquement) : inhibe le 1er front pour mesurer jusqu'au
+        /// front suivant (cas montant→montant). Exprimé en ns. 0 = désactivé.</summary>
+        public double IntervHoldoffNs { get; set; }
+
         /// <summary>
         /// Temps de porte de la mesure. Un seul élément pour Fréquence/Intervalle/Tachy ; pour la
         /// Stabilité, N gates balayées séquentiellement (une feuille Excel par gate), ce qui remplace

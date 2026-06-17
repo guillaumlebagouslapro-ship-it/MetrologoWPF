@@ -178,6 +178,20 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _refInt = string.Empty;
         [ObservableProperty] private string _refExt = string.Empty;
 
+        // ---------------- Intervalle de temps (templates SCPI propres à l'appareil) ----------------
+        // Si "Actif" est décoché, l'appareil ne propose pas l'intervalle piloté logiciel : le panneau
+        // intervalle reste masqué côté Configuration et aucune commande n'est envoyée (ex: Stanford).
+        [ObservableProperty] private bool _intervalleActif;
+        [ObservableProperty] private string _intervConf1Voie = string.Empty;
+        [ObservableProperty] private string _intervConf2Voies = string.Empty;
+        [ObservableProperty] private string _intervCmdCouplage = string.Empty;
+        [ObservableProperty] private string _intervCmdImpedance = string.Empty;
+        [ObservableProperty] private string _intervCmdSeuilStart = string.Empty;
+        [ObservableProperty] private string _intervCmdPenteStart = string.Empty;
+        [ObservableProperty] private string _intervCmdSeuilStop1 = string.Empty;
+        [ObservableProperty] private string _intervCmdPenteStop1 = string.Empty;
+        [ObservableProperty] private string _intervCmdHoldoff = string.Empty;
+
         public Action<bool>? CloseAction { get; set; }
         public ModeleAppareil? Resultat { get; private set; }
 
@@ -240,6 +254,41 @@ namespace Metrologo.ViewModels
             CouplagesTexte = string.Join(", ", modeleExistant.Couplages);
 
             ChargerReglages(modeleExistant.Reglages);
+            ChargerIntervalle(modeleExistant.Parametres.Intervalle);
+        }
+
+        /// <summary>Recopie les templates d'intervalle du modèle vers les champs du formulaire.</summary>
+        private void ChargerIntervalle(CommandesIntervalle? iv)
+        {
+            if (iv == null) return;
+            IntervalleActif    = iv.Actif;
+            IntervConf1Voie    = iv.Conf1Voie;
+            IntervConf2Voies   = iv.Conf2Voies;
+            IntervCmdCouplage  = iv.Couplage;
+            IntervCmdImpedance = iv.Impedance;
+            IntervCmdSeuilStart = iv.SeuilStart;
+            IntervCmdPenteStart = iv.PenteStart;
+            IntervCmdSeuilStop1 = iv.SeuilStop1Voie;
+            IntervCmdPenteStop1 = iv.PenteStop1Voie;
+            IntervCmdHoldoff   = iv.Holdoff;
+        }
+
+        /// <summary>Coche "gère l'intervalle" et pré-remplit avec le jeu standard 53230A si les
+        /// champs sont vides (bouton « Pré-remplir 53230A »). Sert de point de départ éditable.</summary>
+        [RelayCommand]
+        private void RemplirIntervalleDefaut()
+        {
+            var d = CommandesIntervalle.Defaut53230A();
+            IntervalleActif    = true;
+            IntervConf1Voie    = d.Conf1Voie;
+            IntervConf2Voies   = d.Conf2Voies;
+            IntervCmdCouplage  = d.Couplage;
+            IntervCmdImpedance = d.Impedance;
+            IntervCmdSeuilStart = d.SeuilStart;
+            IntervCmdPenteStart = d.PenteStart;
+            IntervCmdSeuilStop1 = d.SeuilStop1Voie;
+            IntervCmdPenteStop1 = d.PenteStop1Voie;
+            IntervCmdHoldoff   = d.Holdoff;
         }
 
         // ---------------- Sauvegarde ----------------
@@ -467,20 +516,43 @@ namespace Metrologo.ViewModels
 
         // ---------------- Params IEEE ----------------
 
-        private ParametresIeee ConstruireParametres() => new()
+        private ParametresIeee ConstruireParametres()
         {
-            ChaineInit = ChaineInit ?? string.Empty,
-            ConfEntree = ConfEntree ?? string.Empty,
-            ExeMesure = ExeMesure ?? string.Empty,
-            CommandeGate = CommandeGate ?? string.Empty,
-            CommandeMesureMultiple = CommandeMesureMultiple ?? string.Empty,
-            CommandeFetchFresh = CommandeFetchFresh ?? string.Empty,
-            TermWrite = TermWrite,
-            TermRead = TermRead,
-            TailleHeader = TailleHeader,
-            GereSrq = GereSrq,
-            SrqOn = SrqOn ?? string.Empty,
-            SrqOff = SrqOff ?? string.Empty
+            // On part des paramètres existants (en édition) pour préserver les champs non exposés
+            // dans ce formulaire (ModeRapideActif, CommandeBulkInit, VerifArmingActive, Legacy,
+            // AdresseFixeParDefaut, CommandesGateParSlot…) — sinon ils seraient remis aux défauts.
+            var p = _modeleExistant?.Parametres ?? new ParametresIeee();
+
+            p.ChaineInit = ChaineInit ?? string.Empty;
+            p.ConfEntree = ConfEntree ?? string.Empty;
+            p.ExeMesure = ExeMesure ?? string.Empty;
+            p.CommandeGate = CommandeGate ?? string.Empty;
+            p.CommandeMesureMultiple = CommandeMesureMultiple ?? string.Empty;
+            p.CommandeFetchFresh = CommandeFetchFresh ?? string.Empty;
+            p.TermWrite = TermWrite;
+            p.TermRead = TermRead;
+            p.TailleHeader = TailleHeader;
+            p.GereSrq = GereSrq;
+            p.SrqOn = SrqOn ?? string.Empty;
+            p.SrqOff = SrqOff ?? string.Empty;
+            p.Intervalle = ConstruireIntervalle();
+
+            return p;
+        }
+
+        /// <summary>Transforme les champs intervalle du formulaire en <see cref="CommandesIntervalle"/>.</summary>
+        private CommandesIntervalle ConstruireIntervalle() => new()
+        {
+            Actif = IntervalleActif,
+            Conf1Voie = IntervConf1Voie ?? string.Empty,
+            Conf2Voies = IntervConf2Voies ?? string.Empty,
+            Couplage = IntervCmdCouplage ?? string.Empty,
+            Impedance = IntervCmdImpedance ?? string.Empty,
+            SeuilStart = IntervCmdSeuilStart ?? string.Empty,
+            PenteStart = IntervCmdPenteStart ?? string.Empty,
+            SeuilStop1Voie = IntervCmdSeuilStop1 ?? string.Empty,
+            PenteStop1Voie = IntervCmdPenteStop1 ?? string.Empty,
+            Holdoff = IntervCmdHoldoff ?? string.Empty
         };
 
         private List<string> GatesCochees()

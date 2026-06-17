@@ -629,6 +629,114 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ===== Intervalle de temps : templates SCPI propres à l'appareil ===== -->
+                <Border Background="White"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="6"
+                        Padding="16" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Intervalle de temps"
+                                   FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Text="Commandes SCPI utilisées par le panneau « intervalle de temps » de la fenêtre Configuration (quand on décoche l'init manuelle). Laisse décoché si l'appareil ne gère pas l'intervalle : le panneau n'apparaîtra pas et aucune commande ne sera envoyée."
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox Content="Cet appareil gère l'intervalle de temps"
+                                      IsChecked="{Binding IntervalleActif}"
+                                      FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Button Command="{Binding RemplirIntervalleDefautCommand}"
+                                    Content="Pré-remplir (53230A)"
+                                    Margin="16,0,0,0" Padding="10,4"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Placeholders remplis automatiquement : {V}=voie (1/2), {C}=couplage (AC/DC), {Z}=impédance (50/1E6), {S}=seuil (V), {P}=pente (POS/NEG), {T}=hold-off (s). Plusieurs commandes peuvent être chaînées par « ;: »."
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Config 1 voie"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="0" Grid.Column="1"
+                                        Text="{Binding IntervConf1Voie, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: CONF:TINT (@1)"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Config 2 voies"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="1" Grid.Column="1"
+                                        Text="{Binding IntervConf2Voies, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: CONF:TINT (@1),(@2)"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Couplage"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="2" Grid.Column="1"
+                                        Text="{Binding IntervCmdCouplage, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: INP{V}:COUP {C}"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Impédance"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="3" Grid.Column="1"
+                                        Text="{Binding IntervCmdImpedance, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: INP{V}:IMP {Z}"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Seuil départ"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="4" Grid.Column="1"
+                                        Text="{Binding IntervCmdSeuilStart, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: INP{V}:LEV1 {S}"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Pente départ"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="5" Grid.Column="1"
+                                        Text="{Binding IntervCmdPenteStart, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: INP{V}:SLOP1 {P}"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Seuil arrêt (1 voie)"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="6" Grid.Column="1"
+                                        Text="{Binding IntervCmdSeuilStop1, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: INP1:LEV2 {S}"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="Pente arrêt (1 voie)"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="7" Grid.Column="1"
+                                        Text="{Binding IntervCmdPenteStop1, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: INP1:SLOP2 {P}"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+
+                            <TextBlock Grid.Row="8" Grid.Column="0" Text="Hold-off (1 voie)"
+                                       VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,6"/>
+                            <ui:TextBox Grid.Row="8" Grid.Column="1"
+                                        Text="{Binding IntervCmdHoldoff, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="ex: TINT:GATE:SOUR ADV;:SENS:GATE:STOP:HOLD:SOUR TIME;:SENS:GATE:STOP:HOLD:TIME {T};:SENS:GATE:STOP:SOUR IMM"
+                                        FontFamily="Cascadia Mono, Consolas" Padding="8,4" Margin="0,0,0,6"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </ScrollViewer>
 
