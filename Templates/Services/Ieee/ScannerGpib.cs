@@ -195,12 +195,26 @@ namespace Metrologo.Services.Ieee
                 if (ml.Success) hote = ml.Groups[1].Value;
             }
 
+            // En LAN, on ouvre le SOCKET SCPI brut (port 5025) plutôt que le VXI-11
+            // (inst0::INSTR) : le VXI-11 (RPC portmapper) est souvent bloqué par les pare-feux
+            // ou capricieux en link-local, alors que le socket — une simple connexion TCP — passe.
+            // C'est cette ressource socket qu'on mémorise, pour que la mesure ouvre le même canal.
+            string ressourceOuverture = (estLan && hote != null)
+                ? $"TCPIP0::{hote}::5025::SOCKET"
+                : resource;
+
             try
             {
-                using var session = (IMessageBasedSession)rm.Open(resource);
+                using var session = (IMessageBasedSession)rm.Open(ressourceOuverture);
                 session.TimeoutMilliseconds = timeoutMs;
 
-                // FormattedIO gère les terminateurs
+                // Socket : pas d'EOI sur le bus, il faut un terminateur de lecture explicite (LF).
+                if (estLan)
+                {
+                    session.TerminationCharacter = (byte)'\n';
+                    session.TerminationCharacterEnabled = true;
+                }
+
                 session.FormattedIO.WriteLine("*IDN?");
                 string reponse = session.FormattedIO.ReadLine()?.Trim() ?? string.Empty;
 
@@ -209,7 +223,7 @@ namespace Metrologo.Services.Ieee
                 {
                     Board = board,
                     Adresse = addr,
-                    Ressource = resource,
+                    Ressource = ressourceOuverture,
                     TypeBus = typeBus,
                     Hote = hote,
                     Repond = !string.IsNullOrWhiteSpace(reponse),
