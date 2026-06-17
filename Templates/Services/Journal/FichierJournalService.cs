@@ -14,12 +14,10 @@ namespace Metrologo.Services.Journal
     /// Journal centralisé sur fichiers JSON dans CheminsMetrologo.Logs (par défaut
     /// M:\exe_spe\Data_Metrologo\Logs\). Remplace l'ancien SqlServerJournalService.
     /// </summary>
-    // Stockage : sessions.json (tableau complet relu/réécrit en bloc, une session = une
-    // ouverture d'app sur un poste) + entries-YYYY-MM.jsonl (JSON-lines append-only, un
-    // fichier par mois : plus rapide en écriture et archivable mois par mois).
-    // Multi-postes : sessions identifiées par Guid (pas de collision), entries en append
-    // avec FileShare.Read donc plusieurs postes écrivent en parallèle sans bloquer la lecture.
-    // Si le partage M:\ est HS, les écritures échouent en silence et l'app reste utilisable.
+    // sessions.json : tableau complet relu/réécrit (une session = une ouverture d'app).
+    // entries-YYYY-MM.jsonl : JSON-lines append-only, un fichier par mois (archivable).
+    // Multi-postes : sessions par Guid, entries en append avec FileShare.Read.
+    // Partage M:\ HS → écritures perdues silencieusement, l'app reste utilisable.
     public class FichierJournalService : IJournalService
     {
         private readonly SemaphoreSlim _semaSessions = new(1, 1);
@@ -87,12 +85,9 @@ namespace Metrologo.Services.Journal
 
         public async Task NettoyerSessionsZombiesAsync()
         {
-            // Deux cas :
-            // - cette machine : si on est la seule instance Metrologo qui tourne, toute
-            //   session locale sans Fin est forcément zombie (fermeture brutale).
-            // - autres machines : impossible de savoir si l'app y tourne encore, donc
-            //   seuil généreux de 24h avant de fermer.
-            // Pour chaque zombie, Fin = dernier Timestamp d'entrée, ou Debut si aucune entrée.
+            // Machine locale + seule instance : toute session sans Fin est zombie (crash).
+            // Autres machines : seuil 24h (impossible de savoir si l'app tourne encore).
+            // Fin d'un zombie = dernier Timestamp d'entrée, ou Debut si aucune entrée.
 
             string maMachine = Environment.MachineName;
             int monPid = System.Diagnostics.Process.GetCurrentProcess().Id;
@@ -115,14 +110,12 @@ namespace Metrologo.Services.Journal
                     bool aFermer;
                     if (estCetteMachine && seuleInstanceLocale)
                     {
-                        // On vient de démarrer la seule instance sur cette machine →
-                        // toute session « en cours » d'ici est forcément zombie.
+                        // Seule instance locale → toute session encore "en cours" est zombie.
                         aFermer = true;
                     }
                     else
                     {
-                        // Autres machines (ou cette machine mais autres instances actives) :
-                        // on attend le seuil 24h pour ne pas fermer prématurément.
+                        // Autres machines (ou instances actives sur cette machine) : seuil 24h.
                         aFermer = s.Debut < seuilZombieAutresMachines;
                     }
 
@@ -175,10 +168,10 @@ namespace Metrologo.Services.Journal
                     string? dossier = Path.GetDirectoryName(fichier);
                     if (!string.IsNullOrEmpty(dossier)) Directory.CreateDirectory(dossier);
 
-                    // 1) JSON-lines (machine-readable, consommé par le JournalViewer)
+                    // 1) JSON-lines (lu par le JournalViewer)
                     string ligne = JsonSerializer.Serialize(entry, _jsonOpts);
-                    // Append concurrent-safe : FileShare.Read autorise les lectures simultanées,
-                    // pas d'écriture concurrente (un seul writer à la fois côté Windows).
+                    // Append concurrent-safe : FileShare.Read → lectures simultanées OK,
+                    // un seul writer à la fois côté Windows.
                     using (var fs = new FileStream(fichier, FileMode.Append, FileAccess.Write,
                         FileShare.Read, bufferSize: 4096, useAsync: false))
                     using (var sw = new StreamWriter(fs, Encoding.UTF8))
@@ -186,7 +179,7 @@ namespace Metrologo.Services.Journal
                         sw.WriteLine(ligne);
                     }
 
-                    // 2) TXT human-readable (consultable directement avec Notepad / tail / grep)
+                    // 2) TXT lisible (Notepad / tail / grep)
                     string ligneTxt = FormaterLigneTexte(entry);
                     try
                     {
@@ -207,18 +200,13 @@ namespace Metrologo.Services.Journal
         private static string FichierEntreesDuMois(DateTime moment) =>
             Path.Combine(CheminsMetrologo.Logs, $"entries-{moment:yyyy-MM}.jsonl");
 
-        /// <summary>
-        /// Chemin du fichier TXT lisible accompagnant le JSON-lines du même mois.
-        /// Permet de consulter les logs directement avec Notepad / PowerShell sans
-        /// passer par l'application Metrologo.
-        /// </summary>
+        /// <summary>Chemin du TXT lisible (Notepad / PowerShell) accompagnant le JSON-lines du mois.</summary>
         private static string FichierEntreesTexteDuMois(DateTime moment) =>
             Path.Combine(CheminsMetrologo.Logs, $"entries-{moment:yyyy-MM}.txt");
 
         /// <summary>
-        /// Formate une entrée pour le fichier TXT lisible. Pattern style log4j :
+        /// Formate une entrée pour le TXT. Style log4j, champs en largeur fixe :
         /// <c>2026-05-25 14:32:47.123 [INFO ] [Administration ] [ACCES_ADMIN_OK     ] message · session=… machine=…</c>
-        /// Champs alignés en largeur fixe pour faciliter le grep / tri par colonne.
         /// </summary>
         private string FormaterLigneTexte(LogEntry e)
         {
@@ -240,13 +228,13 @@ namespace Metrologo.Services.Journal
               .Append('[').Append(act).Append(']').Append(' ')
               .Append(msg);
 
-            // Metadata utile pour corrélation multi-postes
+            // Métadonnées pour corrélation multi-postes
             sb.Append("  ·  user=").Append(UtilisateurActuel ?? "?");
             sb.Append(" machine=").Append(Environment.MachineName);
             if (!string.IsNullOrEmpty(e.SessionId))
                 sb.Append(" session=").Append(e.SessionId.Substring(0, Math.Min(8, e.SessionId.Length)));
 
-            // Détails JSON inline si court ; sinon résumé
+            // Détails JSON inline (tronqués à 200 car.)
             if (!string.IsNullOrEmpty(e.Details))
             {
                 string d = e.Details.Replace("\r", " ").Replace("\n", " ");
@@ -267,7 +255,7 @@ namespace Metrologo.Services.Journal
             {
                 var sessions = LireFichierSessions();
 
-                // Filtre temporel + utilisateur sur les sessions
+                // Filtre temporel + utilisateur
                 if (filtre != null)
                 {
                     if (filtre.Depuis.HasValue)
@@ -280,7 +268,7 @@ namespace Metrologo.Services.Journal
                             .ToList();
                 }
 
-                // Charge les entrées des mois pertinents
+                // Entrées des mois pertinents
                 var sessionsParId = sessions.ToDictionary(s => s.SessionId);
                 foreach (var entry in LireToutesLesEntrees(filtre))
                 {
@@ -334,10 +322,7 @@ namespace Metrologo.Services.Journal
             }
         }
 
-        /// <summary>
-        /// Lit / modifie / réécrit le fichier sessions.json de manière atomique.
-        /// Le sémaphore garantit qu'un seul thread du même poste y touche à la fois.
-        /// </summary>
+        /// <summary>Lit / modifie / réécrit sessions.json de manière atomique (sémaphore).</summary>
         private async Task ModifierSessionsAsync(Action<List<SessionJournal>> modification)
         {
             await _semaSessions.WaitAsync();
@@ -391,10 +376,7 @@ namespace Metrologo.Services.Journal
             string dossier = CheminsMetrologo.Logs;
             if (!Directory.Exists(dossier)) yield break;
 
-            // On collecte tous les fichiers entries-*.jsonl à lire :
-            //   1) Mois actifs/récents : directement dans Logs/
-            //   2) Mois archivés : dans Logs/Archives/YYYY-MM/
-            // Comme ça le viewer voit l'historique complet, même après rotation mensuelle.
+            // Fichiers à lire : Logs/entries-*.jsonl (actifs) + Logs/Archives/YYYY-MM/ (archivés).
             var fichiersAlire = new List<string>(Directory.EnumerateFiles(dossier, "entries-*.jsonl"));
             string dossierArchives = Path.Combine(dossier, "Archives");
             if (Directory.Exists(dossierArchives))
@@ -405,14 +387,13 @@ namespace Metrologo.Services.Journal
                 }
             }
 
-            // Filtres temporels appliqués au niveau du nom de fichier pour zapper les mois
-            // non pertinents avant de lire les lignes.
+            // Filtre par nom de fichier (mois) pour éviter de lire les mois hors plage.
             DateTime? bornInf = filtre?.Depuis;
             DateTime? bornSup = filtre?.Jusqu_a;
 
             foreach (var fichier in fichiersAlire)
             {
-                // Optim : filtre par nom de fichier sur le mois si possible
+                // Filtre rapide par nom de fichier avant lecture des lignes
                 if (bornInf.HasValue || bornSup.HasValue)
                 {
                     if (TryExtraireMois(Path.GetFileName(fichier), out var mois))
@@ -480,8 +461,7 @@ namespace Metrologo.Services.Journal
 
         private async Task<Dictionary<string, DateTime>> CalculerDerniersTimestampsAsync()
         {
-            // Pour chaque session, on garde le dernier Timestamp d'entrée — utile
-            // pour fermer proprement les sessions zombies.
+            // Dernier Timestamp par session — utilisé pour dater la fermeture des zombies.
             var result = new Dictionary<string, DateTime>();
             await Task.Run(() =>
             {

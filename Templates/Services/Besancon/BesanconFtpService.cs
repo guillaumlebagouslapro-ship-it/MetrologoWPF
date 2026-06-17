@@ -6,11 +6,8 @@ using Metrologo.Services.Journal;
 
 namespace Metrologo.Services.Besancon
 {
-    /// <summary>
-    /// Récupération du fichier de l'observatoire de Besançon sur le FTP (équivalent du ftpe2m Indy
-    /// du legacy). FtpWebRequest est obsolète mais intégré .NET, donc pas de dépendance externe ;
-    /// le FTPS explicite est géré via la config (FtpSsl).
-    /// </summary>
+    /// <summary>Téléchargement FTP du fichier Besançon (équivalent du ftpe2m Indy legacy).
+    /// FtpWebRequest obsolète mais sans dépendance externe ; FTPS géré via FtpSsl.</summary>
     public static class BesanconFtpService
     {
         /// <summary>Résultat d'un téléchargement FTP : contenu si OK, sinon détail de l'échec.</summary>
@@ -23,9 +20,8 @@ namespace Metrologo.Services.Besancon
             public bool Ok => Contenu != null;
         }
 
-        /// <summary>Télécharge le fichier distant. Retourne le contenu si OK, sinon le détail de
-        /// l'échec : config manquante, réponse FTP du serveur (530 login, 550 fichier absent...)
-        /// ou erreur réseau (timeout, TLS, refus).</summary>
+        /// <summary>Télécharge le fichier distant. Retourne le contenu ou le détail de l'échec
+        /// (config manquante, code FTP 530/550..., timeout, TLS).</summary>
         public static async Task<ResultatFtp> TelechargerAsync(BesanconConfig cfg)
         {
             if (string.IsNullOrWhiteSpace(cfg.FtpHote) || string.IsNullOrWhiteSpace(cfg.FtpUtilisateur))
@@ -64,7 +60,7 @@ namespace Metrologo.Services.Besancon
             }
             catch (WebException wex)
             {
-                // réponse FTP du serveur (code + texte) si disponible, le plus parlant pour diagnostiquer
+                // Code + texte FTP si disponible (le plus parlant pour le diagnostic).
                 string detail = wex.Message;
                 if (wex.Response is FtpWebResponse fr)
                 {

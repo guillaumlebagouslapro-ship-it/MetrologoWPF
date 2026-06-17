@@ -10,17 +10,11 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// CRUD local des comptes utilisateurs (stockage JSON via <see cref="Preferences"/>).
-    /// Pas de SQL Server. Système d'identification :
-    ///
-    ///  • Dropdown de démarrage : identité déclarative (sans mot de passe). Sert au
-    ///    journal et à l'affichage du nom dans l'app — pas aux droits.
-    ///  • Modale Administration : login + mot de passe vérifiés contre le compte
-    ///    sélectionné. Le rôle débloqué dépend du compte authentifié, pas du dropdown.
-    ///
-    /// Seuls les comptes Administrateur et SuperAdministrateur ont un mot de passe.
-    /// Lors d'une promotion → mdp généré et retourné à l'admin (à communiquer).
-    /// Lors d'une rétrogradation vers Utilisateur → mdp effacé.
+    /// CRUD des comptes utilisateurs (JSON via <see cref="Preferences"/>, pas de SQL).
+    /// Identification à deux niveaux :
+    ///  - Dropdown démarrage : déclaratif (pas de mdp), pour le journal et l'affichage.
+    ///  - Modale Administration : login + mdp ; le rôle débloqué dépend du compte authentifié.
+    /// Admin/SuperAdmin ont un mdp. Promotion → mdp généré ; rétrogradation → mdp effacé.
     /// </summary>
     public static class ComptesLocauxService
     {
@@ -33,11 +27,8 @@ namespace Metrologo.Services
                 .ToList();
         }
 
-        /// <summary>
-        /// Si le catalogue d'utilisateurs est vide (1er démarrage), crée un compte
-        /// de démonstration en SuperAdministrateur. Mot de passe initial : « admin ».
-        /// L'admin peut le supprimer/renommer à tout moment depuis l'admin.
-        /// </summary>
+        /// <summary>Crée un compte démo SuperAdmin (mdp « admin ») si la liste est vide.
+        /// Supprimable/renommable depuis l'admin à tout moment.</summary>
         public static void AssurerCompteParDefaut()
         {
             if (Preferences.Utilisateurs.Count > 0)
@@ -140,11 +131,8 @@ namespace Metrologo.Services
 
         // -------- Rôles + mots de passe --------
 
-        /// <summary>
-        /// Change le rôle. Retourne le mot de passe clair généré si la transition crée
-        /// un nouvel admin (passage de Utilisateur vers Admin/SuperAdmin), sinon null.
-        /// Garde-fou : impossible de rétrograder le dernier SuperAdmin.
-        /// </summary>
+        /// <summary>Change le rôle. Retourne le mdp clair généré lors d'une promotion vers
+        /// Admin/SuperAdmin, sinon null. Impossible de rétrograder le dernier SuperAdmin.</summary>
         public static string? ChangerRole(int id, RoleUtilisateur nouveauRole)
         {
             var liste = Preferences.Utilisateurs.ToList();
@@ -168,7 +156,7 @@ namespace Metrologo.Services
 
             if (nouveauRole == RoleUtilisateur.Utilisateur)
             {
-                // Rétrogradation : on efface le mdp (un Utilisateur lambda n'a pas d'accès admin).
+                // Rétrogradation : mdp effacé.
                 cible.PasswordHash = null;
             }
             else if (deviendraAdmin && (etaitUtilisateur || string.IsNullOrEmpty(cible.PasswordHash)))
@@ -177,7 +165,7 @@ namespace Metrologo.Services
                 mdpClair = GenererMotDePasse();
                 cible.PasswordHash = PasswordHasher.HashPassword(mdpClair);
             }
-            // Sinon (Admin ↔ SuperAdmin) on garde le mdp existant.
+            // Admin ↔ SuperAdmin : mdp existant conservé.
 
             cible.Role = nouveauRole;
             Preferences.SauvegarderUtilisateurs(liste);
@@ -188,11 +176,9 @@ namespace Metrologo.Services
             return mdpClair;
         }
 
-        /// <summary>
-        /// Génère un nouveau mot de passe pour un compte admin et l'enregistre.
-        /// Retourne le mot de passe clair (à afficher une seule fois). Lance si le
-        /// compte n'existe pas ou n'est pas admin.
-        /// </summary>
+        /// <summary>Génère et enregistre un nouveau mdp pour un compte admin.
+        /// Retourne le mdp clair (à afficher une seule fois). Lève si le compte est introuvable
+        /// ou n'est pas admin.</summary>
         public static string ReinitialiserMotDePasse(int id)
         {
             var liste = Preferences.Utilisateurs.ToList();
@@ -212,10 +198,8 @@ namespace Metrologo.Services
             return mdpClair;
         }
 
-        /// <summary>
-        /// Définit un mot de passe choisi par l'admin (sert au « Changer mon mdp »
-        /// dans la zone admin). L'ancien hash est immédiatement remplacé.
-        /// </summary>
+        /// <summary>Définit un mdp choisi par l'admin (« Changer mon mdp »).
+        /// L'ancien hash est remplacé immédiatement.</summary>
         public static bool DefinirMotDePasse(int id, string motDePasse)
         {
             if (string.IsNullOrWhiteSpace(motDePasse))
@@ -236,12 +220,8 @@ namespace Metrologo.Services
             return true;
         }
 
-        /// <summary>
-        /// Authentifie un admin (Admin ou SuperAdmin) à partir d'un login + mdp.
-        /// Retourne le compte si OK, null sinon (mauvais identifiants ou compte non
-        /// admin). Le caller ne distingue pas « login inconnu » de « mauvais mdp »
-        /// pour ne pas faciliter l'énumération des comptes valides.
-        /// </summary>
+        /// <summary>Authentifie un Admin/SuperAdmin (login + mdp). Retourne le compte si OK,
+        /// null sinon. Ne distingue pas « login inconnu » de « mauvais mdp » (anti-énumération).</summary>
         public static Utilisateur? AuthentifierAdmin(string login, string motDePasse)
         {
             if (string.IsNullOrWhiteSpace(login) || string.IsNullOrEmpty(motDePasse)) return null;
@@ -284,11 +264,8 @@ namespace Metrologo.Services
                 $"Aucun super-administrateur trouvé : promotion automatique de {premier.Login}.");
         }
 
-        /// <summary>
-        /// Migration : tout compte admin/super-admin sans hash de mdp se voit attribuer
-        /// le mot de passe par défaut « admin » (à changer au plus vite). Permet de
-        /// récupérer une base où les rôles existaient déjà mais sans passwords.
-        /// </summary>
+        /// <summary>Migration : attribue le mdp par défaut « admin » aux comptes admin
+        /// sans hash. Récupère les bases créées avant l'introduction des passwords.</summary>
         private static void AssurerPasswordsAdmins()
         {
             var liste = Preferences.Utilisateurs.ToList();
@@ -318,15 +295,12 @@ namespace Metrologo.Services
             return $"{baseLogin}{Guid.NewGuid().ToString("N")[..6]}";
         }
 
-        /// <summary>
-        /// Génère un mot de passe aléatoire lisible (8 caractères, lettres + chiffres).
-        /// Pas de symboles pour éviter les confusions à la dictée. Pseudo-aléatoire
-        /// cryptographique (<see cref="RandomNumberGenerator"/>).
-        /// </summary>
+        /// <summary>Génère un mdp aléatoire lisible (8 car. par défaut, lettres + chiffres,
+        /// pas de symboles). Entropie via <see cref="RandomNumberGenerator"/>.</summary>
         public static string GenererMotDePasse(int longueur = 8)
         {
             const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-            // Caractères ambigus retirés : O/0/o, I/1/l/L
+            // Ambigus retirés : O/0/o, I/1/l/L
             var buf = new char[longueur];
             byte[] rand = RandomNumberGenerator.GetBytes(longueur);
             for (int i = 0; i < longueur; i++)

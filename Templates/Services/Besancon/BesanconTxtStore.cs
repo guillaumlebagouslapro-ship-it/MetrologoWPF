@@ -8,12 +8,8 @@ using System.Threading.Tasks;
 
 namespace Metrologo.Services.Besancon
 {
-    /// <summary>
-    /// Stockage cumulatif des valeurs Besançon dans un simple fichier texte sur le partage, en
-    /// remplacement de la base SQL BASE_E2M. Une ligne par mesure (MJD, date, valeur en Hz, séparés
-    /// par tab), triée par MJD croissant et sans doublon : à chaque récupération FTP seules les
-    /// dates absentes sont ajoutées, le fichier grossit jour après jour.
-    /// </summary>
+    /// <summary>Stockage cumulatif des valeurs Besançon (remplace BASE_E2M SQL). Fichier texte
+    /// tab-séparé (MJD, date, valeur Hz), trié par MJD, sans doublon.</summary>
     public static class BesanconTxtStore
     {
         /// <summary>Fichier texte cumulatif des valeurs journalières Besançon (partage).</summary>
@@ -38,17 +34,14 @@ namespace Metrologo.Services.Besancon
             public bool FichierModifie => Nouvelles > 0 || (Corrections?.Count ?? 0) > 0;
         }
 
-        /// <summary>
-        /// Fusionne les mesures FTP dans le fichier cumulatif : MJD absent = nouvelle ligne,
-        /// MJD présent avec valeur différente = correction (rare, Besançon révise parfois une
-        /// valeur passée), MJD présent avec valeur identique = ignoré (cas courant). Le fichier
-        /// n'est réécrit que s'il y a au moins une nouveauté ou une correction.
-        /// </summary>
+        /// <summary>Fusionne les mesures FTP dans le cumulatif : nouveau MJD = ajout,
+        /// valeur différente = correction (Besançon révise parfois), identique = ignoré.
+        /// Réécriture uniquement si le fichier est modifié.</summary>
         public static async Task<ResultatAjout> AjouterAsync(IEnumerable<MesureBesancon> mesures)
         {
             Directory.CreateDirectory(CheminsMetrologo.Besancon);
 
-            // charge l'historique existant (MJD -> valeur) pour dédoublonner et le conserver
+            // Charge l'historique pour dédoublonner.
             var parMjd = await LireAsync();
 
             int nouvelles = 0;
@@ -57,7 +50,7 @@ namespace Metrologo.Services.Besancon
             {
                 if (parMjd.TryGetValue(m.Mjd, out double existante))
                 {
-                    // date déjà connue : on ne réécrit que si la source a corrigé la valeur
+                    // Date déjà connue : réécriture seulement si la source a corrigé la valeur.
                     if (!MemeValeur(existante, m.Valeur))
                     {
                         corrections.Add(new Correction { Mjd = m.Mjd, Ancienne = existante, Nouvelle = m.Valeur });
@@ -74,20 +67,20 @@ namespace Metrologo.Services.Besancon
 
             var sb = new StringBuilder();
             sb.AppendLine(EnTete);
-            foreach (var kv in parMjd)   // SortedDictionary : déjà trié par MJD croissant
+            foreach (var kv in parMjd)   // SortedDictionary : trié par MJD
                 sb.AppendLine(FormaterLigne(kv.Key, kv.Value));
 
             await File.WriteAllTextAsync(CheminValeurs, sb.ToString(), Encoding.UTF8);
             return res;
         }
 
-        /// <summary>Égalité telle qu'écrite dans le fichier : on compare la représentation texte
-        /// (InvariantCulture). Évite le bruit flottant tout en détectant toute correction réelle.</summary>
+        /// <summary>Égalité par représentation texte (InvariantCulture) : évite le bruit
+        /// flottant tout en détectant les vraies corrections.</summary>
         private static bool MemeValeur(double a, double b) =>
             a.ToString(CultureInfo.InvariantCulture) == b.ToString(CultureInfo.InvariantCulture);
 
-        /// <summary>Relit le fichier cumulatif en dictionnaire MJD -> valeur (trié, vide si le
-        /// fichier n'existe pas). En-tête et lignes non conformes ignorés.</summary>
+        /// <summary>Relit le fichier cumulatif en dictionnaire MJD -> valeur trié.
+        /// Vide si absent ; en-tête et lignes non conformes ignorés.</summary>
         public static async Task<SortedDictionary<int, double>> LireAsync()
         {
             var parMjd = new SortedDictionary<int, double>();
@@ -101,7 +94,7 @@ namespace Metrologo.Services.Besancon
 
                 var tokens = ligne.Split('\t');
                 if (tokens.Length < 3) continue;
-                // 1er token entier = MJD (ignore la ligne d'en-tête et tout texte parasite)
+                // 1er token entier = MJD (ignore l'en-tête et tout texte parasite).
                 if (!int.TryParse(tokens[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int mjd))
                     continue;
                 if (!double.TryParse(tokens[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double v))

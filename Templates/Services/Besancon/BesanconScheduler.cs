@@ -9,11 +9,9 @@ using Metrologo.Services.Journal;
 
 namespace Metrologo.Services.Besancon
 {
-    /// <summary>
-    /// Tâche quotidienne Besançon (reprend le timer tmrBesancon du legacy) : chaque jour à l'heure
-    /// configurée, télécharge le fichier corrigé par FTP, l'intègre, et le mardi recalcule la moyenne
-    /// hebdo. Ne tourne que si la config est active sur le poste.
-    /// </summary>
+    /// <summary>Tâche quotidienne Besançon (remplace tmrBesancon du legacy) : télécharge
+    /// le fichier FTP, l'intègre, recalcule la moyenne hebdo le mardi. Actif si
+    /// besancon.ftp.json Active=true.</summary>
     public static class BesanconScheduler
     {
         private static Timer? _timer;
@@ -33,11 +31,8 @@ namespace Metrologo.Services.Besancon
         /// pour rafraîchir voyant et rapport. Marshalé sur le Dispatcher si une UI est présente.</summary>
         public static event EventHandler? StatutChange;
 
-        /// <summary>
-        /// Demande une pop-up sur CE poste (titre, message, avertissement). La tâche ne s'exécute que
-        /// sur un poste par jour et le watcher admin ne notifie que les AUTRES postes : on combine donc
-        /// pop-up directe ici + entrée au journal d'audit pour le reste du parc.
-        /// </summary>
+        /// <summary>Demande une pop-up sur ce poste. Complète le watcher admin qui ne notifie
+        /// que les autres postes : pop-up directe ici + entrée au journal d'audit.</summary>
         public static event Action<string, string, bool>? PopupRubidiumDemandee;
 
         /// <summary>Lève PopupRubidiumDemandee sur le thread UI si une UI est présente.</summary>
@@ -65,15 +60,10 @@ namespace Metrologo.Services.Besancon
             }
             Programmer(cfg);
 
-            // Rattrapage au démarrage : le timer ne sert à rien si l'app n'était pas ouverte à
-            // l'heure prévue. Deux cas (fire-and-forget) :
-            //  - lancé APRÈS l'heure : le fichier du jour est publié, on fait la récupération
-            //    complète tout de suite ; ExecuterAsync(forcer:false) respecte DejaRecupereAujourdhui()
-            //    donc pas de doublon si un autre poste l'a déjà fait.
-            //  - lancé AVANT l'heure : la valeur du JOUR n'est pas encore publiée, mais les jours
-            //    PASSÉS (week-end, vacances) le sont. Si on revient après une coupure, on rattrape
-            //    tout de suite ce retard sans consommer le marqueur du jour (la récupération
-            //    programmée de l'heure ira chercher la valeur du jour normalement).
+            // Rattrapage au démarrage (app fermée à l'heure prévue). Fire-and-forget.
+            // Après l'heure : récupération complète (DejaRecupereAujourdhui empêche les doublons).
+            // Avant l'heure : rattrapage du backlog (week-end/vacances) sans consommer le
+            //   marqueur du jour — la récupération programmée interviendra quand même à l'heure.
             if (DateTime.Now.TimeOfDay >= cfg.HeureParsee())
                 _ = RattrapageDemarrageAsync();
             else
@@ -96,11 +86,9 @@ namespace Metrologo.Services.Besancon
             }
         }
 
-        /// <summary>Rattrapage AVANT l'heure de publication : si des jours passés ont été manqués
-        /// (app fermée le week-end / en vacances), va chercher ce retard sur le FTP tout de suite,
-        /// au lieu d'attendre l'heure programmée. Ne touche PAS au marqueur du jour : la récupération
-        /// planifiée à l'heure ira chercher la valeur du jour comme d'habitude. No-op si les données
-        /// sont déjà fraîches (on a au moins la valeur d'hier).</summary>
+        /// <summary>Rattrapage du backlog avant l'heure de publication : jours passés manqués
+        /// récupérés immédiatement. Ne touche pas au marqueur du jour. No-op si données
+        /// fraîches (au moins la valeur d'hier).</summary>
         private static async Task RattrapageBacklogAsync()
         {
             try
@@ -109,7 +97,7 @@ namespace Metrologo.Services.Besancon
                 int todayMjd = JourJulien.VersMjd(Aujourdhui);
                 int maxMjd = valeurs.Count > 0 ? valeurs.Keys.Max() : 0;
 
-                // Données déjà à jour (dernière valeur = hier ou aujourd'hui) → aucun retard à rattraper.
+                // Données fraîches (hier ou aujourd'hui) : rien à rattraper.
                 if (maxMjd >= todayMjd - 1) return;
 
                 var res = await ExecuterAsync(forcer: true, marquerJour: false);
@@ -170,21 +158,19 @@ namespace Metrologo.Services.Besancon
             }
             finally
             {
-                // Reprogramme pour le lendemain à la même heure (re-lit la config au cas où).
+                // Reprogramme pour le lendemain (relit la config au cas où).
                 Programmer(BesanconConfig.Charger());
             }
         }
 
-        /// <summary>Exécute la tâche une fois : téléchargement FTP, parsing, ajout au fichier txt
-        /// cumulatif (aucune écriture SQL). Sans forcer, no-op si un poste a déjà récupéré
-        /// aujourd'hui (marqueur partagé) ; forcer=true (bouton Forcer) ignore ce garde-fou.
-        /// marquerJour=false : télécharge sans écrire le marqueur du jour (rattrapage de backlog
-        /// avant l'heure) afin que la récupération programmée du jour s'exécute quand même.</summary>
+        /// <summary>Exécution one-shot : FTP → parsing → fichier txt cumulatif (pas de SQL).
+        /// Sans forcer : no-op si déjà fait aujourd'hui (marqueur partagé).
+        /// marquerJour=false : télécharge sans écrire le marqueur (rattrapage backlog).</summary>
         public static async Task<ResultatBesancon> ExecuterAsync(bool forcer = false, bool marquerJour = true)
         {
             var res = new ResultatBesancon { Destination = BesanconTxtStore.CheminValeurs };
 
-            // garde-fou multi-poste : déjà fait aujourd'hui, on ne refait pas (sauf forçage manuel)
+            // Garde-fou multi-poste : déjà fait aujourd'hui → ignoré (sauf forçage).
             if (!forcer && DejaRecupereAujourdhui())
             {
                 res.DejaFait = true;
@@ -206,14 +192,13 @@ namespace Metrologo.Services.Besancon
             res.Telecharge = true;
             string contenu = ftp.Contenu!;
 
-            // Dépose le brut sur le partage (récupère le chemin exact, ou null si échec).
+            // Sauvegarde du brut sur le partage (null si échec).
             res.CheminBrut = SauvegarderBrut(contenu);
 
             var mesures = BesanconParser.Parser(contenu);
             res.ValeursLues = mesures.Count;
 
-            // ajout au fichier texte cumulatif (sans doublon de MJD) ; toute erreur d'écriture
-            // est remontée à l'admin, mais on ne touche plus à aucune base SQL
+            // Fusion dans le fichier txt cumulatif (sans doublon MJD, plus de SQL).
             int maxMjd = 0;
             try
             {
@@ -221,9 +206,8 @@ namespace Metrologo.Services.Besancon
                 res.Nouvelles = ajout.Nouvelles;
                 res.Corrections = ajout.Corrections.Count;
 
-                // Corrections rares mais importantes (Besançon révise parfois une valeur passée) :
-                // elles modifient l'historique → potentiellement la moyenne hebdo → la fréquence de
-                // référence injectée plus bas. On les trace explicitement (date, ancienne → nouvelle).
+                // Corrections rares (Besançon révise des valeurs passées) : modifient l'historique
+                // → moyenne hebdo → fréquence de référence. Tracées explicitement.
                 if (ajout.Corrections.Count > 0)
                 {
                     string details = string.Join(" ; ", ajout.Corrections.Select(c =>
@@ -244,14 +228,11 @@ namespace Metrologo.Services.Besancon
                 return res;
             }
 
-            // Marqueur partagé : signale aux autres postes que c'est fait pour aujourd'hui.
-            // En mode backlog (avant l'heure) on ne l'écrit pas, pour laisser la récupération
-            // programmée du jour s'exécuter à l'heure prévue.
+            // Marqueur partagé (pas écrit en mode backlog → récupération programmée du jour préservée).
             if (marquerJour) EcrireMarqueur(maxMjd);
 
-            // Injecte la fréquence de référence du rubidium piloté E10-Y8 à partir de l'écart de la
-            // dernière semaine COMPLÈTE mardi→lundi : 10 MHz × (1 + écart). Recalculé à chaque
-            // récupération quotidienne ; ne change effectivement que le mardi (rotation de semaine).
+            // Injecte la fréquence de référence E10-Y8 : 10 MHz × (1 + écart hebdo).
+            // Recalculé à chaque récupération ; change effectivement seulement le mardi.
             try
             {
                 var ecartHebdo = await BesanconSuiviService.EcartHebdoCompletAsync(DateTime.Today);
@@ -259,15 +240,13 @@ namespace Metrologo.Services.Besancon
                 {
                     bool valeurChangee = InjecterReferenceRubidiumActif(ecartHebdo.Value);
 
-                    // alerte quand la nouvelle valeur hebdo passe sous la limite de 1e-13 ;
-                    // conditionnée au changement effectif (rotation de semaine) pour ne pas
-                    // répéter l'alerte chaque jour tant que la valeur ne bouge pas
+                    // Alerte si la valeur passe sous 1e-13, conditionnée au changement
+                    // effectif pour ne pas répéter l'alerte chaque jour.
                     if (valeurChangee && ecartHebdo.Value < SeuilAlerteHebdo)
                     {
                         string detail = $"L'écart hebdomadaire Besançon ({ecartHebdo.Value:G6}) est passé "
                                       + $"sous la limite de {SeuilAlerteHebdo:G1}.";
-                        // catégorie Rubidium + action en liste blanche : passe au journal d'audit,
-                        // donc les autres postes sont avertis ; pop-up directe ci-dessous pour CE poste
+                        // Journal d'audit (Rubidium) → notifie les autres postes + pop-up directe ici.
                         Journal.Journal.Warn(CategorieLog.Rubidium, "RUBIDIUM_HEBDO_SOUS_SEUIL", detail);
                         NotifierPopupRubidium("⚠ Écart hebdo sous la limite",
                             detail + "\n\nVérifie l'étalonnage / la chaîne de référence du rubidium.",
@@ -281,8 +260,7 @@ namespace Metrologo.Services.Besancon
                     $"Injection de la fréquence de référence E10-Y8 échouée : {exRef.Message}");
             }
 
-            // Notifie l'écran d'accueil (singleton, abonné à StatutChange) pour qu'il relise le
-            // fichier txt et rafraîchisse le voyant + le rapport sans attendre un redémarrage.
+            // Rafraîchit voyant + rapport sur l'écran d'accueil sans redémarrage.
             NotifierStatutChange();
 
             Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_OK",
@@ -296,8 +274,7 @@ namespace Metrologo.Services.Besancon
             return res;
         }
 
-        /// <summary>Lève StatutChange (sur le Dispatcher si UI) pour que l'écran d'accueil relise
-        /// le fichier txt et rafraîchisse voyant + rapport après une récupération.</summary>
+        /// <summary>Lève StatutChange sur le Dispatcher (si UI) après une récupération.</summary>
         private static void NotifierStatutChange()
         {
             var disp = System.Windows.Application.Current?.Dispatcher;
@@ -357,14 +334,12 @@ namespace Metrologo.Services.Besancon
             }
         }
 
-        /// <summary>Applique l'écart hebdo Besançon (signé) comme fréquence de référence du rubidium
-        /// actif : 10 MHz x (1 + écart). Met à jour l'objet en mémoire, rubidium-actif.json et le
-        /// catalogue partagé, puis notifie l'UI. Un rubidium en réglage manuel n'est pas écrasé.
-        /// Retourne true seulement si la valeur a réellement changé (rotation de semaine).</summary>
+        /// <summary>Applique l'écart hebdo Besançon au rubidium actif : 10 MHz × (1 + écart).
+        /// Met à jour en mémoire, rubidium-actif.json et le catalogue partagé. Réglage manuel
+        /// non écrasé. Retourne true si la valeur a réellement changé.</summary>
         private static bool InjecterReferenceRubidiumActif(double ecart)
         {
-            // garde-fou : écart fini et plausible (les écarts Besançon font ~1e-11..1e-14, |v| <= 1e-9).
-            // Les valeurs négatives sont acceptées (référence sous 10 MHz), seul l'invraisemblable est rejeté.
+            // Écarts Besançon : ~1e-11..1e-14. Négatifs acceptés ; |v| > 1e-9 = invraisemblable.
             if (double.IsNaN(ecart) || double.IsInfinity(ecart) || Math.Abs(ecart) > 1e-9)
             {
                 Journal.Journal.Warn(CategorieLog.Systeme, "BESANCON_REF_IGNOREE",
@@ -380,8 +355,7 @@ namespace Metrologo.Services.Besancon
                 return false;
             }
 
-            // automatique, aucun raccord manuel requis ; seul un rubidium en réglage MANUEL
-            // (fréquence saisie explicitement par l'utilisateur) n'est pas écrasé
+            // Réglage manuel (fréquence saisie explicitement) : non écrasé.
             if (actif.EstReglageManuel)
             {
                 Journal.Journal.Info(CategorieLog.Systeme, "BESANCON_REF_MANUEL",
@@ -399,11 +373,11 @@ namespace Metrologo.Services.Besancon
 
             double ancienne = actif.FrequenceMoyenne;
 
-            // 1. Mise à jour en mémoire (objet == EtatApplication.RubidiumActif) + persistance partagée.
+            // 1. Mise à jour en mémoire + persistance partagée.
             actif.FrequenceMoyenne = nouvelleFreq;
             Models.Preferences.SauvegarderRubidium(actif);
 
-            // 2. Répercute dans l'entrée correspondante du catalogue partagé (survit à une re-sélection).
+            // 2. Répercute dans le catalogue partagé (survit à une re-sélection).
             try
             {
                 var catalogue = Models.Preferences.CatalogueRubidiums.ToList();
@@ -421,7 +395,7 @@ namespace Metrologo.Services.Besancon
                     $"Mise à jour du catalogue pour « {actif.Designation} » échouée : {ex.Message}");
             }
 
-            // 3. Notifie l'UI (bandeau bas, écrans) sur le thread Dispatcher.
+            // 3. Notifie l'UI sur le Dispatcher.
             var disp = System.Windows.Application.Current?.Dispatcher;
             if (disp != null)
                 disp.BeginInvoke(new Action(() => EtatApplication.NotifierRubidiumActifChange()));
@@ -430,12 +404,11 @@ namespace Metrologo.Services.Besancon
                 $"Fréquence de référence de « {actif.Designation} » mise à jour depuis l'écart hebdo "
               + $"Besançon ({ecart:G9}) : {ancienne:F9} Hz → {nouvelleFreq:F9} Hz.");
 
-            // 4. Trace d'audit (catégorie Rubidium + action en liste blanche) : les autres postes
-            //    sont avertis et peuvent recharger la config (rubidium-actif.json mis à jour).
+            // 4. Trace d'audit Rubidium → autres postes avertis (rechargent rubidium-actif.json).
             Journal.Journal.Info(CategorieLog.Rubidium, "RUBIDIUM_VALEUR_MAJ",
                 $"« {actif.Designation} » : {ancienne:F6} Hz → {nouvelleFreq:F6} Hz (écart hebdo {ecart:G6}).");
 
-            // 5. Pop-up directe sur CE poste (le watcher d'audit ne notifie que les autres).
+            // 5. Pop-up sur ce poste (le watcher d'audit ne notifie que les autres).
             NotifierPopupRubidium("Rubidium — nouvelle valeur",
                 $"La fréquence de référence du rubidium « {actif.Designation} » a été mise à jour :\n\n"
               + $"{ancienne:F6} Hz  →  {nouvelleFreq:F6} Hz\n"

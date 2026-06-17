@@ -8,12 +8,11 @@ using System.Text;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Profileur léger qui accumule des marqueurs (timestamp + label) en mémoire pendant
-    /// une mesure, puis dumpe un fichier texte à la fin. Aucun I/O pendant la mesure
-    /// (sauf le <c>Stopwatch.GetTimestamp</c> qui coûte ~10 ns) — évite que le journal
-    /// SQL fasse 30+ écritures pendant la boucle GPIB et ralentisse la mesure.
+    /// Profileur léger : accumule des marqueurs (timestamp + label) en mémoire, puis
+    /// dumpe un fichier texte après la mesure. Aucun I/O pendant la boucle GPIB (~10 ns
+    /// par Mark vs 30+ écritures journal SQL).
     ///
-    /// Format du fichier (timing en ms depuis le démarrage de la session) :
+    /// Format (timing en ms depuis la création de la session) :
     /// <code>
     /// Profiling FI=987654 | Type=Frequence | NbMesures=30 | Date=05/05/2026 10:00:00
     /// Total : 30450 ms
@@ -33,7 +32,7 @@ namespace Metrologo.Services
         private readonly Stopwatch _sw = Stopwatch.StartNew();
         private readonly List<(long ts, string label)> _events = new();
 
-        /// <summary>Ajoute un marqueur. Coût : ~10 ns (Stopwatch.ElapsedMilliseconds + List.Add).</summary>
+        /// <summary>Ajoute un marqueur (~10 ns : Stopwatch.ElapsedMilliseconds + List.Add).</summary>
         public void Mark(string label)
         {
             _events.Add((_sw.ElapsedMilliseconds, label));
@@ -42,13 +41,10 @@ namespace Metrologo.Services
         /// <summary>Durée totale (ms) depuis la création du profiler.</summary>
         public long TotalMs => _sw.ElapsedMilliseconds;
 
-        /// <summary>Nombre de marqueurs accumulés — utilisé pour pré-allouer dans le formatter.</summary>
+        /// <summary>Nombre de marqueurs (pré-allocation du StringBuilder dans FormaterTexte).</summary>
         public int Count => _events.Count;
 
-        /// <summary>
-        /// Sérialise le profiling en texte tabulé. Le caller décide où l'écrire (fichier,
-        /// log, etc.). Ne fait aucun I/O lui-même — gardé pur pour testabilité.
-        /// </summary>
+        /// <summary>Sérialise en texte tabulé. Sans I/O — le caller choisit où écrire.</summary>
         public string FormaterTexte(string entete)
         {
             var sb = new StringBuilder(80 * (_events.Count + 5));
@@ -71,11 +67,7 @@ namespace Metrologo.Services
             return sb.ToString();
         }
 
-        /// <summary>
-        /// Écrit le profiling dans un fichier texte. À appeler après la mesure (jamais
-        /// pendant). Crée les répertoires manquants. Erreurs swallowed avec stderr —
-        /// le caller peut logger en plus s'il le souhaite.
-        /// </summary>
+        /// <summary>Écrit le profiling dans un fichier texte après la mesure. Crée les dossiers manquants.</summary>
         public void EcrireFichier(string cheminFichier, string entete)
         {
             string? dossier = Path.GetDirectoryName(cheminFichier);

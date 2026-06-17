@@ -17,8 +17,7 @@ namespace Metrologo.ViewModels
 
         // ---------- Mode Réglage manuel ----------
 
-        // si vrai, l'admin tape directement une fréquence au lieu de choisir un rubidium
-        // du catalogue (pas de rubidium raccordé, tests, fréquence de référence custom)
+        // l'admin saisit une fréquence directement, sans choisir de rubidium dans le catalogue
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(EstModeListe))]
         private bool _modeManuel;
@@ -64,17 +63,14 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(ListeVide));
         }
 
-        // À l'ouverture, coche le bon mode et pré-sélectionne le rubidium en cours
-        // (sinon le 1er du catalogue). Sans ça la fenêtre s'ouvrirait toujours en mode
-        // Catalogue même quand la mesure tourne en Réglage manuel.
+        // Restaure le mode et la sélection courante à l'ouverture (sinon toujours en mode Catalogue).
         private void RestaurerEtatCourant()
         {
             var actif = EtatApplication.RubidiumActif;
             if (actif != null && actif.EstReglageManuel)
             {
                 ModeManuel = true;
-                // valeur exacte, pas tronquée à 2 décimales : on doit retrouver
-                // la fréquence de référence telle qu'elle a été saisie
+                // valeur exacte (pas tronquée) pour retrouver la fréquence telle que saisie
                 FrequenceManuelleTexte = actif.FrequenceMoyenne.ToString(
                     CultureInfo.InvariantCulture);
                 RubidiumSelectionne = Rubidiums.FirstOrDefault();
@@ -93,8 +89,7 @@ namespace Metrologo.ViewModels
             }
         }
 
-        // ouvre la gestion du catalogue (CRUD) puis recharge la liste en gardant
-        // la sélection courante si possible
+        // ouvre le CRUD catalogue, puis recharge la liste en gardant la sélection courante si possible
         [RelayCommand]
         private void GererCatalogue()
         {
@@ -120,8 +115,7 @@ namespace Metrologo.ViewModels
 
             if (ModeManuel)
             {
-                // on parse la fréquence et on fabrique un Rubidium factice avec
-                // EstReglageManuel=true (repris par NomAffichage et le badge de l'accueil)
+                // Rubidium factice avec EstReglageManuel=true (repris par NomAffichage et le badge d'accueil)
                 string txt = (FrequenceManuelleTexte ?? "").Trim().Replace(',', '.');
                 if (!double.TryParse(txt, NumberStyles.Float, CultureInfo.InvariantCulture, out double freq) || freq <= 0)
                 {

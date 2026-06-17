@@ -27,7 +27,7 @@ namespace Metrologo.Services
         {
             if (string.IsNullOrWhiteSpace(s)) return string.Empty;
 
-            // Décomposition Unicode pour retirer les diacritiques (é → e, ç → c, etc.)
+            // Décomposition Unicode pour supprimer les diacritiques (é → e, ç → c…)
             string decompose = s.Normalize(NormalizationForm.FormD);
             var sb = new StringBuilder(decompose.Length);
             foreach (char c in decompose)
@@ -37,7 +37,7 @@ namespace Metrologo.Services
             }
             string sansAccents = sb.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
 
-            // Espaces → tirets, on retire tout ce qui n'est pas [a-z0-9.-]
+            // Espaces → tirets ; hors [a-z0-9.-] supprimé
             var sortie = new StringBuilder(sansAccents.Length);
             foreach (char c in sansAccents)
             {
@@ -47,7 +47,7 @@ namespace Metrologo.Services
                 // tout le reste : ignoré (apostrophes, ponctuation, etc.)
             }
 
-            // Trim des séparateurs en bordure et compaction des doublons (--)
+            // Trim des séparateurs et compaction des doublons (--)
             string r = sortie.ToString().Trim('-', '.');
             while (r.Contains("--")) r = r.Replace("--", "-");
             return r;

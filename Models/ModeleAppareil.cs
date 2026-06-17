@@ -28,10 +28,9 @@ namespace Metrologo.Models
         /// <summary>Couplages proposés (ex: "AC", "DC"). Vide = pas de choix.</summary>
         public List<string> Couplages { get; set; } = new();
 
-        /// <summary>
-        /// Réglages dynamiques de la fenêtre Configuration (impédance, filtre, atténuation...).
-        /// Chaque réglage porte ses options et leurs commandes SCPI, donc on peut étendre la UI sans recompiler.
-        /// </summary>
+        /// <summary>Réglages dynamiques de la fenêtre Configuration (impédance, filtre,
+        /// atténuation...). Chaque réglage porte ses options et commandes SCPI — UI
+        /// extensible sans recompilation.</summary>
         public List<ReglageAppareil> Reglages { get; set; } = new();
 
         // stocké en UTC, ToLocalTime() pour l'affichage
@@ -77,20 +76,17 @@ namespace Metrologo.Models
         public string CommandeGate { get; set; } = string.Empty;
 
         /// <summary>
-        /// Commande de mesure en lot quand l'appareil sait faire N mesures côté hardware et les
-        /// renvoyer d'un coup en CSV. {N} = nombre de mesures (ex 53131A : ":SAMP:COUN {N};:READ:ARR? {N}").
-        /// Si non vide, l'orchestrator passe en bulk au lieu de boucler sur :FETCh?, gros gain sur les
-        /// gates courtes (10 ms x 30 : ~0,5 s contre ~6 s) car plus d'aller-retour GPIB par mesure.
-        /// Vide = fallback :INIT:CONT ON + :FETCh?, puis :READ?. La stratégie vient entièrement du
-        /// catalogue, rien de codé en dur par modèle.
+        /// Commande bulk N mesures côté hardware, renvoyées en CSV. {N} = nombre de mesures
+        /// (ex 53131A : ":SAMP:COUN {N};:READ:ARR? {N}"). Si renseignée, l'orchestrator passe
+        /// en bulk au lieu de boucler sur :FETCh? (10 ms x 30 : ~0,5 s contre ~6 s).
+        /// Vide = fallback :INIT:CONT ON + :FETCh?, puis :READ?. Stratégie entièrement pilotée
+        /// par le catalogue, rien de codé en dur.
         /// </summary>
         public string CommandeMesureMultiple { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Commande SCPI qui renvoie la prochaine mesure (bloquante) au lieu de la dernière déjà lue,
-        /// ce qui évite le Task.Delay entre deux fetches en boucle rapide. Ex 53131A : ":DATA:FRESh:FREQ?"
-        /// selon firmware. Vide = fallback :FETCh? + Task.Delay (gate x 0,5) + détection doublons.
-        /// </summary>
+        /// <summary>Commande bloquante qui renvoie la prochaine mesure (évite le Task.Delay
+        /// entre fetches). Ex 53131A : ":DATA:FRESh:FREQ?" selon firmware.
+        /// Vide = fallback :FETCh? + Task.Delay (gate × 0,5) + détection doublons.</summary>
         public string CommandeFetchFresh { get; set; } = string.Empty;
 
         /// <summary>WriteTerm : 0=none, 1=NL (LF), 2=EOI. Cf. Metrologo.ini.</summary>
@@ -106,39 +102,29 @@ namespace Metrologo.Models
         public string SrqOn { get; set; } = string.Empty;
         public string SrqOff { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Vérif optionnelle de l'arming après envoi du gate (:FREQ:ARM:STOP:SOUR? + :TIM? + :SYST:ERR?).
-        /// Spécifique au HP/Agilent 53131A et compatibles : les autres (53230A, SR620...) répondent
-        /// -113 Undefined header sur ces commandes ARM, qui s'affiche à l'écran de l'instrument.
-        /// Défaut false, à activer seulement si le modèle supporte la syntaxe :FREQ:ARM:* historique.
-        /// </summary>
+        /// <summary>Vérif de l'arming après envoi du gate (:FREQ:ARM:STOP:SOUR? + :TIM? + :SYST:ERR?).
+        /// 53130A/compatibles uniquement : les autres (53230A, SR620...) renvoient -113 Undefined header
+        /// sur ces commandes. Défaut false.</summary>
         public bool VerifArmingActive { get; set; } = false;
 
         /// <summary>
-        /// Active le mode rapide :INIT:CONT ON + boucle :FETCh? dans l'orchestrator (ok pour le 53131A
-        /// et compatibles). A désactiver pour le 53230A et les compteurs modernes : leur :INIT:CONT ON
-        /// fait du "front panel running" et la combinaison avec :FETCh? donne -113 ou +230 Data corrupt,
-        /// ils passent par SAMP:COUN N + READ? via CommandeMesureMultiple. Défaut true (rétrocompat
-        /// 53131A) ; à false l'orchestrator retombe sur :READ? par mesure ou sur le bulk si configuré.
+        /// Active :INIT:CONT ON + boucle :FETCh? (ok pour 53131A). À désactiver sur 53230A et
+        /// compteurs modernes : leur :INIT:CONT ON est un "front panel running", la combinaison
+        /// avec :FETCh? donne -113 ou +230 Data corrupt. Ceux-ci utilisent SAMP:COUN N + READ?
+        /// via CommandeMesureMultiple. Défaut true (rétrocompat 53131A).
         /// </summary>
         public bool ModeRapideActif { get; set; } = true;
 
-        /// <summary>
-        /// Commande qui lance une acquisition gap-free de N mesures sans renvoyer les valeurs
-        /// (placeholder {N}). Sert au mode streaming (bulk lu une mesure à la fois via
-        /// CommandeFetchFresh) pour les gates longues (1 s et plus) où on veut du live à l'écran.
-        /// Ex 53230A : :SENS:FREQ:MODE CONT;:SAMP:COUN {N};:INIT:IMM. Si vide (ou si
-        /// CommandeFetchFresh est vide), pas de streaming : bulk classique en une transaction GPIB.
-        /// </summary>
+        /// <summary>Lance une acquisition gap-free de N mesures sans renvoyer les valeurs ({N} =
+        /// placeholder). Mode streaming pour gates longues (>= 1 s) : bulk lu une mesure à la fois
+        /// via CommandeFetchFresh. Ex 53230A : :SENS:FREQ:MODE CONT;:SAMP:COUN {N};:INIT:IMM.
+        /// Vide ou CommandeFetchFresh vide = bulk classique en une transaction GPIB.</summary>
         public string CommandeBulkInit { get; set; } = string.Empty;
 
         // -------- appareils legacy (pas de *IDN?) --------
 
-        /// <summary>
-        /// true = appareil ancien qui ne répond pas à *IDN? (EIP 545, Racal-Dana 1996, Stanford SR620).
-        /// Indétectable au scan GPIB : l'orchestrator le résout par AdresseFixeParDefaut au lieu d'un
-        /// match IDN. Défaut false (comportement IDN inchangé pour les compteurs modernes).
-        /// </summary>
+        /// <summary>Appareil sans *IDN? (EIP 545, Racal-Dana 1996, Stanford SR620).
+        /// Résolution par AdresseFixeParDefaut au lieu du match IDN. Défaut false.</summary>
         public bool Legacy { get; set; } = false;
 
         /// <summary>
@@ -147,29 +133,22 @@ namespace Metrologo.Models
         /// </summary>
         public int AdresseFixeParDefaut { get; set; } = 0;
 
-        /// <summary>
-        /// Map slot UI (0=10 ms ... 12=100 s) vers une commande de gate discrète quand le template
-        /// CommandeGate ne suffit pas. Ex Stanford slot 6 = "armm5;size1E0", Racal slot 6 = "GA1E0",
-        /// EIP slots 0/3/6 = "R2"/"R1"/"R0". Si non vide, prioritaire sur CommandeGate dans
-        /// CatalogueAdapter. Vide = comportement template inchangé.
-        /// </summary>
+        /// <summary>Map slot UI (0=10 ms … 12=100 s) → commande de gate discrète, quand
+        /// CommandeGate ne suffit pas. Ex Stanford slot 6 = "armm5;size1E0", EIP = "R0/R1/R2".
+        /// Prioritaire sur CommandeGate dans CatalogueAdapter. Vide = template inchangé.</summary>
         public Dictionary<int, string> CommandesGateParSlot { get; set; } = new();
 
-        /// <summary>
-        /// Commandes SCPI de la mesure d'intervalle de temps, propres à CET appareil. Quand
-        /// <see cref="CommandesIntervalle.Actif"/> est false (défaut), l'appareil ne gère pas
-        /// l'intervalle piloté par le logiciel : le panneau intervalle reste masqué et aucune
-        /// commande n'est envoyée. Évite d'envoyer des commandes 53230A à un Stanford.
-        /// </summary>
+        /// <summary>Templates SCPI pour la mesure d'intervalle. Si <see cref="CommandesIntervalle.Actif"/>
+        /// est false (défaut), le panneau est masqué et rien n'est envoyé — évite d'envoyer des
+        /// commandes 53230A à un Stanford.</summary>
         public CommandesIntervalle Intervalle { get; set; } = new();
     }
 
     /// <summary>
-    /// Templates SCPI d'une mesure d'intervalle de temps, stockés au catalogue par appareil.
-    /// Placeholders remplacés par le code à l'envoi :
-    /// {V}=numéro de voie (1/2), {C}=couplage (AC|DC), {Z}=impédance (50|1E6),
-    /// {S}=seuil en volts, {P}=pente (POS|NEG), {T}=hold-off en secondes.
-    /// Un template vide = commande non envoyée. Plusieurs commandes peuvent être chaînées par ";:".
+    /// Templates SCPI pour mesure d'intervalle, stockés par appareil dans le catalogue.
+    /// Placeholders : {V}=voie (1/2), {C}=couplage (AC|DC), {Z}=impédance (50|1E6),
+    /// {S}=seuil (V), {P}=pente (POS|NEG), {T}=hold-off (s).
+    /// Template vide = commande ignorée. Chaînage possible avec ";:".
     /// </summary>
     public class CommandesIntervalle
     {

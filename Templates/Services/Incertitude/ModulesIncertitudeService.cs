@@ -49,10 +49,7 @@ namespace Metrologo.Services.Incertitude
 
         // -------------------------------------------------------------------------
 
-        /// <summary>
-        /// Nom du sous-dossier dédié à un type de mesure. Sans accent ni espace pour rester
-        /// portable cross-OS et lisible côté disque.
-        /// </summary>
+        /// <summary>Sous-dossier du type de mesure (sans accent ni espace, portable et lisible).</summary>
         public static string DossierPourType(TypeMesure type) => type switch
         {
             TypeMesure.Frequence       => "Frequence",
@@ -67,9 +64,8 @@ namespace Metrologo.Services.Incertitude
         };
 
         /// <summary>
-        /// Migration des anciens noms de dossier vers la convention courante. Idempotent :
-        /// si un dossier "TachyContact" existe à la racine Incertitudes, on le renomme en
-        /// "TachymetreContact". Appelé une seule fois au démarrage de l'app.
+        /// Migration des anciens noms de dossier (ex: "TachyContact" → "TachymetreContact").
+        /// Idempotent — appelé une seule fois au démarrage.
         /// </summary>
         public static void MigrerAnciensNomsDossiers()
         {
@@ -109,10 +105,8 @@ namespace Metrologo.Services.Incertitude
         // -------------------------------------------------------------------------
 
         /// <summary>
-        /// Liste les modules disponibles pour un type de mesure donné — un sous-dossier
-        /// par type (ex. <c>%LocalAppData%\Metrologo\Incertitudes\Frequence\</c>). Création
-        /// du sous-dossier si absent. Pour la catégorie Fréquence, dépose un fichier exemple
-        /// au 1er démarrage pour guider l'admin.
+        /// Liste les modules d'un type de mesure (un sous-dossier par type). Crée le dossier
+        /// si absent. Pour Frequence, dépose un CSV exemple au 1er démarrage.
         /// </summary>
         public static List<ModuleIncertitude> Lister(TypeMesure type)
         {
@@ -120,8 +114,7 @@ namespace Metrologo.Services.Incertitude
             if (string.IsNullOrEmpty(dossier)) return new List<ModuleIncertitude>();
             Directory.CreateDirectory(dossier);
 
-            // Fichier exemple uniquement dans Frequence (la 1ère catégorie usuelle), pour
-            // ne pas multiplier les exemples par 7. L'admin peut le modifier ou le supprimer.
+            // Exemple uniquement dans Frequence (1ère catégorie) pour ne pas en déposer dans les 7.
             if (type == TypeMesure.Frequence
                 && Directory.GetFiles(dossier, "*.csv").Length == 0)
             {
@@ -152,9 +145,8 @@ namespace Metrologo.Services.Incertitude
         }
 
         /// <summary>
-        /// Charge un module depuis son fichier CSV. Le NumModule est dérivé du nom de
-        /// fichier (sans extension). Le NomAffichage peut être renseigné via une
-        /// 1ère ligne de commentaire <c># Nom: ...</c> en tête du CSV.
+        /// Charge un module depuis son CSV. NumModule = nom de fichier sans extension.
+        /// NomAffichage optionnel via <c># Nom: ...</c> en tête du fichier.
         /// </summary>
         public static ModuleIncertitude? Charger(string cheminCsv)
         {
@@ -174,7 +166,7 @@ namespace Metrologo.Services.Incertitude
                 if (string.IsNullOrEmpty(l)) continue;
                 if (l.StartsWith("#"))
                 {
-                    // Commentaires métadonnées : "# Nom: xxx" et "# SansTemps: true"
+                    // Métadonnées : "# Nom: xxx" et "# SansTemps: true"
                     var mNom = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*Nom\s*:\s*(.+)$",
                         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (mNom.Success) module.NomAffichage = mNom.Groups[1].Value.Trim();
@@ -193,8 +185,7 @@ namespace Metrologo.Services.Incertitude
                 }
 
                 var champs = l.Split(';');
-                // 6 colonnes = ancien format (rétro-compatibilité). 9 colonnes = nouveau
-                // format avec Condition2 + Domaine 2 (BB2, BH2).
+                // 6 col = ancien format. 9 col = nouveau format (Condition2 + Domaine2 : BB2, BH2).
                 if (champs.Length < 6)
                 {
                     JournalLog.Warn(CategorieLog.Configuration, "INCERT_LIGNE_KO",
@@ -241,10 +232,7 @@ namespace Metrologo.Services.Incertitude
             return module;
         }
 
-        /// <summary>
-        /// Sauvegarde un module en CSV dans le sous-dossier de son type de mesure. Écrase le
-        /// fichier existant. Utilisé par l'UI Admin.
-        /// </summary>
+        /// <summary>Sauvegarde un module en CSV (écrase l'existant). Appelé par l'UI Admin.</summary>
         public static void Sauvegarder(ModuleIncertitude module, TypeMesure type)
         {
             if (string.IsNullOrWhiteSpace(module.NumModule))
@@ -282,11 +270,8 @@ namespace Metrologo.Services.Incertitude
         }
 
         /// <summary>
-        /// Copie le fichier CSV d'un module d'une catégorie vers une autre. Utile quand un
-        /// module physique (ex. compteur de fréquence) est applicable à plusieurs types de
-        /// mesure (Fréquence + FreqAvantInterv + FreqFinale, par ex.).
-        /// Écrase le fichier de la catégorie cible s'il existe — l'appelant doit avoir
-        /// confirmé avec l'utilisateur.
+        /// Copie le CSV d'un module vers une autre catégorie (ex. Frequence → FreqAvantInterv).
+        /// Écrase la cible si elle existe — confirmation préalable attendue de l'appelant.
         /// </summary>
         public static void Copier(string numModule, TypeMesure source, TypeMesure cible)
         {
@@ -307,9 +292,8 @@ namespace Metrologo.Services.Incertitude
         }
 
         /// <summary>
-        /// Renomme un module : renomme son fichier CSV de <paramref name="ancienNum"/> vers
-        /// <paramref name="nouveauNum"/> dans le même sous-dossier. No-op si identique. Lève si
-        /// le nouveau nom existe déjà (l'appelant doit gérer/confirmer).
+        /// Renomme le CSV du module dans le même sous-dossier. No-op si identique.
+        /// Lève si <paramref name="nouveauNum"/> existe déjà — l'appelant doit confirmer.
         /// </summary>
         public static void Renommer(string ancienNum, string nouveauNum, TypeMesure type)
         {
@@ -348,9 +332,7 @@ namespace Metrologo.Services.Incertitude
 
         /// <summary>
         /// Retourne (CoeffA, CoeffB) pour une combinaison module/type/fonction/temps/freq.
-        /// Le module est cherché dans le sous-dossier correspondant au type de mesure.
-        /// Si rien ne matche (module introuvable ou hors plage), retourne (0, 0) — le
-        /// caller décidera quoi faire (ex. logger + utiliser des valeurs par défaut).
+        /// Retourne (0, 0) si module introuvable ou hors plage — le caller décide de la suite.
         /// </summary>
         public static (double CoeffA, double CoeffB) ObtenirCoefficients(
             string numModule, TypeMesure type, string fonction, double tempsSec, double freqHz)
@@ -366,11 +348,9 @@ namespace Metrologo.Services.Incertitude
         }
 
         /// <summary>
-        /// Vérifie si une valeur (fréquence en Hz, ou vitesse en tr/min côté tachy) tombe
-        /// dans une ligne du module. Contrairement à <see cref="ObtenirCoefficients"/> qui
-        /// renvoie (0,0) aussi bien pour « hors plage » que pour « module introuvable »,
-        /// cette méthode distingue les deux cas — utile pour décider d'interrompre une mesure
-        /// dont la valeur dépasse le domaine couvert par le module.
+        /// Vérifie si la valeur (Hz ou tr/min) tombe dans une ligne du module. Contrairement à
+        /// <see cref="ObtenirCoefficients"/> (retourne (0,0) dans les deux cas), distingue
+        /// "hors plage" de "module introuvable" — utile pour interrompre une mesure hors domaine.
         /// </summary>
         public static CouvertureModule VerifierCouverture(
             string numModule, TypeMesure type, string fonction, double tempsSec, double freqHz)
@@ -388,7 +368,7 @@ namespace Metrologo.Services.Incertitude
 
         private static double ParseDouble(string s)
         {
-            // Accepte "." ou "," comme séparateur décimal pour tolérer les saisies humaines.
+            // Accepte "." ou "," comme séparateur décimal.
             string normalise = s.Trim().Replace(',', '.');
             return double.Parse(normalise, NumberStyles.Float, CultureInfo.InvariantCulture);
         }
@@ -403,8 +383,7 @@ namespace Metrologo.Services.Incertitude
 
         private static string ConstruireCsvExemple()
         {
-            // Reproduit les 12 premières lignes du tableau fourni (module MF51901A) pour
-            // que l'admin ait un point de départ concret à remplir/copier.
+            // Basé sur les 12 premières lignes du module MF51901A — point de départ pour l'admin.
             var sb = new StringBuilder();
             sb.AppendLine("# Nom: Compteur de fréquence MF51901A");
             sb.AppendLine("# Format : Fonction;TempsDeMesure (s);BorneBasse (Hz);BorneHaute (Hz);IncertRelative;IncertAbsolue (Hz)");

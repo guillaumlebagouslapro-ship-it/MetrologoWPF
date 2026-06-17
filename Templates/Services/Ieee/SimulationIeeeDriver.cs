@@ -47,7 +47,7 @@ namespace Metrologo.Services.Ieee
 
         public async Task<byte> LireStatusByteAsync(int adresse, CancellationToken ct = default)
         {
-            // court délai d'acquisition puis MAV armé
+            // délai d'acquisition simulé, puis MAV armé
             await Task.Delay(10, ct);
             return 0x10;  // MAV set
         }
@@ -64,7 +64,7 @@ namespace Metrologo.Services.Ieee
 
         public void AborterToutesSessions()
         {
-            // rien à débloquer : le LireAsync simulé est court et déjà annulable via le token
+            // LireAsync simulé est court et déjà annulable via le token — rien à débloquer.
         }
 
         public void DefinirTimeout(int adresse, int timeoutMs)

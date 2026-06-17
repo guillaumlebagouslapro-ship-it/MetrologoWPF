@@ -99,9 +99,7 @@ namespace Metrologo.ViewModels
 
             Preferences.SauvegarderCatalogueRubidiums(snapshot);
 
-            // Si le rubidium actif fait partie du catalogue, on rafraîchit ses infos
-            // (au cas où l'admin aurait renommé ou modifié la fréquence d'une entrée
-            // actuellement sélectionnée).
+            // Rafraîchit le rubidium actif si l'admin a renommé ou modifié sa fréquence.
             var actif = EtatApplication.RubidiumActif;
             if (actif != null && !actif.EstReglageManuel)
             {
@@ -114,9 +112,7 @@ namespace Metrologo.ViewModels
                 }
                 else
                 {
-                    // L'entrée a été supprimée du catalogue : on retombe sur le 1er
-                    // rubidium du catalogue (sinon null), pour éviter d'avoir un
-                    // rubidium actif fantôme qui n'existe plus.
+                    // Entrée supprimée : bascule sur le 1er rubidium pour éviter un actif fantôme.
                     EtatApplication.RubidiumActif = snapshot.FirstOrDefault();
                 }
             }

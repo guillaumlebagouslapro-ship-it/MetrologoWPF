@@ -40,8 +40,7 @@ namespace Metrologo.ViewModels
 
         [ObservableProperty] private string _statut = "Prêt.";
 
-        /// <summary>NumModule du module au moment de sa sélection — pour détecter un renommage
-        /// (et renommer le fichier CSV en conséquence) lors de l'enregistrement.</summary>
+        /// <summary>NumModule à la sélection — référence pour détecter un renommage à l'enregistrement.</summary>
         private string _numModuleOriginal = string.Empty;
 
         partial void OnModuleSelectionneChanged(ModuleIncertitude? value)
@@ -50,9 +49,8 @@ namespace Metrologo.ViewModels
         // ------- Catégorie (sous-dossier) actuellement consultée -------
 
         /// <summary>
-        /// Type de mesure actuellement sélectionné dans le ComboBox « Catégorie ».
-        /// Définit le sous-dossier consulté (ex. <c>Incertitudes\Frequence\</c>) — chaque
-        /// type a ses propres modules. Recharge la liste à chaque changement.
+        /// Type de mesure sélectionné dans le ComboBox « Catégorie ».
+        /// Définit le sous-dossier consulté (ex. <c>Incertitudes\Frequence\</c>). Recharge la liste à chaque changement.
         /// </summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CheminDossier))]
@@ -61,7 +59,7 @@ namespace Metrologo.ViewModels
 
         partial void OnTypeMesureSelectionneChanged(TypeMesure value)
         {
-            // Reset de la sélection — le module actif n'a pas de sens dans une autre catégorie.
+            // Reset : le module actif n'a pas de sens dans une autre catégorie.
             ModuleSelectionne = null;
             Recharger();
         }
@@ -82,10 +80,8 @@ namespace Metrologo.ViewModels
         public string LibelleCategorie => EnTetesMesureHelper.LibelleType(TypeMesureSelectionne);
 
         /// <summary>
-        /// Libellé du bouton d'ajout d'une ligne d'incertitude — dépend du module :
-        /// <c>« Ajouter un temps de mesure »</c> si le module utilise un temps de porte,
-        /// <c>« Ajouter une plage »</c> sinon (tachymètre/stroboscope où le temps n'a pas
-        /// de sens). Permet d'éviter le label trompeur sur les modules sans gate.
+        /// Libellé du bouton d'ajout : « Ajouter un temps de mesure » si le module utilise
+        /// un temps de porte, « Ajouter une plage » sinon (tachy/stroboscope sans gate).
         /// </summary>
         public string LibelleAjouter
         {
@@ -190,9 +186,7 @@ namespace Metrologo.ViewModels
                 }
                 ModuleSelectionne.NumModule = nouveauNum;
 
-                // Renommage éventuel : si le N° module a changé, on renomme le fichier CSV
-                // puis on sauvegarde le contenu. Si un autre module porte déjà ce nom, on
-                // demande confirmation avant d'écraser (sinon on rétablit le nom d'origine).
+                // Renommage : si le N° a changé, rename le CSV. Doublon -> confirmation avant écrasement.
                 if (!string.IsNullOrEmpty(_numModuleOriginal)
                     && !string.Equals(_numModuleOriginal, nouveauNum, StringComparison.OrdinalIgnoreCase))
                 {
@@ -209,15 +203,13 @@ namespace Metrologo.ViewModels
 
                         if (conf != MessageBoxResult.Yes)
                         {
-                            // Refus : on rétablit le nom d'origine, sinon le champ et la liste
-                            // garderaient le doublon alors que rien n'a été enregistré.
+                            // Rétablit le nom d'origine (sinon le doublon persisterait dans l'UI sans être sauvé).
                             ModuleSelectionne.NumModule = _numModuleOriginal;
                             Statut = $"Renommage annulé : « {nouveauNum} » est déjà utilisé.";
                             return;
                         }
 
-                        // Remplacement confirmé : on supprime le module existant (fichier + liste)
-                        // avant de renommer le fichier courant vers ce nom.
+                        // Confirmé : supprime l'existant (fichier + liste) avant de renommer.
                         ModulesIncertitudeService.Supprimer(nouveauNum, TypeMesureSelectionne);
                         Modules.Remove(existant);
                     }
@@ -266,11 +258,7 @@ namespace Metrologo.ViewModels
         // mesure via AjouterTrio (3 plages auto). Évite des lignes orphelines hors du
         // schéma "1 temps de mesure = 3 plages" du format C.E.A.O.
 
-        /// <summary>
-        /// Ajoute en une seule fois 3 lignes correspondant aux 3 plages de fréquence
-        /// typiques d'un temps de mesure donné (basse / moyenne / haute) — accélère la
-        /// saisie quand on suit le format du tableau papier C.E.A.O.
-        /// </summary>
+        /// <summary>Ajoute 3 lignes (plages basse/moyenne/haute) pour un temps de mesure — format tableau C.E.A.O.</summary>
         [RelayCommand(CanExecute = nameof(PeutEnregistrerSupprimer))]
         private void AjouterTrio()
         {
@@ -284,8 +272,7 @@ namespace Metrologo.ViewModels
 
             if (dlg.NombrePlages == 1)
             {
-                // 1 plage unique — typique tachymètre/stroboscope. Bornes par défaut larges,
-                // l'admin les ajustera dans le tableau.
+                // 1 plage unique (tachy/stroboscope). Bornes larges par défaut, à ajuster.
                 ModuleSelectionne.Lignes.Add(new LigneIncertitude
                 {
                     Fonction = fn, TempsDeMesure = t,
@@ -295,8 +282,7 @@ namespace Metrologo.ViewModels
             }
             else
             {
-                // 3 plages typiques C.E.A.O. : basse / moyenne / haute. L'admin ajuste
-                // ensuite les bornes et incertitudes ligne par ligne.
+                // 3 plages C.E.A.O. : basse / moyenne / haute. Bornes et incertitudes à ajuster.
                 ModuleSelectionne.Lignes.Add(new LigneIncertitude
                 {
                     Fonction = fn, TempsDeMesure = t,
@@ -332,12 +318,7 @@ namespace Metrologo.ViewModels
             Statut = $"{aSupprimer.Count} ligne(s) supprimée(s).";
         }
 
-        /// <summary>
-        /// Copie le module sélectionné vers une autre catégorie. Utile quand un module
-        /// physique (ex. compteur de fréquence) est valide pour plusieurs types de mesure
-        /// (Fréquence + FreqAvantInterv + FreqFinale par exemple). L'admin choisit la
-        /// catégorie cible dans un mini-dialog.
-        /// </summary>
+        /// <summary>Copie le module sélectionné vers une autre catégorie (ex. compteur valide pour Fréquence + FreqAvantInterv + FreqFinale).</summary>
         [RelayCommand(CanExecute = nameof(PeutEnregistrerSupprimer))]
         private void CopierVers()
         {
@@ -366,9 +347,7 @@ namespace Metrologo.ViewModels
 
             try
             {
-                // Important : enregistrer d'abord le module courant pour que les éventuelles
-                // modifs en cours soient incluses dans la copie (sinon la copie part du
-                // disque, ignore le travail non sauvé).
+                // Sauvegarde d'abord pour inclure les modifs en cours dans la copie.
                 ModulesIncertitudeService.Sauvegarder(ModuleSelectionne, TypeMesureSelectionne);
                 ModulesIncertitudeService.Copier(ModuleSelectionne.NumModule,
                     TypeMesureSelectionne, cible);
@@ -401,9 +380,6 @@ namespace Metrologo.ViewModels
         private bool PeutEnregistrerSupprimer() => ModuleSelectionne != null;
     }
 
-    /// <summary>
-    /// Option du ComboBox « Catégorie » : couple (TypeMesure, libellé affichable).
-    /// Utilise <c>Type</c> comme clé pour le binding à <c>TypeMesureSelectionne</c>.
-    /// </summary>
+    /// <summary>Option du ComboBox « Catégorie » : (TypeMesure, libellé). <c>Type</c> est la clé de binding.</summary>
     public record OptionTypeMesure(TypeMesure Type, string Libelle);
 }

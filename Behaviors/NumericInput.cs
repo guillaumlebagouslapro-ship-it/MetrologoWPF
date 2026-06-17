@@ -6,18 +6,10 @@ using Metrologo.Services;
 namespace Metrologo.Behaviors
 {
     /// <summary>
-    /// Propriétés attachées qui restreignent un <see cref="TextBox"/> (y compris
-    /// le <c>ui:TextBox</c> de WPF-UI, qui en hérite) à la saisie numérique :
-    /// les frappes et collages produisant autre chose qu'un nombre plausible
-    /// sont rejetés <em>avant</em> d'atteindre le champ.
-    ///
-    /// Usage XAML :
-    ///   xmlns:behaviors="clr-namespace:Metrologo.Behaviors"
-    ///   &lt;ui:TextBox behaviors:NumericInput.IsEnabled="True" /&gt;
-    ///
-    /// La validation de la <em>valeur</em> (bornes, signe métier) reste du
-    /// ressort du ViewModel ; ce behavior ne fait qu'empêcher la saisie de
-    /// caractères non numériques.
+    /// Propriétés attachées restreignant un <see cref="TextBox"/> à la saisie numérique :
+    /// frappes et collages non numériques rejetés avant d'atteindre le champ.
+    /// Usage XAML : <c>behaviors:NumericInput.IsEnabled="True"</c>.
+    /// La validation métier (bornes, signe) reste du ressort du ViewModel.
     /// </summary>
     public static class NumericInput
     {
@@ -63,7 +55,7 @@ namespace Metrologo.Behaviors
             }
         }
 
-        // La barre d'espace ne déclenche pas PreviewTextInput : on la bloque ici.
+        // Espace ne passe pas par PreviewTextInput : bloqué ici.
         private static void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Space)

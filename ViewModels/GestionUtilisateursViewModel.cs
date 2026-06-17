@@ -43,8 +43,7 @@ namespace Metrologo.ViewModels
         {
             try
             {
-                // on relit le JSON à jour : Rafraîchir voit ainsi les comptes créés ou
-                // modifiés depuis un autre poste sans redémarrer l'appli
+                // Relit le JSON : Rafraîchir voit les comptes créés/modifiés depuis un autre poste.
                 Preferences.InvaliderCacheUtilisateurs();
 
                 Utilisateurs.Clear();
@@ -138,8 +137,7 @@ namespace Metrologo.ViewModels
             }
         }
 
-        // change le rôle ; sur une promotion en admin le service génère un mot de passe,
-        // affiché une seule fois pour le communiquer à l'intéressé
+        // Promotion admin : le service génère un mot de passe affiché une seule fois.
         [RelayCommand(CanExecute = nameof(PeutChangerRole))]
         private void ChangerRole()
         {
@@ -179,8 +177,7 @@ namespace Metrologo.ViewModels
             }
         }
 
-        // réinitialise le mot de passe de l'admin sélectionné (SuperAdmin uniquement),
-        // le nouveau n'est affiché qu'une seule fois
+        // Réinitialise le mot de passe (SuperAdmin uniquement) — affiché une seule fois.
         [RelayCommand(CanExecute = nameof(PeutReinitialiserMotDePasse))]
         private void ReinitialiserMotDePasse()
         {
@@ -214,7 +211,7 @@ namespace Metrologo.ViewModels
             }
         }
 
-        // l'admin connecté change son propre mot de passe (Admin comme SuperAdmin)
+        // Changement du mot de passe de l'admin connecté (Admin ou SuperAdmin).
         [RelayCommand]
         private void ChangerMonMotDePasse()
         {

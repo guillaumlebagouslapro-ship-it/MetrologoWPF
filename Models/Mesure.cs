@@ -31,9 +31,8 @@ namespace Metrologo.Models
         public int InputIndex { get; set; }    // Gamme/Entrée
         public int CouplingIndex { get; set; } // Couplage AC/DC
 
-        // --- Intervalle de temps piloté par le logiciel (53230A) ---------------------------
-        // Config envoyée en SCPI quand on décoche l'init manuelle en mode Intervalle, pour
-        // éviter de paramétrer l'appareil dans ses sous-menus. Cf. CONF:TINT du 53230A.
+        // --- Intervalle de temps piloté logiciel (53230A) ---
+        // Paramètres SCPI envoyés quand l'init manuelle est décochée. Cf. CONF:TINT.
 
         /// <summary>false = mesure d'intervalle sur 1 voie (start ET stop sur la voie 1) ;
         /// true = 2 voies (start voie 1, stop voie 2).</summary>
@@ -46,7 +45,7 @@ namespace Metrologo.Models
         public double IntervSeuilStart { get; set; } = 1.0;
         public bool IntervStartMontant { get; set; } = true; // pente départ : true = montant
 
-        // Arrêt : en 1 voie c'est la voie 1 (INP1:LEV2/SLOP2) ; en 2 voies c'est la voie 2 (INP2:LEV1/SLOP1)
+        // Stop : 1 voie = INP1:LEV2/SLOP2 ; 2 voies = INP2:LEV1/SLOP1
         /// <summary>Seuil de déclenchement de l'ARRÊT (V).</summary>
         public double IntervSeuilStop { get; set; } = 1.0;
         public bool IntervStopMontant { get; set; } = false; // pente arrêt : défaut descendant (cas largeur 1 voie)
@@ -60,16 +59,14 @@ namespace Metrologo.Models
         public double IntervHoldoffNs { get; set; }
 
         /// <summary>
-        /// Temps de porte de la mesure. Un seul élément pour Fréquence/Intervalle/Tachy ; pour la
-        /// Stabilité, N gates balayées séquentiellement (une feuille Excel par gate), ce qui remplace
-        /// les anciennes procédures auto. Défaut index 6 (1 s), compat avec le flux Fréquence existant.
+        /// Temps de porte. Mono-élément pour Fréquence/Intervalle/Tachy ; N gates pour
+        /// Stabilité (une feuille Excel par gate, remplace les anciennes procédures auto).
+        /// Défaut index 6 (1 s), compat flux Fréquence.
         /// </summary>
         public List<int> GateIndices { get; set; } = new() { 6 };
 
-        /// <summary>
-        /// Raccourci vers la première gate, pour tous les usages mono-gate (Fréquence, Intervalle,
-        /// zones nommées ZNGate/ZNValGateSecondes). L'écriture remplace toute la liste par un élément.
-        /// </summary>
+        /// <summary>Raccourci vers la première gate (mono-gate : Fréquence, Intervalle,
+        /// ZNGate/ZNValGateSecondes). L'affectation remplace toute la liste.</summary>
         public int GateIndex
         {
             get => GateIndices.Count > 0 ? GateIndices[0] : 6;
@@ -88,18 +85,15 @@ namespace Metrologo.Models
         public int VoieMux { get; set; } = 0;
 
         /// <summary>
-        /// Module d'incertitude sélectionné (nom du CSV sans extension dans
-        /// %LocalAppData%\Metrologo\Incertitudes\). Vide = coefficients hardcoded par défaut.
-        /// Fournit ZNCoeffA/B pour Fréquence/Stab, ou ZNCoeffC/D (côté RPM, formule I29) pour les
-        /// tachymètres, dont les coeffs A/B viennent alors de NumModuleIncertitudeFreq.
+        /// Module d'incertitude (nom CSV sans extension dans Incertitudes\).
+        /// Vide = coefficients par défaut. Donne ZNCoeffA/B pour Fréquence/Stab,
+        /// ZNCoeffC/D (RPM, formule I29) pour les tachys (A/B viennent de NumModuleIncertitudeFreq).
         /// </summary>
         public string NumModuleIncertitude { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Module d'incertitude Fréquence auxiliaire, uniquement pour les tachymètres : donne
-        /// l'incertitude A/B (en Hz) du fréquencemètre sous-jacent, combinée dans le rapport Excel
-        /// avec les C/D (RPM) de NumModuleIncertitude. Ignoré pour les autres types.
-        /// </summary>
+        /// <summary>Module d'incertitude Fréquence auxiliaire (tachymètres uniquement) :
+        /// fournit les coeffs A/B (Hz) du fréquencemètre, combinés avec les C/D (RPM)
+        /// de NumModuleIncertitude dans le rapport Excel. Ignoré pour les autres types.</summary>
         public string NumModuleIncertitudeFreq { get; set; } = string.Empty;
 
         public Mesure()

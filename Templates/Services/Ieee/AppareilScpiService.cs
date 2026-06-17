@@ -13,10 +13,7 @@ namespace Metrologo.Services.Ieee
     /// </summary>
     public static class AppareilScpiService
     {
-        /// <summary>
-        /// Envoie les commandes une par une à l'adresse donnée, avec le TermWrite du modèle.
-        /// Les chaînes vides sont ignorées.
-        /// </summary>
+        /// <summary>Envoie les commandes une par une avec le TermWrite du modèle. Chaînes vides ignorées.</summary>
         public static async Task EnvoyerAsync(
             ModeleAppareil modele,
             int adresse,
@@ -36,17 +33,14 @@ namespace Metrologo.Services.Ieee
 
                 await driver.EcrireAsync(adresse, cmd, termWrite, ct);
 
-                // le 53131A (et d'autres compteurs lents) a besoin de ~50 ms entre les commandes,
-                // sinon certaines sont rejetées en silence et l'instrument peut rester dans un
-                // état bancal qui bloque les sessions VISA suivantes (ex: le *RST de l'orchestrator
-                // au début d'une mesure)
+                // 53131A (et autres compteurs lents) : rejette silencieusement les commandes trop
+                // rapprochées, ce qui laisse l'instrument dans un état bancal bloquant les sessions
+                // VISA suivantes (ex: *RST en début de mesure).
                 await Task.Delay(50, ct);
             }
 
-            // Délai final avant que la session VISA ne soit libérée (le caller utilise
-            // souvent un `using var driver`). Évite que l'instrument soit encore en train
-            // de traiter la dernière commande quand on rouvre une session sur la même
-            // adresse pour la mesure (cause typique de timeout sur le premier :READ?).
+            // Laisse l'instrument terminer la dernière commande avant que la session VISA soit
+            // libérée (caller en `using`). Évite le timeout sur le premier :READ? de la mesure.
             await Task.Delay(200, ct);
         }
     }

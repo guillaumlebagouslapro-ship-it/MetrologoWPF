@@ -12,13 +12,10 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.ViewModels
 {
     /// <summary>
-    /// VM de la fenêtre d'enregistrement d'un nouvel appareil au catalogue local.
-    /// Pré-rempli à partir de l'IDN détecté, l'utilisateur ajuste les commandes SCPI puis sauvegarde.
-    ///
-    /// Les réglages exposés dans la fenêtre Configuration sont saisis via un formulaire fixe
-    /// calqué sur le tableau métier (Impédance, Couplage, Filtre, Trigger, Modes FREQ/TIAB
-    /// sur Voie A et Voie B). Les champs vides sont ignorés : l'option/le réglage correspondant
-    /// n'apparaîtra pas dans Configuration.
+    /// VM d'enregistrement/édition d'un appareil au catalogue. Pré-rempli depuis l'IDN détecté,
+    /// l'utilisateur ajuste les commandes SCPI puis sauvegarde. Formulaire fixe calqué sur le
+    /// tableau métier (Impédance, Couplage, Filtre, Trigger, Modes FREQ/TIAB, Voies A/B/C).
+    /// Un champ vide = option absente dans Configuration.
     /// </summary>
     public partial class EnregistrementAppareilViewModel : ObservableObject
     {
@@ -40,7 +37,7 @@ namespace Metrologo.ViewModels
         private const string NomResolution = "Résolution";
         private const string NomAtomRef    = "Référence";
 
-        // Libellés d'options (persistés aussi dans le JSON)
+        // Libellés d'options (persistés dans le JSON)
         private const string Opt50Ohm   = "50 Ω";
         private const string Opt1MOhm   = "1 MΩ";
         private const string OptAC      = "AC";
@@ -85,11 +82,8 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _srqOn = string.Empty;
         [ObservableProperty] private string _srqOff = string.Empty;
 
-        /// <summary>
-        /// Temps de porte proposés à l'utilisateur sous forme de cases à cocher. Liste fixe de
-        /// 14 valeurs standard (de 10 ms à 1000 s) — l'utilisateur coche celles que son appareil
-        /// supporte. Évite les coquilles d'une saisie libre (ex: "100ms" vs "100 ms").
-        /// </summary>
+        /// <summary>Temps de porte standard (10 ms..1000 s) à cocher selon les capacités de l'appareil.
+        /// Evite les coquilles de saisie libre ("100ms" vs "100 ms").</summary>
         public System.Collections.ObjectModel.ObservableCollection<GateCochable> GatesOptions { get; } = new()
         {
             new("10 ms"), new("20 ms"), new("50 ms"),
@@ -106,12 +100,8 @@ namespace Metrologo.ViewModels
 
         // ---------------- Formulaire Réglages : champs fixes du tableau ----------------
 
-        /// <summary>
-        /// Nombre de voies du fréquencemètre (1, 2 ou 3). Pilote la visibilité des
-        /// sections VOIE A/B/C dans l'UI : seules les voies correspondantes au choix
-        /// sont affichées. Persisté sur le modèle pour rétrocompat avec les modules
-        /// existants (défaut 2).
-        /// </summary>
+        /// <summary>Nombre de voies (1/2/3). Pilote la visibilité des sections VOIE A/B/C.
+        /// Persisté sur le modèle pour rétrocompat (défaut 2).</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(ShowVoieB))]
         [NotifyPropertyChangedFor(nameof(ShowVoieC))]
@@ -126,8 +116,7 @@ namespace Metrologo.ViewModels
         /// <summary>Vrai pour piloter la visibilité de la section VOIE C.</summary>
         public bool ShowVoieC => NbVoies >= 3;
 
-        // Bindings TwoWay pour les RadioButtons (XAML ne sait pas comparer un int dans
-        // un trigger sans converter, donc on expose 3 booléens couplés).
+        // 3 booléens couplés pour les RadioButtons TwoWay (XAML ne compare pas un int sans converter).
         public bool IsUneVoie    { get => NbVoies == 1; set { if (value) NbVoies = 1; } }
         public bool IsDeuxVoies  { get => NbVoies == 2; set { if (value) NbVoies = 2; } }
         public bool IsTroisVoies { get => NbVoies == 3; set { if (value) NbVoies = 3; } }
@@ -156,7 +145,7 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _filtreCOn = string.Empty;
         [ObservableProperty] private string _filtreCOff = string.Empty;
 
-        // Trigger (template avec {0} pour la valeur en volts)
+        // Trigger : template avec {0} pour la valeur en volts.
         [ObservableProperty] private string _triggerA = string.Empty;
         [ObservableProperty] private string _triggerB = string.Empty;
         [ObservableProperty] private string _triggerC = string.Empty;
@@ -167,20 +156,17 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _modeFreqC = string.Empty;
         [ObservableProperty] private string _modeTiab  = string.Empty;
 
-        // Résolution (= mode de calcul interne du compteur). Auto=true côté code : ne s'affiche
-        // pas dans la fenêtre Configuration utilisateur, le code choisit selon TypeMesure.
+        // Résolution (mode de calcul interne). Auto=true : masqué en Configuration, choisi selon TypeMesure.
         [ObservableProperty] private string _resolutionAuto = string.Empty;
         [ObservableProperty] private string _resolutionRecip = string.Empty;
         [ObservableProperty] private string _resolutionCont = string.Empty;
 
-        // Référence (oscillateur interne / EXT 10 MHz pour synchroniser sur rubidium externe).
-        // Auto=false : l'utilisateur peut le changer manuellement (cas métrologie).
+        // Référence (INT / EXT 10 MHz). Auto=false : choix manuel (cas métrologie).
         [ObservableProperty] private string _refInt = string.Empty;
         [ObservableProperty] private string _refExt = string.Empty;
 
-        // ---------------- Intervalle de temps (templates SCPI propres à l'appareil) ----------------
-        // Si "Actif" est décoché, l'appareil ne propose pas l'intervalle piloté logiciel : le panneau
-        // intervalle reste masqué côté Configuration et aucune commande n'est envoyée (ex: Stanford).
+        // Intervalle de temps : templates SCPI propres à l'appareil.
+        // Non actif = panneau masqué en Configuration, aucune commande envoyée (ex: Stanford).
         [ObservableProperty] private bool _intervalleActif;
         [ObservableProperty] private string _intervConf1Voie = string.Empty;
         [ObservableProperty] private string _intervConf2Voies = string.Empty;
@@ -206,14 +192,12 @@ namespace Metrologo.ViewModels
             ModeleIdn = detecte.Modele ?? string.Empty;
             IdnDetecte = detecte.IdnBrut ?? string.Empty;
 
-            // Valeurs SCPI standard — conviennent à la majorité des fréquencemètres modernes.
-            // L'utilisateur peut les ajuster dans la section « Commandes de base » avant sauvegarde.
+            // Valeurs SCPI par défaut, correctes pour la plupart des fréquencemètres modernes.
             ChaineInit = "*RST;*CLS";
             ExeMesure = ":READ?";
             CommandeGate = ":FREQ:APER {0}";
 
-            // Par défaut, tous les temps de porte standards sont cochés — l'utilisateur
-            // décoche ceux qui ne sont pas supportés par son appareil.
+            // Tout coché par défaut : décocher les gates non supportées.
             foreach (var g in GatesOptions) g.EstCoche = true;
         }
 
@@ -227,7 +211,7 @@ namespace Metrologo.ViewModels
             FabricantIdn = modeleExistant.FabricantIdn;
             ModeleIdn = modeleExistant.ModeleIdn;
             IdnDetecte = $"(enregistré le {modeleExistant.DateCreation:dd/MM/yyyy} par {modeleExistant.CreePar})";
-            // Rétrocompat : modèles sauvegardés avant la fonctionnalité NbVoies → 2 par défaut.
+            // Rétrocompat : NbVoies absent des anciens modèles -> 2 par défaut.
             NbVoies = modeleExistant.NbVoies > 0 ? modeleExistant.NbVoies : 2;
 
             ChaineInit = modeleExistant.Parametres.ChaineInit;
@@ -243,7 +227,7 @@ namespace Metrologo.ViewModels
             SrqOn = modeleExistant.Parametres.SrqOn;
             SrqOff = modeleExistant.Parametres.SrqOff;
 
-            // Coche les gates déjà enregistrées pour ce modèle (match insensible aux espaces).
+            // Coche les gates déjà enregistrées (match insensible aux espaces).
             var gatesConnues = new HashSet<string>(
                 modeleExistant.Gates.Select(g => NormaliserLibelleGate(g)),
                 StringComparer.OrdinalIgnoreCase);
@@ -273,8 +257,7 @@ namespace Metrologo.ViewModels
             IntervCmdHoldoff   = iv.Holdoff;
         }
 
-        /// <summary>Coche "gère l'intervalle" et pré-remplit avec le jeu standard 53230A si les
-        /// champs sont vides (bouton « Pré-remplir 53230A »). Sert de point de départ éditable.</summary>
+        /// <summary>Active l'intervalle et pré-remplit avec les templates 53230A (point de départ éditable).</summary>
         [RelayCommand]
         private void RemplirIntervalleDefaut()
         {
@@ -354,22 +337,18 @@ namespace Metrologo.ViewModels
 
         // ---------------- Build / Load Réglages ----------------
 
-        /// <summary>
-        /// Transforme les champs du formulaire en <see cref="ReglageAppareil"/>. Un réglage ne
-        /// sera créé que si au moins une de ses options est renseignée. Idem pour Trigger
-        /// (ignoré si le template est vide).
-        /// </summary>
+        /// <summary>Construit la liste des <see cref="ReglageAppareil"/> depuis le formulaire.
+        /// Un réglage est ignoré si aucune de ses options n'est renseignée (idem pour Trigger).</summary>
         private List<ReglageAppareil> ConstruireReglages()
         {
             var liste = new List<ReglageAppareil>();
 
-            // Voie A : toujours présente (au moins 1 voie sur tout appareil).
+            // Voie A : toujours présente.
             AjouterChoix(liste, NomImpedanceA, (Opt50Ohm, ImpedanceA50), (Opt1MOhm, ImpedanceA1M));
             AjouterChoix(liste, NomCouplageA,  (OptAC, CouplageAAc),     (OptDC, CouplageADc));
             AjouterChoix(liste, NomFiltreA,    (OptON, FiltreAOn),       (OptOFF, FiltreAOff));
             AjouterNumerique(liste, NomTriggerA, TriggerA, unite: "V");
 
-            // Voie B : seulement si l'appareil a au moins 2 voies.
             if (NbVoies >= 2)
             {
                 AjouterChoix(liste, NomImpedanceB, (Opt50Ohm, ImpedanceB50), (Opt1MOhm, ImpedanceB1M));
@@ -378,7 +357,7 @@ namespace Metrologo.ViewModels
                 AjouterNumerique(liste, NomTriggerB, TriggerB, unite: "V");
             }
 
-            // Voie C : seulement si l'appareil a 3 voies (typiquement la voie HF).
+            // Voie C : voie HF, présente seulement sur 3 voies.
             if (NbVoies >= 3)
             {
                 AjouterChoix(liste, NomImpedanceC, (Opt50Ohm, ImpedanceC50), (Opt1MOhm, ImpedanceC1M));
@@ -387,24 +366,20 @@ namespace Metrologo.ViewModels
                 AjouterNumerique(liste, NomTriggerC, TriggerC, unite: "V");
             }
 
-            // Le mode de mesure n'affiche que les options de voies disponibles. AjouterChoix
-            // filtre déjà les options vides, mais on aurait pu hardcoder un OptFreqB="" si
-            // NbVoies < 2. Les champs B/C ne devraient pas être renseignés si voies masquées,
-            // donc AjouterChoix suffit.
+            // Mode de mesure : AjouterChoix filtre les options vides, les champs B/C étant vides si voies masquées.
             AjouterChoix(liste, NomMode, auto: true,
                 (OptFreqA, ModeFreqA),
                 (OptFreqB, NbVoies >= 2 ? ModeFreqB : string.Empty),
                 (OptFreqC, NbVoies >= 3 ? ModeFreqC : string.Empty),
                 (OptTiab,  ModeTiab));
 
-            // Résolution : auto-sélectionnée selon TypeMesure (CONT pour Stab, AUTO sinon).
-            // Auto=true → invisible côté utilisateur.
+            // Résolution auto (CONT pour Stab, AUTO sinon). Auto=true -> invisible en Configuration.
             AjouterChoix(liste, NomResolution, auto: true,
                 (OptResAuto,  ResolutionAuto),
                 (OptResRecip, ResolutionRecip),
                 (OptResCont,  ResolutionCont));
 
-            // Référence : choix utilisateur (Auto=false).
+            // Référence : choix manuel, Auto=false.
             AjouterChoix(liste, NomAtomRef, auto: false,
                 (OptRefInt, RefInt),
                 (OptRefExt, RefExt));
@@ -518,9 +493,8 @@ namespace Metrologo.ViewModels
 
         private ParametresIeee ConstruireParametres()
         {
-            // On part des paramètres existants (en édition) pour préserver les champs non exposés
-            // dans ce formulaire (ModeRapideActif, CommandeBulkInit, VerifArmingActive, Legacy,
-            // AdresseFixeParDefaut, CommandesGateParSlot…) — sinon ils seraient remis aux défauts.
+            // Part des paramètres existants pour préserver les champs non exposés ici
+            // (Legacy, AdresseFixeParDefaut, CommandesGateParSlot, ModeRapideActif…).
             var p = _modeleExistant?.Parametres ?? new ParametresIeee();
 
             p.ChaineInit = ChaineInit ?? string.Empty;

@@ -4,18 +4,13 @@ using System.Security.Cryptography;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Hash de mots de passe en PBKDF2-HMAC-SHA256 avec sel aléatoire par compte.
+    /// Hash PBKDF2-HMAC-SHA256 avec sel aléatoire par compte.
     ///
-    /// Format de sortie auto-décrit :
-    ///   <c>PBKDF2$&lt;iterations&gt;$&lt;sel-base64&gt;$&lt;hash-base64&gt;</c>
-    /// Ce format permet d'augmenter le nombre d'itérations dans le futur sans casser
-    /// les anciens comptes : <see cref="VerifyPassword"/> relit les paramètres
-    /// dans la chaîne stockée. Si on doit migrer vers Argon2/scrypt plus tard, le
-    /// préfixe <c>PBKDF2</c> permet de les coexister.
+    /// Format auto-décrit : <c>PBKDF2$&lt;iterations&gt;$&lt;sel-base64&gt;$&lt;hash-base64&gt;</c>
+    /// Permet d'augmenter les itérations sans casser les anciens comptes, et de coexister
+    /// avec Argon2/scrypt si migration future (préfixe distinct).
     ///
-    /// 100 000 itérations = recommandation OWASP 2023 pour PBKDF2-SHA256, ~50 ms
-    /// par hash sur un poste standard — imperceptible côté UX, prohibitif pour
-    /// une attaque par force brute.
+    /// 100 000 itérations = recommandation OWASP 2023 (~50 ms/hash, prohibitif en brute-force).
     /// </summary>
     public static class PasswordHasher
     {
@@ -38,9 +33,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Vérifie un mot de passe contre un hash stocké. Retourne <c>false</c> sur tout
-        /// format invalide / hash corrompu — ne lance pas d'exception (le caller traite
-        /// ça comme un échec d'authentification standard).
+        /// Vérifie un mot de passe contre un hash stocké. Retourne <c>false</c> sur format
+        /// invalide ou hash corrompu — pas d'exception (traité comme échec d'authentification).
         /// </summary>
         public static bool VerifyPassword(string password, string hashStocke)
         {

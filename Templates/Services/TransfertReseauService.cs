@@ -36,11 +36,9 @@ namespace Metrologo.Services
             Path.Combine(CheminsMetrologo.Configuration, "transferts_en_attente.json");
 
         /// <summary>
-        /// Transfère le dossier local d'une FI (<c>Desktop\Metrologo\&lt;FI&gt;\</c>) vers
-        /// son équivalent réseau. Si le transfert échoue ou que M:\ n'est pas configuré,
-        /// la FI est ajoutée à la liste en attente.
-        ///
-        /// Retourne <c>true</c> si le transfert s'est terminé avec succès, <c>false</c> sinon.
+        /// Transfère le dossier FI local (<c>Desktop\Metrologo\&lt;FI&gt;\</c>) vers le réseau.
+        /// En cas d'échec ou de chemin non configuré, la FI est ajoutée à la liste en attente.
+        /// Retourne <c>true</c> si succès.
         /// </summary>
         public static async Task<bool> TransfererDossierFIAsync(string numFI)
         {
@@ -91,10 +89,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Au démarrage de l'application, tente de rejouer tous les transferts en attente
-        /// (FI qui n'ont pas pu être copiées sur le réseau lors des sessions précédentes).
-        /// Best-effort : si le réseau est toujours indisponible, les FI restent dans la liste
-        /// pour la prochaine tentative.
+        /// Au démarrage, rejoue tous les transferts en attente. Best-effort : si le réseau est
+        /// toujours indisponible, les FI restent en liste pour la prochaine session.
         /// </summary>
         public static async Task TenterTransfertsEnAttenteAsync()
         {
@@ -206,11 +202,9 @@ namespace Metrologo.Services
                 string nomFichier = Path.GetFileName(fichier);
                 string fichierCible = Path.Combine(cible, nomFichier);
 
-                // Cas particulier du journal utilisateur de la FI (Journal_<FI>.txt) : il doit
-                // être FUSIONNÉ, pas écrasé. Plusieurs opérateurs se relaient sur une même FI
-                // (reprise, absence, passage des appareils entre collègues), souvent depuis des
-                // postes différents. Chaque poste n'a localement que SES propres blocs de session ;
-                // un overwrite ferait perdre côté réseau les sessions des autres opérateurs.
+                // Journal_<FI>.txt : FUSION obligatoire (pas d'écrasement). Plusieurs opérateurs
+                // se relaient depuis des postes différents ; chaque poste n'a que ses propres blocs.
+                // Un overwrite ferait perdre les sessions des autres opérateurs côté réseau.
                 if (nomFichier.StartsWith("Journal_", StringComparison.OrdinalIgnoreCase)
                     && nomFichier.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
                 {
@@ -218,12 +212,11 @@ namespace Metrologo.Services
                 }
                 else
                 {
-                    // overwrite=true : on synchronise en écrasant côté réseau (le local fait foi).
+                    // Le local fait foi : on écrase le réseau.
                     File.Copy(fichier, fichierCible, overwrite: true);
                 }
             }
-            // Récursion sur les sous-dossiers (si jamais un jour il y en a — ex: dossier
-            // d'archives à l'intérieur d'une FI). Aujourd'hui le dossier FI est plat.
+            // Récursion sur les sous-dossiers (dossier FI plat aujourd'hui, prévu pour l'avenir).
             foreach (var sousDossier in Directory.EnumerateDirectories(source))
             {
                 string nomSousDossier = Path.GetFileName(sousDossier);
@@ -232,19 +225,14 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Fusionne le journal FI local dans le journal réseau au lieu de l'écraser, afin de
-        /// préserver les blocs de session des autres opérateurs qui se sont relayés sur la même
-        /// FI depuis d'autres postes. Si aucun journal réseau n'existe encore, simple copie.
-        ///
-        /// Chaque journal est une suite de blocs de session ; un bloc est identifié de manière
-        /// unique par (utilisateur, poste, date de début). On part des blocs réseau existants,
-        /// puis les blocs locaux remplacent leur homologue de même signature (le local est plus
-        /// à jour pour ses propres sessions) ou s'ajoutent. Le résultat est trié par date de
-        /// début de session et réécrit de façon atomique (fichier temporaire + Move).
+        /// Fusionne le journal FI local dans le journal réseau (simple copie si pas encore de réseau).
+        /// Clé de bloc : (utilisateur, poste, date de début). Les blocs locaux remplacent leur
+        /// homologue réseau (le local est plus à jour pour ses sessions) ou s'ajoutent. Résultat
+        /// trié par date de début et réécrit atomiquement (temp + Move).
         /// </summary>
         private static void FusionnerOuCopierJournal(string fichierSource, string fichierCible)
         {
-            // Pas de journal réseau existant → rien à fusionner, simple copie.
+            // Pas encore de journal réseau → simple copie.
             if (!File.Exists(fichierCible))
             {
                 File.Copy(fichierSource, fichierCible, overwrite: true);
@@ -257,8 +245,7 @@ namespace Metrologo.Services
             var blocsReseau = DecouperBlocsSession(contenuReseau);
             var blocsLocaux = DecouperBlocsSession(contenuLocal);
 
-            // Garde-fou : si le découpage ne reconnaît aucun bloc (format inattendu), on ne
-            // prend AUCUN risque de perdre l'historique réseau — on s'abstient d'écraser.
+            // Format inattendu (aucun bloc reconnu) → on n'écrase pas pour ne pas perdre l'historique réseau.
             if (blocsReseau.Count == 0 && blocsLocaux.Count == 0)
             {
                 Journal.Journal.Warn(CategorieLog.Systeme, "JOURNAL_FUSION_FORMAT",
@@ -282,7 +269,7 @@ namespace Metrologo.Services
             foreach (var b in blocsReseau) Upsert(b, remplacer: false);
             foreach (var b in blocsLocaux) Upsert(b, remplacer: true);
 
-            // Tri par date de début (ascendant) ; blocs sans date analysable rejetés en fin.
+            // Tri par date de début ; blocs sans date parseable repoussés en fin.
             var blocsTries = fusion.Values
                 .OrderBy(b => b.Debut ?? DateTime.MaxValue)
                 .ToList();
@@ -295,25 +282,22 @@ namespace Metrologo.Services
             }
             sb.Append("\r\n");
 
-            // Écriture atomique : on écrit dans un fichier temporaire puis on le déplace par-dessus
-            // la cible. Évite tout journal réseau tronqué/corrompu en cas d'interruption pendant
-            // l'écriture (le pire scénario serait de perdre l'historique consolidé).
+            // Écriture atomique (temp + Move) : évite un journal réseau tronqué en cas d'interruption.
             string temp = fichierCible + ".tmp";
             File.WriteAllText(temp, sb.ToString(), Encoding.UTF8);
             File.Move(temp, fichierCible, overwrite: true);
         }
 
         /// <summary>
-        /// Découpe le contenu d'un journal FI en blocs de session. Un bloc commence à une ligne
-        /// de séparateur « ===… » immédiatement suivie de « Journal utilisateur — FI ».
+        /// Découpe un journal FI en blocs de session. Chaque bloc commence par « ===… »
+        /// suivi de « Journal utilisateur — FI ».
         /// </summary>
         private static List<BlocSession> DecouperBlocsSession(string contenu)
         {
             var blocs = new List<BlocSession>();
             if (string.IsNullOrWhiteSpace(contenu)) return blocs;
 
-            // Lookahead : on découpe juste AVANT chaque en-tête, en gardant le séparateur avec
-            // le bloc qui suit.
+            // Lookahead : découpe juste avant chaque en-tête, le séparateur reste avec son bloc.
             var separateur = new Regex(@"(?=^=+\r?\nJournal utilisateur — FI )",
                 RegexOptions.Multiline);
             foreach (var morceau in separateur.Split(contenu))

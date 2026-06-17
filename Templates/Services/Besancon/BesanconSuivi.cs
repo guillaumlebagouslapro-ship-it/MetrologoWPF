@@ -35,15 +35,11 @@ namespace Metrologo.Services.Besancon
     }
 
     /// <summary>
-    /// Évalue l'état du suivi Besançon (voyant vert/orange/rouge) et produit le rapport texte de
-    /// l'écran principal, à partir du fichier txt cumulatif (plus aucune lecture SQL).
-    /// Voyant selon l'âge de la dernière valeur journalière : 2 j max = vert, 3 à 6 j = orange,
-    /// 7 j et plus = rouge.
-    /// Règle métier de la moyenne hebdo de référence : moyenne des 7 valeurs d'une semaine
-    /// mardi->lundi entièrement écoulée. On retient la dernière semaine complète disponible ; si la
-    /// semaine en cours n'est pas calculable on garde la dernière valide. Tant qu'aucune semaine
-    /// complète n'existe (première fois, données éparses), une valeur provisoire est calculée avec
-    /// les valeurs disponibles. Voir CalculerReferenceHebdo.
+    /// Évalue l'état du suivi Besançon (voyant vert/orange/rouge) et produit le rapport texte,
+    /// à partir du fichier txt cumulatif (plus de SQL).
+    /// Voyant : age <= 2 j = vert, 3-6 j = orange, >= 7 j = rouge.
+    /// Référence hebdo : moyenne de la dernière semaine mardi->lundi complète (7 valeurs) ;
+    /// valeur provisoire avec les dernières disponibles si aucune semaine complète.
     /// </summary>
     public static class BesanconSuiviService
     {
@@ -72,7 +68,7 @@ namespace Metrologo.Services.Besancon
             {
                 int todayMjd = JourJulien.VersMjd(aujourdhui);
 
-                // Source unique : le fichier texte cumulatif (plus aucune lecture SQL).
+                // Source unique : le fichier txt cumulatif (plus de SQL).
                 var valeurs = await BesanconTxtStore.LireAsync();
 
                 if (valeurs.Count == 0)
@@ -92,8 +88,7 @@ namespace Metrologo.Services.Besancon
 
                 var reference = CalculerReferenceHebdo(valeurs, aujourdhui);
 
-                // Voyant basé uniquement sur la fraîcheur de la dernière valeur journalière.
-                // (La moyenne de référence est détaillée dans le corps du rapport, pas répétée ici.)
+                // Voyant sur la fraîcheur uniquement ; la moyenne est dans le rapport.
                 if (age > SeuilOrangeMaxJours)
                 {
                     st.Niveau = NiveauSuivi.Rouge;
@@ -136,19 +131,18 @@ namespace Metrologo.Services.Besancon
             return moys.Count > 0 ? moys[0].moyenne : (double?)null;
         }
 
-        /// <summary>Formate un écart Besançon (~1e-11 à 1e-13) en notation scientifique.
-        /// SaisieHelper.FormaterFrequence, calibré pour ~10 MHz, arrondirait ces valeurs à 0.</summary>
+        /// <summary>Formate un écart (~1e-11..1e-13) en notation scientifique.
+        /// FormaterFrequence arrondirait ces valeurs à 0.</summary>
         private static string FormaterValeur(double v) => v.ToString("0.000000E+00", CultureInfo.InvariantCulture);
 
-        /// <summary>Construit le rapport compact (référence hebdo, fraîcheur, dernières moyennes
-        /// hebdo complètes), affiché sur l'écran d'accueil et archivé sur le partage. Volontairement
-        /// court pour tenir sans scroll ; le détail journalier reste dans valeurs_besancon.txt.</summary>
+        /// <summary>Rapport compact (référence hebdo, fraîcheur, dernières moyennes) affiché
+        /// sur l'accueil et archivé. Volontairement court ; détail journalier dans valeurs_besancon.txt.</summary>
         private static async Task<string> ConstruireRapportAsync(
             DateTime aujourdhui, SortedDictionary<int, double> valeurs, ReferenceHebdo? reference)
         {
             var sb = new StringBuilder();
 
-            // ligne principale : la moyenne de référence qui pilote la correction
+            // Moyenne de référence (ligne principale du rapport).
             if (reference == null)
                 sb.AppendLine("Référence hebdo : indisponible (aucune valeur)");
             else if (reference.Provisoire)
@@ -157,7 +151,7 @@ namespace Metrologo.Services.Besancon
                 sb.AppendLine($"Référence hebdo : {FormaterValeur(reference.Moyenne)}   "
                             + $"(semaine {JourJulien.DepuisMjd(reference.MardiMjd - 7):dd/MM} → {JourJulien.DepuisMjd(reference.MardiMjd - 1):dd/MM})");
 
-            // Fraîcheur de la dernière valeur journalière.
+            // Fraîcheur de la dernière valeur.
             if (valeurs.Count > 0)
             {
                 int maxMjd = valeurs.Keys.Max();
@@ -166,7 +160,7 @@ namespace Metrologo.Services.Besancon
             }
             sb.AppendLine();
 
-            // dernières moyennes hebdo complètes (tendance) ; la 1re ligne est la référence
+            // Dernières moyennes hebdo (tendance).
             var moys = CalculerMoyennesHebdo(valeurs, aujourdhui, NbSemainesListe);
             sb.AppendLine("Moyennes hebdomadaires (mardi→lundi)");
             if (moys.Count == 0)
@@ -177,7 +171,7 @@ namespace Metrologo.Services.Besancon
 
             string rapport = sb.ToString();
 
-            // Persistance best-effort sur le partage (archive + lecture par les autres postes).
+            // Persistance best-effort sur le partage.
             try
             {
                 Directory.CreateDirectory(CheminsMetrologo.Besancon);
@@ -202,12 +196,8 @@ namespace Metrologo.Services.Besancon
             public bool Provisoire;
         }
 
-        /// <summary>
-        /// Moyenne hebdo de référence : la plus récente semaine mardi->lundi écoulée avec exactement
-        /// 7 valeurs (si la semaine en cours est incomplète, on retombe sur la dernière qui l'était).
-        /// À défaut, valeur provisoire = moyenne des 7 valeurs les plus récentes, remplacée dès
-        /// qu'une semaine complète existe. Null uniquement s'il n'y a aucune valeur.
-        /// </summary>
+        /// <summary>Dernière semaine mardi->lundi avec 7 valeurs exactes. Valeur provisoire
+        /// (7 plus récentes) si aucune semaine complète. Null si aucune valeur.</summary>
         private static ReferenceHebdo? CalculerReferenceHebdo(
             SortedDictionary<int, double> valeurs, DateTime aujourdhui)
         {
@@ -219,7 +209,7 @@ namespace Metrologo.Services.Besancon
             {
                 int mardiMjd = JourJulien.VersMjd(mardi);
                 int debut = mardiMjd - 7, fin = mardiMjd - 1;
-                if (fin < todayMjd)   // semaine entièrement écoulée (mardi→lundi)
+                if (fin < todayMjd)   // semaine entièrement écoulée
                 {
                     var vals = valeurs.Where(kv => kv.Key >= debut && kv.Key <= fin)
                                       .Select(kv => kv.Value).ToList();
@@ -229,7 +219,7 @@ namespace Metrologo.Services.Besancon
                 mardi = mardi.AddDays(-7);
             }
 
-            // Aucune semaine complète → initialisation provisoire avec les 7 valeurs les plus récentes.
+            // Aucune semaine complète → provisoire avec les 7 valeurs les plus récentes.
             var recentes = valeurs.OrderByDescending(kv => kv.Key).Take(7).Select(kv => kv.Value).ToList();
             return new ReferenceHebdo
             {
@@ -239,8 +229,8 @@ namespace Metrologo.Services.Besancon
             };
         }
 
-        /// <summary>Les nbVoulu dernières moyennes hebdo complètes (mardi->lundi, 7 valeurs
-        /// exactement), de la plus récente à la plus ancienne. Peut être vide s'il y a des trous.</summary>
+        /// <summary>Les nbVoulu dernières moyennes hebdo complètes (mardi->lundi, 7 valeurs),
+        /// de la plus récente à la plus ancienne. Vide s'il y a des trous.</summary>
         private static List<(int mardiMjd, double moyenne)> CalculerMoyennesHebdo(
             SortedDictionary<int, double> valeurs, DateTime aujourdhui, int nbVoulu)
         {

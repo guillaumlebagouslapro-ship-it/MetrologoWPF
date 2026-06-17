@@ -29,9 +29,8 @@ namespace Metrologo.Services.Ieee
         public bool AErreur => !string.IsNullOrEmpty(Erreur);
 
         /// <summary>
-        /// Réponse *IDN? incohérente = possible conflit d'adresse (deux appareils sur la même
-        /// adresse, réponses mélangées sur le bus). Best-effort : deux appareils identiques
-        /// peuvent passer inaperçus.
+        /// IDN incohérent = possible conflit d'adresse (réponses mélangées sur le bus).
+        /// Best-effort : deux appareils identiques peuvent passer inaperçus.
         /// </summary>
         public bool ConflitAdressePossible => Repond && ScannerGpib.EstIdnSuspect(ReponseIdn);
 
@@ -85,9 +84,8 @@ namespace Metrologo.Services.Ieee
             new(@"^GPIB(\d+)::(\d+)(?:::\d+)?::INSTR$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         /// <summary>
-        /// Scanne le bus via ResourceManager.Find() (rapide, VISA sait déjà qui répond).
-        /// Si Find() ne donne rien, fallback en balayage séquentiel 1..30 sur le board indiqué,
-        /// utile pour un appareil branché mais pas encore vu par VISA.
+        /// Scanne le bus via ResourceManager.Find() (rapide). Si Find() ne donne rien, fallback
+        /// en balayage séquentiel 1..30 sur le board indiqué (appareil pas encore vu par VISA).
         /// </summary>
         public static async Task<List<ResultatScanGpib>> ScannerAsync(
             int gpibBoard = 0,
@@ -164,7 +162,7 @@ namespace Metrologo.Services.Ieee
                 using var session = (IMessageBasedSession)rm.Open(resource);
                 session.TimeoutMilliseconds = timeoutMs;
 
-                // FormattedIO gère les terminateurs proprement
+                // FormattedIO gère les terminateurs
                 session.FormattedIO.WriteLine("*IDN?");
                 string reponse = session.FormattedIO.ReadLine()?.Trim() ?? string.Empty;
 
@@ -206,10 +204,8 @@ namespace Metrologo.Services.Ieee
             }
         }
 
-        /// <summary>
-        /// Liste brute des ressources VISA connues de NI (toutes interfaces). Permet de vérifier
-        /// que l'adaptateur voit les instruments, indépendamment de notre scan.
-        /// </summary>
+        /// <summary>Liste brute des ressources VISA (toutes interfaces). Utile pour vérifier
+        /// que l'adaptateur voit les instruments, indépendamment du scan.</summary>
         public static Task<List<string>> ListerRessourcesAsync(CancellationToken ct = default)
         {
             return Task.Run(() =>
@@ -227,10 +223,8 @@ namespace Metrologo.Services.Ieee
             }, ct);
         }
 
-        /// <summary>
-        /// Parse une chaîne IDN standard IEEE-488.2 : Fabricant,Modèle,Série,Firmware.
-        /// Ex "HEWLETT-PACKARD,53131A,0,4613" ou "STANFORD,SR620,s/n 12345,ver 1.20".
-        /// </summary>
+        /// <summary>Parse une chaîne IDN IEEE-488.2 : Fabricant,Modèle,Série,Firmware.
+        /// Ex : "HEWLETT-PACKARD,53131A,0,4613" ou "STANFORD,SR620,s/n 12345,ver 1.20".</summary>
         public static (string? fabricant, string? modele, string? serie, string? firmware) ParserIdn(string idn)
         {
             if (string.IsNullOrWhiteSpace(idn)) return (null, null, null, null);
@@ -245,9 +239,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Détecte un *IDN? incohérent, symptôme typique de deux appareils sur la même adresse
-        /// (les réponses se superposent sur le bus). Un IDN normal = 4 champs et que de
-        /// l'imprimable ; plus de 4 champs ou des caractères de contrôle = suspect.
+        /// IDN suspect = plus de 4 champs ou caractères de contrôle (réponses superposées
+        /// de deux appareils sur la même adresse). IDN normal : 4 champs, tout imprimable.
         /// </summary>
         public static bool EstIdnSuspect(string? idn)
         {

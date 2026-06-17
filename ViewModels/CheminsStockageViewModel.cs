@@ -28,16 +28,14 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _cheminMesuresLocal = string.Empty;
 
         /// <summary>
-        /// URL vers le fichier maître paths.config.json sur le serveur. Quand non vide,
-        /// l'app lit ce fichier au démarrage et écrase les valeurs locales — permet la
-        /// propagation auto des changements de chemins à tous les postes.
+        /// URL du fichier maître paths.config.json sur le serveur. Quand renseignée,
+        /// l'app le lit au démarrage et écrase les valeurs locales — propagation auto à tous les postes.
         /// </summary>
         [ObservableProperty] private string _masterPathsUrl = string.Empty;
 
         /// <summary>
-        /// Coché par défaut quand un MasterPathsUrl est renseigné. Quand l'admin enregistre,
-        /// les nouvelles valeurs sont propagées dans le fichier maître sur le serveur, donc
-        /// tous les autres postes prendront ces valeurs à leur prochain démarrage.
+        /// Coché si un MasterPathsUrl est configuré. À l'enregistrement, propage les valeurs
+        /// dans le fichier maître : tous les postes prendront ces chemins au prochain démarrage.
         /// </summary>
         [ObservableProperty] private bool _appliquerATousLesPostes;
 
@@ -51,11 +49,10 @@ namespace Metrologo.ViewModels
 
         public CheminsStockageViewModel()
         {
-            // Recharge depuis paths.config.json pour récupérer les overrides actuels.
+            // Recharge paths.config.json pour avoir les overrides actuels.
             CheminsMetrologo.ChargerConfigChemins();
 
-            // Pré-remplit les TextBox avec les valeurs actuelles SI surchargées,
-            // sinon laisse vide (= utilise le défaut local).
+            // Pré-remplit les TextBox avec les valeurs surchargées, sinon vide (= défaut local).
             _cheminIncertitudes = CheminsMetrologo.EstSurcharge(nameof(CheminsMetrologo.Incertitudes))
                 ? CheminsMetrologo.Incertitudes : string.Empty;
             _cheminPresets = CheminsMetrologo.EstSurcharge(nameof(CheminsMetrologo.Presets))
@@ -66,14 +63,12 @@ namespace Metrologo.ViewModels
                 ? CheminsMetrologo.ArchivesLogs : string.Empty;
             _cheminMesuresLocal = CheminsMetrologo.MesuresLocal;
 
-            // URL du fichier maître : si déjà configurée, on l'affiche, sinon on pré-remplit
-            // avec le chemin réseau standard pour faciliter le déploiement initial.
+            // Si pas encore configurée, pré-remplit avec le chemin réseau standard pour le déploiement initial.
             _masterPathsUrl = string.IsNullOrWhiteSpace(CheminsMetrologo.MasterPathsUrl)
                 ? CheminsMetrologo.MasterPathsUrlDefaut
                 : CheminsMetrologo.MasterPathsUrl;
 
-            // Pré-coche "Appliquer à tous les postes" quand un master est configuré —
-            // l'admin qui ouvre cette fenêtre veut typiquement modifier pour tous.
+            // Pré-coche "Appliquer à tous les postes" si un master est configuré.
             _appliquerATousLesPostes = !string.IsNullOrWhiteSpace(CheminsMetrologo.MasterPathsUrl);
         }
 
@@ -182,9 +177,6 @@ namespace Metrologo.ViewModels
 
         private static string? ParcourirDossier(string cheminInitial)
         {
-            // Ouvre un browser de dossier. Utilise le dialog standard via OpenFileDialog en
-            // sélection multi-fichier pour atteindre le dossier (workaround WPF natif —
-            // pas de FolderBrowserDialog standard).
             var dlg = new Microsoft.Win32.OpenFolderDialog
             {
                 Title = "Choisir un dossier",

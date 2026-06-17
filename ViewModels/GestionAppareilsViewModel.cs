@@ -24,13 +24,10 @@ namespace Metrologo.ViewModels
         private readonly string _utilisateurActuel;
 
         /// <summary>
-        /// Modèles affichés et éditables ici : tout le catalogue SAUF les appareils legacy
-        /// (EIP / Racal / Stanford). L'éditeur générique de cette fenêtre ne sait pas représenter
-        /// les champs propres aux legacy (Legacy, AdresseFixeParDefaut, CommandesGateParSlot,
-        /// réglages non canoniques comme « Bande de fréquence ») : les y ouvrir puis sauvegarder
-        /// remettait ces champs à vide et écrivait la version cassée dans appareils.json, ce qui
-        /// rendait toutes leurs commandes inopérantes. Les legacy se gèrent via la fenêtre dédiée
-        /// « Adresses GPIB legacy » (GestionAdressesLegacyViewModel).
+        /// Catalogue complet hors appareils legacy (EIP / Racal / Stanford). L'éditeur générique
+        /// ne couvre pas leurs champs spécifiques (AdresseFixeParDefaut, CommandesGateParSlot…) :
+        /// les ouvrir ici puis sauvegarder remettrait ces champs à vide et casserait leurs commandes.
+        /// Les legacy se gèrent via « Adresses GPIB legacy » (GestionAdressesLegacyViewModel).
         /// </summary>
         public ObservableCollection<ModeleAppareil> Modeles { get; } = new();
 
@@ -39,24 +36,19 @@ namespace Metrologo.ViewModels
         public bool CatalogueVide => Modeles.Count == 0;
         public int NbModeles => Modeles.Count;
 
-        /// <summary>
-        /// Vrai si l'utilisateur courant est administrateur. Contrôle la visibilité du
-        /// bouton « Supprimer » dans l'UI : la modification reste libre pour tous, mais
-        /// seul l'admin peut purger un modèle du catalogue (action irréversible).
-        /// </summary>
+        /// <summary>Vrai si l'utilisateur est admin. Contrôle la visibilité de « Supprimer » :
+        /// la modification est libre, mais seul l'admin peut purger un modèle (irréversible).</summary>
         public bool EstAdmin { get; }
 
         public GestionAppareilsViewModel(string utilisateur, bool estAdmin = false)
         {
             _utilisateurActuel = utilisateur;
             EstAdmin = estAdmin;
-            // Catalogue stocké en fichier JSON sur le partage réseau — visible par tous
-            // les postes. On affiche le chemin effectif (résolu via paths.config.json).
+            // Chemin effectif résolu via paths.config.json (JSON réseau, visible par tous les postes).
             CheminCatalogue = CheminsMetrologo.FichierCatalogueAppareils;
 
             RafraichirListe();
-            // Le catalogue partagé peut changer (ajout / suppression / import) pendant que la
-            // fenêtre est ouverte : on resynchronise la liste filtrée à chaque modification.
+            // Resynchronise la liste si le catalogue change pendant que la fenêtre est ouverte.
             CatalogueAppareilsService.Instance.Modeles.CollectionChanged += (_, _) => RafraichirListe();
         }
 
@@ -88,9 +80,7 @@ namespace Metrologo.ViewModels
         {
             if (modele == null) return;
 
-            // Garde-fou serveur : même si le bouton est censé être caché aux non-admins,
-            // on refuse à nouveau ici (par exemple si quelqu'un déclenche la commande
-            // par un autre chemin).
+            // Garde-fou : refus côté serveur même si le bouton est caché côté UI.
             if (!EstAdmin)
             {
                 MessageBox.Show("Seul un administrateur peut supprimer un modèle du catalogue.",
@@ -116,10 +106,8 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Importe un (ou plusieurs) modèles d'appareil depuis un fichier .json — format
-        /// hérité du catalogue local (cf. <c>AppareilsCatalogue.json</c>). Permet à l'admin
-        /// d'ajouter en un clic un appareil pré-configuré (53131A, 53230A, SR620, etc.) sans
-        /// ressaisir manuellement chaque commande SCPI dans la UI.
+        /// Importe un ou plusieurs modèles depuis un .json (format catalogue, cf. AppareilsCatalogue.json).
+        /// Permet d'ajouter un appareil pré-configuré (53131A, 53230A, SR620…) sans ressaisie SCPI.
         /// </summary>
         [RelayCommand]
         private async Task ImporterJsonAsync()
@@ -159,8 +147,7 @@ namespace Metrologo.ViewModels
         [RelayCommand]
         private void OuvrirDossierCatalogue()
         {
-            // Ouvre dans l'Explorateur le dossier qui contient appareils.json — pratique
-            // pour vérifier que le fichier réseau est bien là, faire un backup manuel, etc.
+            // Ouvre le dossier de appareils.json dans l'Explorateur (vérif réseau, backup…).
             try
             {
                 string dossier = CheminsMetrologo.Catalogues;

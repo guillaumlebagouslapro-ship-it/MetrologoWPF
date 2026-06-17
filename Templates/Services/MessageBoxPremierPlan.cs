@@ -3,12 +3,10 @@ using System.Windows;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// MessageBox garanti AU-DESSUS de toutes les fenêtres, y compris celles des autres
-    /// applications. Cas d'usage : en fin de mesure, le rapport Excel est au premier
-    /// plan — un MessageBox classique apparaîtrait DERRIÈRE lui et l'utilisateur ne
-    /// verrait pas que la mesure a échoué (ex. valeur hors du module d'incertitude).
-    /// Astuce : le MessageBox est rattaché à une fenêtre propriétaire invisible et
-    /// Topmost, ce qui le rend lui-même topmost — il passe donc par-dessus Excel.
+    /// MessageBox garanti au-dessus de toutes les fenêtres, y compris Excel. Un
+    /// MessageBox classique passerait derrière le rapport ouvert en fin de mesure
+    /// (ex. valeur hors module d'incertitude). Astuce : fenêtre propriétaire invisible
+    /// et Topmost → le MessageBox hérite du Topmost.
     /// </summary>
     public static class MessageBoxPremierPlan
     {
@@ -37,9 +35,7 @@ namespace Metrologo.Services
             }
             catch
             {
-                // Filet de sécurité : si la fenêtre propriétaire ne peut pas être créée,
-                // on retombe sur le MessageBox classique (possiblement derrière Excel,
-                // mais le message n'est pas perdu).
+                // Fallback : MessageBox classique (possiblement derrière Excel, mais pas perdu).
                 return MessageBox.Show(message, titre, boutons, icone);
             }
             finally

@@ -7,10 +7,10 @@ namespace Metrologo.Services.Incertitude
 {
     /// <summary>
     /// Vérifie qu'une série de mesures tombe dans le domaine couvert par le module
-    /// d'incertitude sélectionné. Centralise la conversion « mesure brute → fréquence réelle
-    /// → valeur de lookup (Hz ou tr/min) » pour ne pas la dupliquer dans l'orchestrateur.
-    /// La même conversion affine existe dans <c>ExcelService.ConvertirEnFreqReelle</c> et
-    /// <c>ExcelInteropHost.ConvertirEnFreqReelleLocal</c> (chemins d'écriture des coeffs).
+    /// d'incertitude sélectionné. Centralise la conversion « mesure brute → freq réelle
+    /// → valeur de lookup (Hz ou tr/min) » pour éviter la duplication dans l'orchestrateur.
+    /// Même conversion affine que <c>ExcelService.ConvertirEnFreqReelle</c> et
+    /// <c>ExcelInteropHost.ConvertirEnFreqReelleLocal</c>.
     /// </summary>
     public static class IncertitudeCouverture
     {
@@ -28,10 +28,9 @@ namespace Metrologo.Services.Incertitude
         }
 
         /// <summary>
-        /// Évalue la moyenne des <paramref name="valeurs"/> face au module d'incertitude
-        /// principal de la mesure. Si aucun module n'est sélectionné (ou pas de valeurs),
-        /// renvoie <see cref="CouvertureModule.Couvert"/> (comportement historique : on laisse
-        /// passer avec les coefficients par défaut).
+        /// Évalue la moyenne des <paramref name="valeurs"/> face au module d'incertitude.
+        /// Sans module sélectionné ou sans valeurs, retourne <see cref="CouvertureModule.Couvert"/>
+        /// (comportement historique : passe avec coefficients par défaut).
         /// </summary>
         public static Resultat Verifier(Mesure mesure, IReadOnlyList<double> valeurs, double tempsGateSecondes)
         {
@@ -45,8 +44,7 @@ namespace Metrologo.Services.Incertitude
 
             double moyenneReelle = ConvertirEnFreqReelle(valeurs.Average(), mesure);
 
-            // Les bornes des modules tachy/strobo sont saisies en tr/min côté admin :
-            // on convertit Hz × 60 avant le lookup, comme dans les chemins d'écriture.
+            // Bornes tachy/strobo saisies en tr/min → Hz × 60 avant le lookup (comme côté écriture).
             bool uniteRpm = EnTetesMesureHelper.EstUniteRpm(mesure.TypeMesure);
             double valeurLookup = uniteRpm ? moyenneReelle * 60.0 : moyenneReelle;
 
@@ -62,10 +60,8 @@ namespace Metrologo.Services.Incertitude
             };
         }
 
-        /// <summary>
-        /// Reproduit la conversion de la colonne F (Fréq. Réelle) du template. Affine, donc
-        /// commute avec la moyenne : <c>conv(AVERAGE(E)) == AVERAGE(conv(E))</c>.
-        /// </summary>
+        /// <summary>Conversion colonne F (Fréq. Réelle) du template. Affine :
+        /// <c>conv(AVERAGE(E)) == AVERAGE(conv(E))</c>.</summary>
         private static double ConvertirEnFreqReelle(double mesureBrute, Mesure mesure)
         {
             if (mesure.ModeMesure == ModeMesure.Direct) return mesureBrute;
@@ -77,9 +73,9 @@ namespace Metrologo.Services.Incertitude
     }
 
     /// <summary>
-    /// Levée lorsqu'une gate produit une valeur moyenne hors du domaine couvert par le module
-    /// d'incertitude sélectionné. L'orchestrateur la rattrape pour supprimer la feuille de la
-    /// mesure en cours (comme un arrêt) et remonter <see cref="MessageUtilisateur"/> au ViewModel.
+    /// Levée quand la valeur moyenne d'une gate dépasse le domaine du module d'incertitude.
+    /// L'orchestrateur la rattrape, supprime la feuille en cours et remonte
+    /// <see cref="MessageUtilisateur"/> au ViewModel.
     /// </summary>
     public sealed class MesureHorsModuleException : Exception
     {

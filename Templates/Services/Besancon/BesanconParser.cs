@@ -11,12 +11,8 @@ namespace Metrologo.Services.Besancon
         public double Valeur { get; set; }
     }
 
-    /// <summary>
-    /// Parse le fichier ef_utcop récupéré sur le FTP de l'observatoire de Besançon. Format hérité
-    /// du legacy Delphi : une ligne par jour, date julienne puis valeur, séparées par des espaces.
-    /// La 1re ligne (en-tête) peut être sautée comme le faisait le Delphi (boucle de 1 à Count-1) ;
-    /// les lignes non conformes sont ignorées.
-    /// </summary>
+    /// <summary>Parse ef_utcop (FTP Besançon). Format legacy Delphi : date julienne + valeur
+    /// séparées par espaces. En-tête et lignes non conformes ignorées.</summary>
     public static class BesanconParser
     {
         public static List<MesureBesancon> Parser(string contenu, bool ignorerPremiereLigne = false)
@@ -32,21 +28,20 @@ namespace Metrologo.Services.Besancon
                 string ligne = lignes[i].Trim();
                 if (ligne.Length == 0) continue;
 
-                // ef_utcop commence par plusieurs lignes de commentaire préfixées par #
-                // (instabilité, sauts de phase) : on les saute
+                // Commentaires # / ; en tête de fichier (instabilité, sauts de phase).
                 if (ligne[0] == '#' || ligne[0] == ';') continue;
 
                 var tokens = ligne.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                 if (tokens.Length < 2) continue;
 
-                // 1er token : date julienne (on garde la partie entière si décimale)
+                // 1er token : date julienne (partie entière si décimale).
                 string sDate = tokens[0];
                 int ptDate = sDate.IndexOf('.');
                 if (ptDate > 0) sDate = sDate.Substring(0, ptDate);
                 if (!int.TryParse(sDate, NumberStyles.Integer, CultureInfo.InvariantCulture, out int mjd))
                     continue;
 
-                // 2e token : valeur (on tolère ',' ou '.' comme séparateur décimal)
+                // 2e token : valeur (',' ou '.' acceptés comme séparateur décimal).
                 string sVal = tokens[1].Replace(',', '.');
                 if (!double.TryParse(sVal, NumberStyles.Float, CultureInfo.InvariantCulture, out double valeur))
                     continue;

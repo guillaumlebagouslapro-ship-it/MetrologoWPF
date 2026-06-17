@@ -108,31 +108,23 @@ namespace Metrologo.Services
             _ => t.ToString()
         };
 
-        /// <summary>
-        /// Vrai pour la famille tachymétrique : contact, optique ET stroboscope.
-        /// Ces trois types partagent le template Excel METROLOGO_Tachy.xlsx (colonne de
-        /// conversion automatique Hz → tr/min, zones ZNCoeffC/ZNCoeffD côté RPM, module
-        /// affiché en G10) et requièrent le module Fréquence auxiliaire (Hz) en plus du
-        /// module principal — le stroboscope est mesuré au fréquencemètre comme les tachys.
-        /// </summary>
+        /// <summary>Famille tachymétrique : contact, optique et stroboscope. Ces trois types
+        /// partagent METROLOGO_Tachy.xlsx (Hz→tr/min, ZNCoeffC/D, module en G10) et requièrent
+        /// un module Fréquence auxiliaire en plus du module principal.</summary>
         public static bool EstTachymetre(TypeMesure t) =>
             t == TypeMesure.TachyContact || t == TypeMesure.TachyOptique
             || t == TypeMesure.Stroboscope;
 
-        /// <summary>
-        /// Vrai pour les types de mesure dont l'unité opérateur est le tr/min (RPM).
-        /// Concerne les tachymètres contact/optique et le stroboscope. Pour ces types,
-        /// les bornes BorneBasse/BorneHaute saisies dans les CSV de modules d'incertitude
-        /// sont exprimées en tr/min — il faut donc multiplier la fréquence moyenne (Hz)
-        /// par 60 avant le lookup pour matcher la bonne ligne.
-        /// </summary>
+        /// <summary>Types dont l'unité est le tr/min (tachys contact/optique + stroboscope).
+        /// Les bornes BorneBasse/BorneHaute des CSV sont en tr/min : multiplier la
+        /// fréquence moyenne (Hz) par 60 avant le lookup.</summary>
         public static bool EstUniteRpm(TypeMesure t) =>
             t == TypeMesure.TachyContact
             || t == TypeMesure.TachyOptique
             || t == TypeMesure.Stroboscope;
 
-        // Gate time helpers (index → libellé et secondes). L'échelle doit rester alignée avec la
-        // combo GateTimes de ConfigurationViewModel/SelectionGateViewModel et avec CatalogueAdapter.
+        // Gates (index → libellé et secondes). Échelle synchronisée avec GateTimes
+        // (ConfigurationViewModel, SelectionGateViewModel, CatalogueAdapter).
         private static readonly string[] _libellesGate =
         {
             "10 ms", "20 ms", "50 ms", "100 ms", "200 ms", "500 ms",
@@ -159,10 +151,8 @@ namespace Metrologo.Services
         public static double SecondesGate(int index) =>
             (index >= 0 && index < _secondesGate.Length) ? _secondesGate[index] : 1.0;
 
-        /// <summary>
-        /// Retourne l'index canonique correspondant à un libellé (insensible à la casse et aux
-        /// espaces multiples). -1 si le libellé n'est pas reconnu — l'appelant doit gérer ce cas.
-        /// </summary>
+        /// <summary>Index canonique pour un libellé (insensible à la casse et aux espaces).
+        /// -1 si non reconnu.</summary>
         public static int IndexDepuisLibelle(string? libelle)
         {
             if (string.IsNullOrWhiteSpace(libelle)) return -1;

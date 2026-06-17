@@ -5,14 +5,10 @@ using System.Text.Json;
 namespace Metrologo.Services.Besancon
 {
     /// <summary>
-    /// Config de la tâche quotidienne Besançon (récupération FTP + moyenne hebdo). Stockée sur le
-    /// partage réseau (besancon.ftp.json dans le dossier Besancon) pour que tous les postes aient
-    /// les mêmes identifiants FTP. Attention : le mot de passe FTP est donc en clair sur le partage,
-    /// compromis assumé pour la mutualisation.
-    /// Active vaut true par défaut : la tâche tourne sur tous les postes, mais le marqueur partagé
-    /// derniere_recuperation.json fait que seul le premier télécharge vraiment chaque jour, les
-    /// autres voient que c'est déjà fait et passent. L'admin peut mettre Active=false sur un poste,
-    /// ce choix tient (la bascule one-shot ne se réapplique pas).
+    /// Config de la tâche quotidienne Besançon. Stockée sur le partage (besancon.ftp.json)
+    /// pour que tous les postes partagent les mêmes identifiants FTP. Mot de passe en clair :
+    /// compromis assumé. Le marqueur derniere_recuperation.json garantit qu'un seul poste
+    /// télécharge par jour ; Active=false sur un poste est respecté définitivement.
     /// </summary>
     public sealed class BesanconConfig
     {
@@ -31,9 +27,8 @@ namespace Metrologo.Services.Besancon
         /// <summary>Nom du fichier à récupérer sur le FTP (legacy : ef_utcop).</summary>
         public string FichierDistant { get; set; } = "ef_utcop";
 
-        /// <summary>Heure de déclenchement quotidien, format HH:mm. Défaut 14:00 : la valeur de la
-        /// veille n'est disponible que vers 12h dans le fichier source, et le transfert baie → FTP est
-        /// fait vers 13h30 ; on récupère donc à 14h pour garder une marge confortable.</summary>
+        /// <summary>Heure de déclenchement quotidien (HH:mm). Défaut 14:00 : valeur de la veille
+        /// dispo vers 12h, transfert baie→FTP vers 13h30 ; 14h laisse une marge confortable.</summary>
         public string HeureDeclenchement { get; set; } = "14:00";
 
         /// <summary>Si vrai, supprime le fichier sur le FTP après téléchargement (comportement
@@ -53,10 +48,8 @@ namespace Metrologo.Services.Besancon
             var cfg = ChargerBrut();
             bool modifie = false;
 
-            // migration heure : les anciens défauts auto (09:50, 09:38, 13:38, jamais réglés à la
-            // main à l'époque) sont remontés à 14:00. La valeur de la veille n'est dispo que vers 12h
-            // et le transfert baie → FTP est fait vers 13h30 ; on récupère donc à 14h pour la marge.
-            // Idempotent, et ne touche pas à une heure réglée volontairement via l'UI (autre valeur).
+            // Anciens défauts (09:50, 09:38, 13:38) remontés à 14:00. Idempotent ;
+            // une heure réglée manuellement (autre valeur) n'est pas touchée.
             if (cfg.HeureDeclenchement == "09:50" || cfg.HeureDeclenchement == "09:38"
                 || cfg.HeureDeclenchement == "13:38")
             {
@@ -64,9 +57,8 @@ namespace Metrologo.Services.Besancon
                 modifie = true;
             }
 
-            // migration multi-poste : bascule one-shot vers Active=true sur tous les postes (le
-            // marqueur partagé empêche les doublons). Tracée par un flag, donc l'admin peut
-            // ensuite remettre Active=false sans que ça se réactive tout seul.
+            // Bascule one-shot Active=true (multi-poste). Flag MigrationMultiPosteAppliquee
+            // empêche la réactivation si l'admin remet Active=false.
             if (!cfg.MigrationMultiPosteAppliquee)
             {
                 cfg.Active = true;
@@ -80,14 +72,12 @@ namespace Metrologo.Services.Besancon
 
         private static BesanconConfig ChargerBrut()
         {
-            // 1. Config partagée déjà valide (identifiants renseignés) : on l'utilise.
+            // 1. Config partagée valide : on l'utilise.
             var partagee = LireFichier(Chemin);
             if (partagee != null && !string.IsNullOrWhiteSpace(partagee.FtpUtilisateur))
                 return partagee;
 
-            // 2. Sinon (partagée absente OU vide), on promeut une config LOCALE déjà remplie
-            //    (ancien emplacement, identifiants saisis avant la mutualisation) vers le partage.
-            //    Robuste même si un autre poste a déjà créé une config partagée vide.
+            // 2. Config partagée absente/vide : promeut la config locale legacy vers le partage.
             var locale = LireFichier(CheminLocalLegacy);
             if (locale != null && !string.IsNullOrWhiteSpace(locale.FtpUtilisateur))
             {
@@ -95,11 +85,11 @@ namespace Metrologo.Services.Besancon
                 return locale;
             }
 
-            // 3. Partagée existante mais vide, et rien à migrer : on garde la partagée (gabarit).
+            // 3. Partagée vide, rien à migrer : on garde le gabarit.
             if (partagee != null)
                 return partagee;
 
-            // 4. Rien nulle part : crée un gabarit par défaut sur le partage (à remplir une fois).
+            // 4. Rien nulle part : gabarit par défaut sur le partage (à remplir).
             var defaut = new BesanconConfig();
             defaut.Sauvegarder();
             return defaut;

@@ -29,24 +29,21 @@ namespace Metrologo.Services.Ieee
         /// <summary>Positionne la ligne REN (Remote Enable) : true = remote, false = local.</summary>
         Task DefinirRemoteLocalAsync(int adresse, bool remote, CancellationToken ct = default);
 
-        /// <summary>
-        /// Ferme les sessions GPIB en cache (rouvertes à la demande). À appeler après un
-        /// appareil éteint/rallumé ou si le bus semble bloqué. Sans effet en simulation.
-        /// </summary>
+        /// <summary>Ferme les sessions GPIB en cache (rouvertes à la demande). À appeler après un cycle
+        /// alimentation ou si le bus est bloqué. Sans effet en simulation.</summary>
         void ReinitialiserSessions();
 
         /// <summary>
-        /// Envoie un Selected Device Clear (SDC) sur toutes les sessions ouvertes. Synchrone et
-        /// thread-safe : appelé depuis le clic "Arrêter la mesure" pendant qu'un autre thread est
-        /// bloqué dans un :FETCh?. Le SDC débloque la lecture côté instrument, donc la boucle de
-        /// mesure voit le token annulé sans attendre la fin de la gate en cours.
+        /// SDC sur toutes les sessions ouvertes. Synchrone et thread-safe : appelé depuis
+        /// "Arrêter la mesure" pendant qu'un autre thread est bloqué dans :FETCh?. Le SDC
+        /// débloque l'instrument, la boucle de mesure voit le token annulé sans attendre la gate.
         /// </summary>
         void AborterToutesSessions();
 
         /// <summary>
-        /// Ajuste le timeout de la session. À faire avant une boucle dont la gate dépasse le
-        /// timeout par défaut (gate 20 s = timeout 22 s mini), sinon chaque :READ? rend une chaîne
-        /// vide et la réponse reste dans le buffer de sortie de l'appareil, bloquant le Write suivant.
+        /// Ajuste le timeout de la session. À faire avant toute gate dépassant le timeout par
+        /// défaut (gate 20 s → timeout 22 s mini) : sinon :READ? retourne vide et la réponse
+        /// reste dans le buffer, bloquant le Write suivant.
         /// </summary>
         void DefinirTimeout(int adresse, int timeoutMs);
     }
