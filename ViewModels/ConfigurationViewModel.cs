@@ -638,16 +638,8 @@ namespace Metrologo.ViewModels
             OnPropertyChanged(nameof(ShowReglagesDynamiques));
         }
 
-        /// <summary>Rappel "vérifier les paramètres du fréquencemètre" : en intervalle de temps,
-        /// le 1er clic sur Valider affiche un rappel et revient à la config sans lancer ; le clic
-        /// suivant lance réellement la mesure. Réarmé dès qu'on change de type de mesure.</summary>
-        private bool _rappelParamsIntervalleConfirme;
-
         public void OnTypeMesureChanged()
         {
-            // tout changement de type réarme le rappel intervalle (cf. ValiderAsync)
-            _rappelParamsIntervalleConfirme = false;
-
             if (MesureConfig.TypeMesure == TypeMesure.Interval)
                 MesureConfig.NbMesures = 1;
             else
@@ -708,25 +700,6 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // En intervalle de temps, l'appareil est configuré à la main (init manuelle) :
-            // Metrologo n'envoie aucune commande. On rappelle donc à l'opérateur de vérifier
-            // les réglages du fréquencemètre AVANT de lancer. Le 1er clic sur Valider affiche
-            // ce rappel et revient à la config sans lancer ; il faut re-cliquer sur Valider
-            // pour démarrer réellement la mesure (le OK du rappel ne lance pas la mesure).
-            if (MesureConfig.TypeMesure == TypeMesure.Interval && !_rappelParamsIntervalleConfirme)
-            {
-                _rappelParamsIntervalleConfirme = true;
-                MessageBox.Show(
-                    "Vérifie les paramètres du fréquencemètre avant de valider.\n\n"
-                    + "En intervalle de temps, l'appareil est configuré à la main : "
-                    + "aucune commande n'est envoyée par Metrologo.\n\n"
-                    + "Clique de nouveau sur « Valider » pour lancer la mesure.",
-                    "Vérification des paramètres",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                return;
-            }
-
             // ===== Portage exact de la validation Delphi (F_Configuration.pas:104-127) =====
 
             // 1. Trim + longueur exacte = 8 caractères
@@ -784,6 +757,20 @@ namespace Metrologo.ViewModels
             else
             {
                 await EnvoyerCommandesScpiAsync();
+            }
+
+            // En intervalle de temps, l'appareil est configuré à la main (init manuelle) :
+            // Metrologo n'envoie aucune commande. Dernier rappel avant le lancement pour que
+            // l'opérateur vérifie les réglages du fréquencemètre. OK lance la mesure.
+            if (MesureConfig.TypeMesure == TypeMesure.Interval)
+            {
+                MessageBox.Show(
+                    "Vérifie les paramètres du fréquencemètre avant de lancer la mesure.\n\n"
+                    + "En intervalle de temps, l'appareil est configuré à la main : "
+                    + "aucune commande n'est envoyée par Metrologo.",
+                    "Vérification des paramètres",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
 
             CloseAction?.Invoke(true);
