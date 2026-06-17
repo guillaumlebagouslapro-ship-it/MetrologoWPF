@@ -991,6 +991,18 @@ namespace Metrologo.ViewModels
                 await SaisiePostMesureTachyAsync(config);
                 return;
             }
+
+            // Intervalle de temps : pas de saisie post-mesure, mais on SAUVEGARDE le rapport
+            // comme le fait la fréquence. Sans ça le classeur reste "modifié" (Saved=false) :
+            // au lancement de la mesure suivante, sa fermeture (FermerClasseurActifInterne →
+            // Workbook.Close(SaveChanges=true), ExcelInteropHost.cs:3458) doit le sauver à ce
+            // moment-là — ce qui provoque la transition grise entre deux mesures et peut figer
+            // sur un dialogue Excel caché. En sauvant ici, la fermeture suivante est immédiate
+            // et propre (mêmes procédures qu'en fréquence).
+            if (config.TypeMesure == TypeMesure.Interval)
+            {
+                await ExcelInteropHost.Instance.SauvegarderAsync();
+            }
         }
 
         private async Task SaisiePostMesureFrequenceAsync(Mesure config)
