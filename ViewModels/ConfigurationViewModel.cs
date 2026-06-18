@@ -581,76 +581,145 @@ namespace Metrologo.ViewModels
             set { if (value) { MesureConfig.IntervDeuxVoies = true; NotifierIntervalle(); } }
         }
 
+        // Couplage / impédance / pente : paires de booléens complémentaires (DC↔AC, 50Ω↔1MΩ,
+        // montant↔descendant). ATTENTION : deux RadioButtons distincts (panneaux « 1 voie » et
+        // « 2 voies », qui s'affichent/se masquent) sont liés TwoWay à la MÊME propriété. Sans le
+        // court-circuit « valeur inchangée » ci-dessous, la mutuelle exclusion des RadioButtons
+        // (re-décochage lors d'un changement de visibilité) déclenche un ping-pong DC→AC→DC… qui
+        // boucle à l'infini → StackOverflow → l'appli fige. Le guard stoppe dès que la valeur est
+        // stable (plus de notification). Le null-safe couvre l'instant de re-binding (MesureConfig
+        // momentanément non affecté). Réf bug : freeze pointant ce setter au 2e lancement de mesure.
+
         // Couplage voie 1
         public bool IntervDc1
         {
-            get => MesureConfig.IntervDc1;
-            set { MesureConfig.IntervDc1 = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervAc1)); }
+            get => MesureConfig?.IntervDc1 ?? false;
+            set
+            {
+                if (MesureConfig == null || MesureConfig.IntervDc1 == value) return;
+                MesureConfig.IntervDc1 = value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervAc1));
+            }
         }
         public bool IntervAc1
         {
-            get => !MesureConfig.IntervDc1;
-            set { MesureConfig.IntervDc1 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervDc1)); }
+            get => !(MesureConfig?.IntervDc1 ?? false);
+            set
+            {
+                if (MesureConfig == null || (!MesureConfig.IntervDc1) == value) return;
+                MesureConfig.IntervDc1 = !value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervDc1));
+            }
         }
 
         // Impedance voie 1
         public bool IntervImp50_1
         {
-            get => MesureConfig.IntervImp50_1;
-            set { MesureConfig.IntervImp50_1 = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp1M_1)); }
+            get => MesureConfig?.IntervImp50_1 ?? false;
+            set
+            {
+                if (MesureConfig == null || MesureConfig.IntervImp50_1 == value) return;
+                MesureConfig.IntervImp50_1 = value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp1M_1));
+            }
         }
         public bool IntervImp1M_1
         {
-            get => !MesureConfig.IntervImp50_1;
-            set { MesureConfig.IntervImp50_1 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp50_1)); }
+            get => !(MesureConfig?.IntervImp50_1 ?? false);
+            set
+            {
+                if (MesureConfig == null || (!MesureConfig.IntervImp50_1) == value) return;
+                MesureConfig.IntervImp50_1 = !value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp50_1));
+            }
         }
 
         // Pente du départ
         public bool IntervStartMontant
         {
-            get => MesureConfig.IntervStartMontant;
-            set { MesureConfig.IntervStartMontant = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervStartDescendant)); }
+            get => MesureConfig?.IntervStartMontant ?? false;
+            set
+            {
+                if (MesureConfig == null || MesureConfig.IntervStartMontant == value) return;
+                MesureConfig.IntervStartMontant = value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervStartDescendant));
+            }
         }
         public bool IntervStartDescendant
         {
-            get => !MesureConfig.IntervStartMontant;
-            set { MesureConfig.IntervStartMontant = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervStartMontant)); }
+            get => !(MesureConfig?.IntervStartMontant ?? false);
+            set
+            {
+                if (MesureConfig == null || (!MesureConfig.IntervStartMontant) == value) return;
+                MesureConfig.IntervStartMontant = !value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervStartMontant));
+            }
         }
 
         // Pente de l'arrêt
         public bool IntervStopMontant
         {
-            get => MesureConfig.IntervStopMontant;
-            set { MesureConfig.IntervStopMontant = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervStopDescendant)); }
+            get => MesureConfig?.IntervStopMontant ?? false;
+            set
+            {
+                if (MesureConfig == null || MesureConfig.IntervStopMontant == value) return;
+                MesureConfig.IntervStopMontant = value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervStopDescendant));
+            }
         }
         public bool IntervStopDescendant
         {
-            get => !MesureConfig.IntervStopMontant;
-            set { MesureConfig.IntervStopMontant = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervStopMontant)); }
+            get => !(MesureConfig?.IntervStopMontant ?? false);
+            set
+            {
+                if (MesureConfig == null || (!MesureConfig.IntervStopMontant) == value) return;
+                MesureConfig.IntervStopMontant = !value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervStopMontant));
+            }
         }
 
         // Couplage voie 2 (mode 2 voies)
         public bool IntervDc2
         {
-            get => MesureConfig.IntervDc2;
-            set { MesureConfig.IntervDc2 = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervAc2)); }
+            get => MesureConfig?.IntervDc2 ?? false;
+            set
+            {
+                if (MesureConfig == null || MesureConfig.IntervDc2 == value) return;
+                MesureConfig.IntervDc2 = value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervAc2));
+            }
         }
         public bool IntervAc2
         {
-            get => !MesureConfig.IntervDc2;
-            set { MesureConfig.IntervDc2 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervDc2)); }
+            get => !(MesureConfig?.IntervDc2 ?? false);
+            set
+            {
+                if (MesureConfig == null || (!MesureConfig.IntervDc2) == value) return;
+                MesureConfig.IntervDc2 = !value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervDc2));
+            }
         }
 
         // Impedance voie 2 (mode 2 voies)
         public bool IntervImp50_2
         {
-            get => MesureConfig.IntervImp50_2;
-            set { MesureConfig.IntervImp50_2 = value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp1M_2)); }
+            get => MesureConfig?.IntervImp50_2 ?? false;
+            set
+            {
+                if (MesureConfig == null || MesureConfig.IntervImp50_2 == value) return;
+                MesureConfig.IntervImp50_2 = value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp1M_2));
+            }
         }
         public bool IntervImp1M_2
         {
-            get => !MesureConfig.IntervImp50_2;
-            set { MesureConfig.IntervImp50_2 = !value; OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp50_2)); }
+            get => !(MesureConfig?.IntervImp50_2 ?? false);
+            set
+            {
+                if (MesureConfig == null || (!MesureConfig.IntervImp50_2) == value) return;
+                MesureConfig.IntervImp50_2 = !value;
+                OnPropertyChanged(); OnPropertyChanged(nameof(IntervImp50_2));
+            }
         }
 
         // Seuils (V) et hold-off (ns) : backing texte conservé tel quel (pas reformaté depuis le double
