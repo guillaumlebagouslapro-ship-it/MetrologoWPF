@@ -43,16 +43,26 @@ namespace Metrologo.Models
         /// </summary>
         public int NbVoies { get; set; } = 2;
 
-        /// <summary>Vérifie si cet IDN correspond à ce modèle (contains insensible à la casse).</summary>
+        /// <summary>Vérifie si cet IDN correspond à ce modèle. Le MODÈLE doit correspondre
+        /// EXACTEMENT (insensible casse/espaces) ; le fabricant reste tolérant (les chaînes IDN
+        /// varient : « Agilent Technologies », « Keysight Technologies », « HEWLETT-PACKARD »…).</summary>
         public bool Correspond(string? fabricant, string? modele)
         {
-            string fab = (fabricant ?? string.Empty).ToUpperInvariant();
-            string mod = (modele ?? string.Empty).ToUpperInvariant();
-            string fabP = (FabricantIdn ?? string.Empty).ToUpperInvariant();
-            string modP = (ModeleIdn ?? string.Empty).ToUpperInvariant();
+            string fab = (fabricant ?? string.Empty).Trim().ToUpperInvariant();
+            string mod = (modele ?? string.Empty).Trim().ToUpperInvariant();
+            string fabP = (FabricantIdn ?? string.Empty).Trim().ToUpperInvariant();
+            string modP = (ModeleIdn ?? string.Empty).Trim().ToUpperInvariant();
 
+            // Fabricant : vide = critère ignoré ; sinon « contient » (tolérant aux variantes).
             bool fabOk = string.IsNullOrEmpty(fabP) || fab.Contains(fabP);
-            bool modOk = string.IsNullOrEmpty(modP) || mod.Contains(modP);
+
+            // Modèle : correspondance EXACTE, et JAMAIS sur un motif vide.
+            // Avant, un « contains » faisait correspondre un 53220A à une fiche 53230A, et une
+            // fiche au modèle vide matchait TOUT appareil — d'où des appareils « reconnus » alors
+            // qu'ils n'avaient jamais été enregistrés, et l'impossibilité de les enregistrer à part.
+            // Avec l'égalité exacte, chaque modèle est indépendant (53220A ≠ 53230A) : un appareil
+            // n'est reconnu que si SON modèle précis figure au catalogue.
+            bool modOk = !string.IsNullOrEmpty(modP) && mod == modP;
             return fabOk && modOk;
         }
     }
