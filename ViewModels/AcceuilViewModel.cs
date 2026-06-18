@@ -486,6 +486,37 @@ namespace Metrologo.ViewModels
             }
             Log($"⏱ Gates à balayer : {string.Join(", ", MesureConfig.GateIndices)}");
 
+            // 3bis) Anti-collision de FI : si un rapport du MÊME nom existe déjà pour cette FI
+            //    (N° repris), on demande explicitement à l'utilisateur. Sans ça, le flux réutilise
+            //    en silence l'ancien freq.xlsx (et, s'il était resté ouvert, une 2e instance Excel
+            //    apparaît avec sa fenêtre grise vide). Même UX que « Relancer » : Oui = fichier
+            //    vierge / Non = ajoute à la suite / Annuler. La Stabilité est exclue : elle gère
+            //    déjà son versionnage (stab1, stab2…) et n'écrase jamais.
+            if (MesureConfig.TypeMesure != TypeMesure.Stabilite)
+            {
+                string cheminAttendu = _excelService.CalculerCheminFichierAttendu(MesureConfig);
+                if (System.IO.File.Exists(cheminAttendu))
+                {
+                    var choix = MessageBox.Show(
+                        $"Un rapport existe déjà pour la FI {MesureConfig.NumFI} :\n{cheminAttendu}\n\n"
+                      + "Voulez-vous écraser les mesures précédentes ?\n\n"
+                      + "• Oui : repart d'un fichier vierge (les anciennes mesures sont perdues).\n"
+                      + "• Non : conserve l'historique et ajoute la nouvelle mesure à la suite.\n"
+                      + "• Annuler : ne lance rien.",
+                        "Rapport déjà existant pour cette FI",
+                        MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+
+                    if (choix == MessageBoxResult.Cancel)
+                    {
+                        Log("✖ Mesure annulée : un rapport existe déjà pour cette FI.");
+                        return;
+                    }
+
+                    if (choix == MessageBoxResult.Yes && !await EcraserRapportExistantAsync(cheminAttendu))
+                        return;   // suppression impossible (fichier verrouillé) : message déjà affiché
+                }
+            }
+
             // 4) La frequence nominale est deja saisie dans ConfigurationWindow (bloc Indirect),
             //    comme dans le Delphi d'origine (pas de dialog pre-mesure pour FNominale).
             double? fNominale = MesureConfig.ModeMesure == ModeMesure.Indirect
@@ -590,6 +621,67 @@ namespace Metrologo.ViewModels
         }
 
         private bool PeutRelancer() => DerniereMesureDisponible && !MesureEnCours;
+
+        /// <summary>
+        /// Écrase le rapport déjà présent (<paramref name="cheminAttendu"/>) avant une nouvelle
+        /// mesure sur une FI au numéro repris. Si ce fichier est le classeur actuellement ouvert
+        /// dans Excel, on le réinitialise IN-PLACE (sans fermer le Workbook → pas de fenêtre grise
+        /// SDI, comme « Relancer ») ; sinon on le supprime sur disque (après avoir fermé une
+        /// éventuelle instance hôte qui le tiendrait). Renvoie false si la suppression échoue
+        /// (fichier verrouillé) — un message a alors été montré à l'utilisateur.
+        /// </summary>
+        private async Task<bool> EcraserRapportExistantAsync(string cheminAttendu)
+        {
+            bool estClasseurActif = ExcelInteropHost.Instance.AClasseurActif
+                && MemeChemin(ExcelInteropHost.Instance.CheminClasseurActif, cheminAttendu);
+
+            if (estClasseurActif)
+            {
+                try
+                {
+                    await ExcelInteropHost.Instance.ReinitialiserClasseurActifAsync();
+                    Log("🗑 Classeur réinitialisé in-place (anciennes feuilles supprimées, fichier conservé).");
+                    Journal.Info(CategorieLog.Mesure, "RAPPORT_ECRASE_INPLACE",
+                        "Rapport FI réinitialisé via COM avant nouvelle mesure (pas de shell grise).");
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Log($"⚠ Réinitialisation in-place échouée : {ex.Message} — fallback fermer + supprimer.");
+                    try { await ExcelInteropHost.Instance.FermerClasseurActifAsync(); } catch { }
+                    // on enchaîne sur la suppression disque ci-dessous
+                }
+            }
+
+            try
+            {
+                if (System.IO.File.Exists(cheminAttendu)) System.IO.File.Delete(cheminAttendu);
+                Log($"🗑 Ancien rapport supprimé : {System.IO.Path.GetFileName(cheminAttendu)}");
+                Journal.Info(CategorieLog.Mesure, "RAPPORT_ECRASE",
+                    $"Ancien rapport supprimé avant nouvelle mesure : {cheminAttendu}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"⚠ Impossible de supprimer l'ancien rapport : {ex.Message}");
+                MessageBox.Show(
+                    $"Impossible de supprimer l'ancien rapport :\n{cheminAttendu}\n\n{ex.Message}\n\n"
+                  + "Il est peut-être encore ouvert dans Excel. Ferme-le puis relance.",
+                    "Fichier verrouillé", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+        }
+
+        private static bool MemeChemin(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            try
+            {
+                return string.Equals(System.IO.Path.GetFullPath(a),
+                    System.IO.Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
+        }
 
         private static string ResolvedNomAppareil(Mesure config)
         {
