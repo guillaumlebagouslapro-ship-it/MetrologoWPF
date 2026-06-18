@@ -279,7 +279,7 @@ namespace Metrologo.Services.Ieee
             AppareilIEEE appareil, IIeeeDriver driver, string commande, CancellationToken ct,
             int gateMs = 0)
         {
-            JournalLog.Info(CategorieLog.Mesure, "MESURE_ENVOI",
+            JournalLog.Trace(CategorieLog.Mesure, "MESURE_ENVOI",
                 $"GPIB0::{appareil.Adresse} ← {commande}",
                 new { Nom = appareil.Nom, Adresse = appareil.Adresse, Commande = commande });
 
@@ -291,15 +291,21 @@ namespace Metrologo.Services.Ieee
             // Delphi — et NON par un délai aveugle. Le serial poll interroge l'octet de statut sur
             // une ligne GPIB dédiée : il ne lit PAS la donnée, donc ne perturbe pas la mesure de
             // l'EIP. On considère prêt dès que RQS (0x40) OU MAV (0x10) est positionné : RQS est le
-            // bit universel « service demandé » des appareils pré-488.2 comme l'EIP 545 (c'est lui
-            // qui manquait dans la tentative abandonnée, qui ne testait que le MAV) ; MAV couvre les
-            // appareils 488.2. Borné par un timeout (gate + marge) : si le SRQ n'arrive jamais, on
-            // lit quand même une fois (dégradation gracieuse, pas de blocage). On loggue l'octet de
-            // statut pour pouvoir verrouiller le bit exact si besoin.
+            // bit universel « service demandé » des appareils pré-488.2 comme l'EIP 545 ; MAV couvre
+            // les appareils 488.2.
+            //
+            // PERF : la mesure dure AU MOINS la porte. Plutôt que de marteler le bus de serial polls
+            // pendant toute la gate (chaque poll = un aller-retour GPIB ~30-50 ms sur l'adaptateur
+            // USB, soit ~5 polls gaspillés à 100 ms de gate), on dort la durée de la porte EN UNE
+            // FOIS (sommeil OS, zéro trafic bus), puis on confirme par serial poll — en général prêt
+            // dès le 1er. Borné par un timeout (gate + marge) : si le SRQ n'arrive jamais, on lit
+            // quand même (dégradation gracieuse, pas de blocage).
             if (appareil.GereSRQ)
             {
                 const byte PRET = 0x40 | 0x10;   // RQS | MAV
-                int budgetMs = gateMs > 0 ? gateMs * 2 + 2000 : 4000;
+                if (gateMs > 0) await Task.Delay(gateMs, ct);
+
+                int budgetMs = gateMs > 0 ? gateMs + 2000 : 4000;
                 var swSrq = Stopwatch.StartNew();
                 byte statut = 0;
                 bool pret = false;
@@ -308,21 +314,24 @@ namespace Metrologo.Services.Ieee
                     ct.ThrowIfCancellationRequested();
                     statut = await driver.LireStatusByteAsync(appareil.Adresse, ct);
                     if ((statut & PRET) != 0) { pret = true; break; }
-                    await Task.Delay(20, ct);
+                    await Task.Delay(5, ct);
                 }
-                JournalLog.Info(CategorieLog.Mesure, "SRQ_WAIT",
-                    $"GPIB0::{appareil.Adresse} statut=0x{statut:X2} prêt={pret} après {swSrq.ElapsedMilliseconds} ms"
-                    + (pret ? "" : " (timeout SRQ → lecture quand même)"),
-                    new { appareil.Adresse, Statut = statut, Pret = pret, swSrq.ElapsedMilliseconds, BudgetMs = budgetMs });
+                if (!pret)
+                    JournalLog.Warn(CategorieLog.Mesure, "SRQ_TIMEOUT",
+                        $"GPIB0::{appareil.Adresse} statut=0x{statut:X2} après {swSrq.ElapsedMilliseconds} ms "
+                        + $"(budget {budgetMs} ms) — lecture quand même.");
+                else
+                    JournalLog.Trace(CategorieLog.Mesure, "SRQ_OK",
+                        $"GPIB0::{appareil.Adresse} statut=0x{statut:X2} confirmé en {swSrq.ElapsedMilliseconds} ms.");
             }
 
             string reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
 
-            // Trace la réponse brute (essentielle pour diagnostiquer un legacy muet) : on voit
-            // immédiatement si l'appareil renvoie une valeur, une chaîne vide ou un format inattendu.
+            // Trace la réponse brute (utile pour diagnostiquer un legacy muet) : on voit si
+            // l'appareil renvoie une valeur, une chaîne vide ou un format inattendu. Verbeux only.
             string apercu = string.IsNullOrEmpty(reponse) ? "(vide)"
                 : reponse.Length > 120 ? reponse.Substring(0, 120) + "..." : reponse;
-            JournalLog.Info(CategorieLog.Mesure, "MESURE_RECEP",
+            JournalLog.Trace(CategorieLog.Mesure, "MESURE_RECEP",
                 $"GPIB0::{appareil.Adresse} → « {apercu} »");
 
             return reponse;

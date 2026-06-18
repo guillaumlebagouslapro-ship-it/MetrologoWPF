@@ -16,6 +16,14 @@ namespace Metrologo.Services.Journal
 
         public static void Configurer(IJournalService service) => _service = service;
 
+        /// <summary>
+        /// Active les traces verbeuses (<see cref="Trace"/>) : log par mesure (envoi/réception
+        /// GPIB, attente SRQ...). Désactivé par défaut — ces entrées, à raison de plusieurs par
+        /// mesure × 30 mesures × N gates, gonflent vite le journal et ralentissent son ouverture,
+        /// sans intérêt en routine. À mettre à true seulement pour diagnostiquer un appareil muet.
+        /// </summary>
+        public static bool Verbeux { get; set; }
+
         public static Task DemarrerSessionAsync(string utilisateur)
             => _service?.DemarrerSessionAsync(utilisateur) ?? Task.CompletedTask;
 
@@ -36,6 +44,14 @@ namespace Metrologo.Services.Journal
 
         public static void Erreur(CategorieLog cat, string action, string message, object? details = null)
             => Router(cat, action, message, details, SeveriteLog.Erreur);
+
+        /// <summary>Trace de diagnostic fine : n'écrit QUE si <see cref="Verbeux"/> est actif.
+        /// Pour les logs par-mesure du chemin chaud (GPIB), qui ne doivent pas grossir le journal
+        /// en fonctionnement normal.</summary>
+        public static void Trace(CategorieLog cat, string action, string message, object? details = null)
+        {
+            if (Verbeux) Router(cat, action, message, details, SeveriteLog.Info);
+        }
 
         /// <summary>
         /// Écrit dans le journal via le service, et au passage recopie dans le journal d'AUDIT

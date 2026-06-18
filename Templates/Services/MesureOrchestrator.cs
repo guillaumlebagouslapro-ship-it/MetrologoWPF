@@ -706,6 +706,19 @@ namespace Metrologo.Services
                     double valPrec = double.NaN;
                     int doublonsConsecutifs = 0;
                     int freshTimeoutsConsec = 0;
+
+                    // Legacy à SRQ (EIP 545...) : la config (SR01) puis le réglage de gate ont pu
+                    // laisser un SRQ « périmé » d'une mesure automatique en attente. Sans le purger,
+                    // la 1ère lecture attrape cet ancien SRQ et renvoie une valeur parasite — d'où la
+                    // « 1ère valeur qui saute » observée. Un serial poll de purge vide ce statut
+                    // avant la 1ère vraie mesure (no-op pour les appareils sans SRQ ou en mode rapide).
+                    if (appareil.GereSRQ && !modeRapide)
+                    {
+                        try { await _driver.LireStatusByteAsync(appareil.Adresse, ct); }
+                        catch (OperationCanceledException) { throw; }
+                        catch { /* best-effort : la purge n'est pas critique */ }
+                    }
+
                     for (int i = 0; i < mesure.NbMesures; i++)
                     {
                         ct.ThrowIfCancellationRequested();
