@@ -285,15 +285,35 @@ namespace Metrologo.Services.Ieee
 
             await driver.EcrireAsync(appareil.Adresse, commande, appareil.WriteTerm, ct);
 
-            // Synchronisation legacy : le Delphi attendait le SRQ (l'appareil signale « mesure prête »)
-            // avant de lire UNE fois. Le serial-poll VISA ne voit pas ce SRQ sur l'EIP 545, et surtout
-            // LIRE pendant la mesure la perturbe (l'EIP reste à « 0E0 » / se re-déclenche → que des 0).
-            // On reproduit donc le comportement qui marche : après l'envoi, on laisse s'écouler le temps
-            // de mesure (gate + marge) SANS lire, puis UNE seule lecture récupère la valeur propre.
+            // Synchronisation legacy : reproduction FIDÈLE du handshake SRQ Delphi
+            // (EcritureLectureIEEE, bGereSRQ=true). Après la commande de déclenchement, on attend
+            // que l'appareil signale « mesure prête » par SERIAL POLL (ReadStatusByte), comme en
+            // Delphi — et NON par un délai aveugle. Le serial poll interroge l'octet de statut sur
+            // une ligne GPIB dédiée : il ne lit PAS la donnée, donc ne perturbe pas la mesure de
+            // l'EIP. On considère prêt dès que RQS (0x40) OU MAV (0x10) est positionné : RQS est le
+            // bit universel « service demandé » des appareils pré-488.2 comme l'EIP 545 (c'est lui
+            // qui manquait dans la tentative abandonnée, qui ne testait que le MAV) ; MAV couvre les
+            // appareils 488.2. Borné par un timeout (gate + marge) : si le SRQ n'arrive jamais, on
+            // lit quand même une fois (dégradation gracieuse, pas de blocage). On loggue l'octet de
+            // statut pour pouvoir verrouiller le bit exact si besoin.
             if (appareil.GereSRQ)
             {
-                int delai = gateMs > 0 ? gateMs + 1000 : 2000;
-                await Task.Delay(delai, ct);
+                const byte PRET = 0x40 | 0x10;   // RQS | MAV
+                int budgetMs = gateMs > 0 ? gateMs * 2 + 2000 : 4000;
+                var swSrq = Stopwatch.StartNew();
+                byte statut = 0;
+                bool pret = false;
+                while (swSrq.ElapsedMilliseconds < budgetMs)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    statut = await driver.LireStatusByteAsync(appareil.Adresse, ct);
+                    if ((statut & PRET) != 0) { pret = true; break; }
+                    await Task.Delay(20, ct);
+                }
+                JournalLog.Info(CategorieLog.Mesure, "SRQ_WAIT",
+                    $"GPIB0::{appareil.Adresse} statut=0x{statut:X2} prêt={pret} après {swSrq.ElapsedMilliseconds} ms"
+                    + (pret ? "" : " (timeout SRQ → lecture quand même)"),
+                    new { appareil.Adresse, Statut = statut, Pret = pret, swSrq.ElapsedMilliseconds, BudgetMs = budgetMs });
             }
 
             string reponse = await driver.LireAsync(appareil.Adresse, appareil.ReadTerm, ct);
