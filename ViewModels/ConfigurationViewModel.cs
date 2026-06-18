@@ -291,9 +291,12 @@ namespace Metrologo.ViewModels
             // Seuls les appareils détectés sur le bus — pas de config sur un instrument absent.
             foreach (var det in EtatApplication.AppareilsDetectes)
             {
+                // ⚠ et non ✓ pour le hors-catalogue : un ✓ laissait croire « reconnu/utilisable »
+                // alors qu'un appareil hors catalogue est affiché mais NON mesurable (au lancement,
+                // IdModeleCatalogue est vide → « Aucun appareil sélectionné, enregistrez-le »).
                 string suffixe = det.ModeleReconnu != null
                     ? $" ✓  (catalogue)"
-                    : $" ✓  (hors catalogue — à enregistrer)";
+                    : $" ⚠  NON enregistré — à ajouter au catalogue (inutilisable en l'état)";
 
                 Appareils.Add(new OptionAppareil
                 {
