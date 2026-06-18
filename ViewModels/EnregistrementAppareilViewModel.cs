@@ -199,6 +199,9 @@ namespace Metrologo.ViewModels
 
             // Tout coché par défaut : décocher les gates non supportées.
             foreach (var g in GatesOptions) g.EstCoche = true;
+
+            // Modèles existants proposés pour cloner leurs réglages (ex. 53230A -> 53220A).
+            ChargerModelesPourCopie(exclureId: null);
         }
 
         /// <summary>Édition d'un modèle existant (flux Admin « Gérer les appareils »).</summary>
@@ -207,38 +210,99 @@ namespace Metrologo.ViewModels
             _modeleExistant = modeleExistant;
             _utilisateurActuel = utilisateur;
 
-            Nom = modeleExistant.Nom;
-            FabricantIdn = modeleExistant.FabricantIdn;
-            ModeleIdn = modeleExistant.ModeleIdn;
             IdnDetecte = $"(enregistré le {modeleExistant.DateCreation:dd/MM/yyyy} par {modeleExistant.CreePar})";
+            ChargerDepuisModele(modeleExistant, inclureIdentite: true);
+            ChargerModelesPourCopie(exclureId: modeleExistant.Id);
+        }
+
+        // ---------------- Copie des réglages depuis un modèle existant ----------------
+
+        /// <summary>Modèles du catalogue proposés pour cloner leurs réglages (53230A → 53220A...).</summary>
+        public System.Collections.ObjectModel.ObservableCollection<ModeleAppareil> ModelesPourCopie { get; } = new();
+
+        /// <summary>Modèle source sélectionné dans la liste « Copier les réglages de… ».</summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(CopierReglagesDepuisSourceCommand))]
+        private ModeleAppareil? _modeleSourceCopie;
+
+        private void ChargerModelesPourCopie(string? exclureId)
+        {
+            ModelesPourCopie.Clear();
+            foreach (var m in CatalogueAppareilsService.Instance.Modeles
+                         .Where(m => m.Id != exclureId)
+                         .OrderBy(m => m.Nom))
+                ModelesPourCopie.Add(m);
+        }
+
+        private bool PeutCopier() => ModeleSourceCopie != null;
+
+        /// <summary>Recopie TOUS les réglages (SCPI, gates, voies, intervalle...) du modèle source
+        /// dans le formulaire, SANS toucher à l'identité (Nom / Fabricant IDN / Modèle IDN) : on
+        /// obtient une fiche distincte aux réglages clonés (ex. 53220A à partir du 53230A).</summary>
+        [RelayCommand(CanExecute = nameof(PeutCopier))]
+        private void CopierReglagesDepuisSource()
+        {
+            if (ModeleSourceCopie == null) return;
+            ChargerDepuisModele(ModeleSourceCopie, inclureIdentite: false);
+            JournalLog.Info(CategorieLog.Configuration, "CATALOGUE_COPIE_REGLAGES",
+                $"Réglages copiés depuis « {ModeleSourceCopie.Nom} » (identité conservée).");
+        }
+
+        /// <summary>Charge les champs du formulaire depuis <paramref name="m"/>. Si
+        /// <paramref name="inclureIdentite"/> est faux, on garde le Nom/Fabricant/Modèle courants
+        /// (cas du clonage de réglages vers une nouvelle fiche distincte).</summary>
+        private void ChargerDepuisModele(ModeleAppareil m, bool inclureIdentite)
+        {
+            if (inclureIdentite)
+            {
+                Nom = m.Nom;
+                FabricantIdn = m.FabricantIdn;
+                ModeleIdn = m.ModeleIdn;
+            }
+
             // Rétrocompat : NbVoies absent des anciens modèles -> 2 par défaut.
-            NbVoies = modeleExistant.NbVoies > 0 ? modeleExistant.NbVoies : 2;
+            NbVoies = m.NbVoies > 0 ? m.NbVoies : 2;
 
-            ChaineInit = modeleExistant.Parametres.ChaineInit;
-            ConfEntree = modeleExistant.Parametres.ConfEntree;
-            ExeMesure = modeleExistant.Parametres.ExeMesure;
-            CommandeGate = modeleExistant.Parametres.CommandeGate;
-            CommandeMesureMultiple = modeleExistant.Parametres.CommandeMesureMultiple;
-            CommandeFetchFresh = modeleExistant.Parametres.CommandeFetchFresh;
-            TermWrite = modeleExistant.Parametres.TermWrite;
-            TermRead = modeleExistant.Parametres.TermRead;
-            TailleHeader = modeleExistant.Parametres.TailleHeader;
-            GereSrq = modeleExistant.Parametres.GereSrq;
-            SrqOn = modeleExistant.Parametres.SrqOn;
-            SrqOff = modeleExistant.Parametres.SrqOff;
+            ChaineInit = m.Parametres.ChaineInit;
+            ConfEntree = m.Parametres.ConfEntree;
+            ExeMesure = m.Parametres.ExeMesure;
+            CommandeGate = m.Parametres.CommandeGate;
+            CommandeMesureMultiple = m.Parametres.CommandeMesureMultiple;
+            CommandeFetchFresh = m.Parametres.CommandeFetchFresh;
+            TermWrite = m.Parametres.TermWrite;
+            TermRead = m.Parametres.TermRead;
+            TailleHeader = m.Parametres.TailleHeader;
+            GereSrq = m.Parametres.GereSrq;
+            SrqOn = m.Parametres.SrqOn;
+            SrqOff = m.Parametres.SrqOff;
 
-            // Coche les gates déjà enregistrées (match insensible aux espaces).
+            // Coche les gates du modèle (match insensible aux espaces), décoche les autres.
             var gatesConnues = new HashSet<string>(
-                modeleExistant.Gates.Select(g => NormaliserLibelleGate(g)),
+                m.Gates.Select(g => NormaliserLibelleGate(g)),
                 StringComparer.OrdinalIgnoreCase);
             foreach (var g in GatesOptions)
                 g.EstCoche = gatesConnues.Contains(NormaliserLibelleGate(g.Libelle));
 
-            EntreesTexte = string.Join(", ", modeleExistant.Entrees);
-            CouplagesTexte = string.Join(", ", modeleExistant.Couplages);
+            EntreesTexte = string.Join(", ", m.Entrees);
+            CouplagesTexte = string.Join(", ", m.Couplages);
 
-            ChargerReglages(modeleExistant.Reglages);
-            ChargerIntervalle(modeleExistant.Parametres.Intervalle);
+            // On repart à blanc sur les champs de réglages avant de recharger : sinon une 2e copie
+            // (ou une copie sur un formulaire déjà rempli) laisserait traîner d'anciennes valeurs.
+            ReinitialiserChampsReglages();
+            ChargerReglages(m.Reglages);
+            ChargerIntervalle(m.Parametres.Intervalle);
+        }
+
+        /// <summary>Vide tous les champs « réglages » du formulaire (avant un rechargement/copie).</summary>
+        private void ReinitialiserChampsReglages()
+        {
+            ImpedanceA50 = ImpedanceA1M = ImpedanceB50 = ImpedanceB1M = ImpedanceC50 = ImpedanceC1M = string.Empty;
+            CouplageAAc = CouplageADc = CouplageBAc = CouplageBDc = CouplageCAc = CouplageCDc = string.Empty;
+            FiltreAOn = FiltreAOff = FiltreBOn = FiltreBOff = FiltreCOn = FiltreCOff = string.Empty;
+            TriggerA = TriggerB = TriggerC = string.Empty;
+            ModeFreqA = ModeFreqB = ModeFreqC = ModeTiab = string.Empty;
+            ResolutionAuto = ResolutionRecip = ResolutionCont = string.Empty;
+            RefInt = RefExt = string.Empty;
         }
 
         /// <summary>Recopie les templates d'intervalle du modèle vers les champs du formulaire.</summary>

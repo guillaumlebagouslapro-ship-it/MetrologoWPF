@@ -84,6 +84,32 @@
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="20,0,20,0">
             <StackPanel>
 
+                <!-- Copier les réglages d'un modèle existant (ex. 53230A -> 53220A) -->
+                <Border Style="{StaticResource FormSectionStyle}">
+                    <StackPanel>
+                        <TextBlock Text="Copier les réglages d'un modèle existant" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Recopie toutes les commandes (init, mesure, gates, intervalle, voies, réglages) du modèle choisi SANS toucher à l'identité ci-dessous. Pratique pour créer un 53220A à partir d'un 53230A : réglages identiques, fiche distincte."
+                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox Grid.Column="0"
+                                      ItemsSource="{Binding ModelesPourCopie}"
+                                      SelectedItem="{Binding ModeleSourceCopie, Mode=TwoWay}"
+                                      DisplayMemberPath="Nom"
+                                      Padding="10,6"/>
+                            <Button Grid.Column="2"
+                                    Content="Copier les réglages"
+                                    Command="{Binding CopierReglagesDepuisSourceCommand}"
+                                    Padding="14,6"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- Identification -->
                 <Border Style="{StaticResource FormSectionStyle}">
                     <StackPanel>
@@ -111,7 +137,7 @@
                             </StackPanel>
                         </Grid>
 
-                        <TextBlock Text="Ces motifs servent à reconnaître automatiquement l'appareil lors d'un futur scan (matching « contains » insensible à la casse)."
+                        <TextBlock Text="Servent à reconnaître l'appareil lors d'un futur scan. Le MODÈLE doit correspondre EXACTEMENT (ex. « 53220A » ≠ « 53230A ») ; le fabricant est tolérant (« contient »). Insensible à la casse."
                                    FontSize="10" TextWrapping="Wrap"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                     </StackPanel>
