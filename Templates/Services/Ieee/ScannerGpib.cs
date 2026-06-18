@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -135,17 +136,31 @@ namespace Metrologo.Services.Ieee
                 }
             }
 
-            // ---- Bus LAN (LXI / VXI-11) : Find() des ressources TCPIP::INSTR. Pas de balayage
-            //      séquentiel ici (on ne sonde pas une plage d'IP) : VISA ne remonte que les
-            //      appareils qu'il découvre sur le sous-réseau ou configurés dans NI-MAX. ----
-            List<string> ressourcesLan;
-            try { ressourcesLan = new List<string>(rm.Find("TCPIP?*INSTR")); }
-            catch (NativeVisaException) { ressourcesLan = new List<string>(); }
+            // ---- Bus LAN (LXI) : Find() des ressources TCPIP. On interroge DEUX familles —
+            //      "TCPIP?*INSTR" (canal VXI-11, inst0::INSTR) ET "TCPIP?*SOCKET" (socket SCPI
+            //      brut, port 5025) : Find("...INSTR") seul NE renvoie PAS les ressources socket.
+            //      C'est essentiel en liaison directe (link-local 169.254.x.x), où le VXI-11 est
+            //      souvent injoignable et où le nom mDNS « xxx.local » ne se résout pas pour une
+            //      socket brute — seule la ressource SOCKET (IP numérique) répond alors. Pas de
+            //      balayage d'IP : VISA ne remonte que ce qu'il découvre ou ce qui est dans NI-MAX.
+            var ressourcesLan = new List<string>();
+            try { ressourcesLan.AddRange(rm.Find("TCPIP?*INSTR")); } catch (NativeVisaException) { }
+            try { ressourcesLan.AddRange(rm.Find("TCPIP?*SOCKET")); } catch (NativeVisaException) { }
 
-            foreach (var res in ressourcesLan)
+            var lan = new List<ResultatScanGpib>();
+            foreach (var res in ressourcesLan.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 ct.ThrowIfCancellationRequested();
-                var r = await Task.Run(() => InterrogerRessource(rm, res, timeoutMs), ct);
+                lan.Add(await Task.Run(() => InterrogerRessource(rm, res, timeoutMs), ct));
+            }
+
+            // Un même appareil expose souvent VXI-11 ET socket : on ne garde que les canaux qui
+            // répondent, dédupliqués par identité IDN (un appareil physique = une seule ligne).
+            // En cas de double réponse, on préfère le VXI-11 (protocole IEEE-488 complet).
+            foreach (var r in lan.Where(x => x.Repond)
+                         .GroupBy(x => $"{x.Fabricant}|{x.Modele}|{x.NumeroSerie}", StringComparer.OrdinalIgnoreCase)
+                         .Select(g => g.OrderBy(x => EstSocket(x.Ressource) ? 1 : 0).First()))
+            {
                 resultats.Add(r);
                 progress?.Report(r);
             }
@@ -197,6 +212,11 @@ namespace Metrologo.Services.Ieee
             var ml = _regexTcpip.Match(resource);
             if (ml.Success) hote = ml.Groups[1].Value;
 
+            // Ressource socket déjà découverte (port 5025) : interrogation directe en mode socket
+            // (terminateur LF, pas d'EOI). Pas la peine de tenter le VXI-11, ce n'est pas ce canal.
+            if (EstSocket(resource))
+                return TenterIdn(rm, resource, timeoutMs, terminateurLf: true, board, addr, typeBus, hote);
+
             // On tente d'abord le canal découvert (VXI-11, inst0::INSTR), qui supporte tout
             // l'IEEE-488 (Device Clear, status byte). S'il ne répond pas — fréquent quand le
             // VXI-11 est bloqué par un pare-feu ou capricieux en link-local — on bascule sur le
@@ -220,6 +240,10 @@ namespace Metrologo.Services.Ieee
         // Port "SCPI raw socket" standard des instruments modernes (Keysight, R&S, Tektronix...).
         // Pourra devenir un champ du catalogue si un appareil utilise un autre port.
         private const int PortSocketScpi = 5025;
+
+        // Une ressource VISA socket brut se termine par "::SOCKET" (ex "TCPIP0::169.254.1.2::5025::SOCKET").
+        private static bool EstSocket(string resource)
+            => resource.EndsWith("SOCKET", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Ouvre une ressource VISA, envoie *IDN? et construit le résultat. terminateurLf =
         /// vrai pour un socket (pas d'EOI : la fin de ligne se repère sur le LF).</summary>
