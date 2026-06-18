@@ -148,6 +148,7 @@ namespace Metrologo.Services
             int gateInscrite = gateIndexOverride ?? config.GateIndex;
             bool estStab = config.TypeMesure == TypeMesure.Stabilite;
             bool estTachy = EnTetesMesureHelper.EstTachymetre(config.TypeMesure);
+            bool estInterval = config.TypeMesure == TypeMesure.Interval;
 
             await Task.Run(() =>
             {
@@ -199,6 +200,7 @@ namespace Metrologo.Services
                 string nomTemplate =
                     estStab ? "METROLOGO_Stab.xlsx" :
                     estTachy ? "METROLOGO_Tachy.xlsx" :
+                    estInterval ? "METROLOGO_Interval.xlsx" :
                     "METROLOGO.xlsx";
                 string templatePath = Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, "Templates", nomTemplate);
