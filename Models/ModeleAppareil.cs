@@ -152,6 +152,16 @@ namespace Metrologo.Models
         /// est false (défaut), le panneau est masqué et rien n'est envoyé — évite d'envoyer des
         /// commandes 53230A à un Stanford.</summary>
         public CommandesIntervalle Intervalle { get; set; } = new();
+
+        /// <summary>Copie profonde : pour cloner les réglages d'un modèle vers un autre (ex.
+        /// 53230A → 53220A) SANS oublier les champs « cachés » du formulaire (ModeRapideActif,
+        /// VerifArmingActive, CommandeBulkInit…) ni partager les références mutables.</summary>
+        public ParametresIeee Cloner()
+        {
+            var c = (ParametresIeee)MemberwiseClone();
+            c.CommandesGateParSlot = new Dictionary<int, string>(CommandesGateParSlot);
+            return c;
+        }
     }
 
     /// <summary>

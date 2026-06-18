@@ -60,6 +60,10 @@ namespace Metrologo.ViewModels
         private readonly ModeleAppareil? _modeleExistant;
         private readonly string _utilisateurActuel;
 
+        // Copie profonde des paramètres du modèle source (bouton « Copier les réglages ») : sert de
+        // base à ConstruireParametres pour hériter aussi des champs non exposés au formulaire.
+        private ParametresIeee? _parametresClone;
+
         public string Titre => _modeleExistant != null ? "Modifier un appareil" : "Enregistrer un appareil";
         public bool EstModification => _modeleExistant != null;
 
@@ -73,6 +77,11 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private string _commandeGate = ":FREQ:APER {0}";
         [ObservableProperty] private string _commandeMesureMultiple = string.Empty;
         [ObservableProperty] private string _commandeFetchFresh = string.Empty;
+
+        /// <summary>Mode rapide :INIT:CONT ON + boucle :FETCh? (OK 53131A). À LAISSER DÉCOCHÉ sur
+        /// 53220A/53230A et compteurs modernes : leur :INIT:CONT ON + :FETCh? renvoie -113 / -230
+        /// / -420. Défaut décoché (sûr) pour un nouvel appareil.</summary>
+        [ObservableProperty] private bool _modeRapideActif;
 
         [ObservableProperty] private int _termWrite = 1;
         [ObservableProperty] private int _termRead = 10;
@@ -244,6 +253,12 @@ namespace Metrologo.ViewModels
         {
             if (ModeleSourceCopie == null) return;
             ChargerDepuisModele(ModeleSourceCopie, inclureIdentite: false);
+            // On mémorise une copie PROFONDE des paramètres source : elle servira de base à
+            // ConstruireParametres, pour hériter aussi des champs NON exposés au formulaire
+            // (ModeRapideActif, VerifArmingActive, CommandeBulkInit...). Sans ça, la nouvelle fiche
+            // repartait sur les défauts (ModeRapideActif=true + pas de streaming) → erreurs SCPI
+            // -113 / -230 / -420 sur un compteur moderne comme le 53220A.
+            _parametresClone = ModeleSourceCopie.Parametres.Cloner();
             JournalLog.Info(CategorieLog.Configuration, "CATALOGUE_COPIE_REGLAGES",
                 $"Réglages copiés depuis « {ModeleSourceCopie.Nom} » (identité conservée).");
         }
@@ -269,6 +284,7 @@ namespace Metrologo.ViewModels
             CommandeGate = m.Parametres.CommandeGate;
             CommandeMesureMultiple = m.Parametres.CommandeMesureMultiple;
             CommandeFetchFresh = m.Parametres.CommandeFetchFresh;
+            ModeRapideActif = m.Parametres.ModeRapideActif;
             TermWrite = m.Parametres.TermWrite;
             TermRead = m.Parametres.TermRead;
             TailleHeader = m.Parametres.TailleHeader;
@@ -558,8 +574,9 @@ namespace Metrologo.ViewModels
         private ParametresIeee ConstruireParametres()
         {
             // Part des paramètres existants pour préserver les champs non exposés ici
-            // (Legacy, AdresseFixeParDefaut, CommandesGateParSlot, ModeRapideActif…).
-            var p = _modeleExistant?.Parametres ?? new ParametresIeee();
+            // (Legacy, AdresseFixeParDefaut, CommandesGateParSlot, ModeRapideActif, VerifArmingActive,
+            // CommandeBulkInit…). Priorité : modèle en édition > clone d'un modèle copié > défauts.
+            var p = _modeleExistant?.Parametres ?? _parametresClone ?? new ParametresIeee();
 
             p.ChaineInit = ChaineInit ?? string.Empty;
             p.ConfEntree = ConfEntree ?? string.Empty;
@@ -567,6 +584,7 @@ namespace Metrologo.ViewModels
             p.CommandeGate = CommandeGate ?? string.Empty;
             p.CommandeMesureMultiple = CommandeMesureMultiple ?? string.Empty;
             p.CommandeFetchFresh = CommandeFetchFresh ?? string.Empty;
+            p.ModeRapideActif = ModeRapideActif;
             p.TermWrite = TermWrite;
             p.TermRead = TermRead;
             p.TailleHeader = TailleHeader;
