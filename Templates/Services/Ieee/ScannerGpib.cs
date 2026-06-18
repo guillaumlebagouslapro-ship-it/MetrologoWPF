@@ -136,30 +136,39 @@ namespace Metrologo.Services.Ieee
                 }
             }
 
-            // ---- Bus LAN (LXI) : Find() des ressources TCPIP. On interroge DEUX familles —
-            //      "TCPIP?*INSTR" (canal VXI-11, inst0::INSTR) ET "TCPIP?*SOCKET" (socket SCPI
-            //      brut, port 5025) : Find("...INSTR") seul NE renvoie PAS les ressources socket.
-            //      C'est essentiel en liaison directe (link-local 169.254.x.x), où le VXI-11 est
-            //      souvent injoignable et où le nom mDNS « xxx.local » ne se résout pas pour une
-            //      socket brute — seule la ressource SOCKET (IP numérique) répond alors. Pas de
-            //      balayage d'IP : VISA ne remonte que ce qu'il découvre ou ce qui est dans NI-MAX.
-            var ressourcesLan = new List<string>();
-            try { ressourcesLan.AddRange(rm.Find("TCPIP?*INSTR")); } catch (NativeVisaException) { }
-            try { ressourcesLan.AddRange(rm.Find("TCPIP?*SOCKET")); } catch (NativeVisaException) { }
+            // ---- Bus LAN (LXI) : on récupère les ressources TCPIP via Find("?*") (toutes
+            //      interfaces) puis on filtre sur "TCPIP". Find("?*") est celui de « Lister les
+            //      ressources VISA » : il remonte aussi bien le canal VXI-11 (inst0::INSTR) que le
+            //      socket SCPI brut (port 5025, ::SOCKET), là où Find("TCPIP?*INSTR") seul oublie
+            //      les sockets. C'est essentiel en liaison directe (link-local 169.254.x.x) : le
+            //      VXI-11 y est souvent injoignable et le nom mDNS « xxx.local » ne se résout pas
+            //      pour une socket brute — seule la ressource SOCKET (IP numérique) répond alors.
+            //      Pas de balayage d'IP : VISA ne remonte que ce qu'il découvre ou ce qui est dans NI-MAX.
+            List<string> toutesRessources;
+            try { toutesRessources = new List<string>(rm.Find("?*")); }
+            catch (NativeVisaException) { toutesRessources = new List<string>(); }
 
             var lan = new List<ResultatScanGpib>();
-            foreach (var res in ressourcesLan.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var res in toutesRessources
+                         .Where(r => r.StartsWith("TCPIP", StringComparison.OrdinalIgnoreCase))
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 ct.ThrowIfCancellationRequested();
                 lan.Add(await Task.Run(() => InterrogerRessource(rm, res, timeoutMs), ct));
             }
 
-            // Un même appareil expose souvent VXI-11 ET socket : on ne garde que les canaux qui
-            // répondent, dédupliqués par identité IDN (un appareil physique = une seule ligne).
-            // En cas de double réponse, on préfère le VXI-11 (protocole IEEE-488 complet).
-            foreach (var r in lan.Where(x => x.Repond)
+            // Un même appareil expose souvent VXI-11 ET socket. On garde les canaux qui répondent,
+            // dédupliqués par identité IDN (un appareil physique = une seule ligne ; VXI-11 préféré
+            // en cas de double réponse). Si RIEN ne répond, on affiche quand même les ressources
+            // découvertes (avec leur erreur) pour rester diagnosticable au lieu de masquer le LAN.
+            var aGarder = lan.Where(x => x.Repond)
                          .GroupBy(x => $"{x.Fabricant}|{x.Modele}|{x.NumeroSerie}", StringComparer.OrdinalIgnoreCase)
-                         .Select(g => g.OrderBy(x => EstSocket(x.Ressource) ? 1 : 0).First()))
+                         .Select(g => g.OrderBy(x => EstSocket(x.Ressource) ? 1 : 0).First())
+                         .ToList();
+            if (aGarder.Count == 0)
+                aGarder = lan;
+
+            foreach (var r in aGarder)
             {
                 resultats.Add(r);
                 progress?.Report(r);
