@@ -10,7 +10,7 @@
 ; ============================================================
 
 #define SuiteVersion "1.0.0"
-#define FeedRoot "M:\exe_spe\Data_Metrologo"
+#define FeedRoot "M:\exe_spe\Data_Metrologo\SUITE ASERTI Guillaume"
 
 [Setup]
 AppId={{B7E5B2A0-1C3D-4E5F-9A8B-1234567890AB}

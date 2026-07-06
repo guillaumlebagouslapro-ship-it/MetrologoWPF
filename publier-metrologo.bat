@@ -11,7 +11,7 @@ REM --- Configuration (a adapter si besoin) --------------------
 set APP_ID=Metrologo
 set MAIN_EXE=Metrologo.exe
 set PROJET=Metrologo.csproj
-set SORTIE_RESEAU=M:\exe_spe\Data_Metrologo\Metrologo
+set "SORTIE_RESEAU=M:\exe_spe\Data_Metrologo\SUITE ASERTI Guillaume\Metrologo"
 set SPLASH=Resources\splash.gif
 set TMP=%~dp0_publish_tmp
 REM ------------------------------------------------------------

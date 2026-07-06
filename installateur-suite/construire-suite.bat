@@ -8,7 +8,7 @@ REM  cocher) et le depose sur le reseau M:.
 REM  Inno Setup est installe automatiquement s'il est absent.
 REM ============================================================
 
-set SORTIE=M:\exe_spe\Data_Metrologo\Suite
+set "SORTIE=M:\exe_spe\Data_Metrologo\SUITE ASERTI Guillaume"
 
 REM --- Localiser le compilateur Inno Setup (ISCC.exe) ---
 call :FIND_ISCC

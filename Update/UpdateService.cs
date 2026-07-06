@@ -20,7 +20,7 @@ public static class UpdateService
     /// Dossier reseau ou <c>publier-metrologo.bat</c> depose les versions.
     /// DOIT etre identique au chemin de sortie du script de publication.
     /// </summary>
-    private const string FeedPath = @"M:\exe_spe\Data_Metrologo\Metrologo";
+    private const string FeedPath = @"M:\exe_spe\Data_Metrologo\SUITE ASERTI Guillaume\Metrologo";
 
     /// <summary>
     /// Recherche et applique une eventuelle mise a jour.
