@@ -45,6 +45,21 @@ Publier une nouvelle version d'une app **ne nécessite pas** de reconstruire la 
 4. Chaque application cochée s'installe. Ensuite, elles se mettent à jour toutes
    seules au lancement.
 
+## Garde-fous (déjà installé / à jour / forcer)
+
+Pour chaque composant coché, l'installateur détecte l'état déjà installé :
+
+- **Pas installé** → installation directe.
+- **Déjà installé ET à jour** (même version que celle du réseau) → demande :
+  *« déjà installé et à jour (vX). Réinstaller quand même (forcer) ? »*
+- **Déjà installé, version différente disponible** → demande :
+  *« installé en vX, version vY disponible. Installer maintenant ? »*
+
+La version installée est lue dans le registre (entrée de désinstallation Velopack) ;
+la version disponible est lue sur les noms de `.nupkg` du dossier réseau. Répondre
+**Oui** (re)lance le `Setup.exe` qui remplace par la dernière version ; **Non**
+ignore ce composant.
+
 ## Fichiers
 
 | Fichier | Rôle |
