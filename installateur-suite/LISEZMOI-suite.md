@@ -24,8 +24,9 @@ Suite-ASERTI-Setup.exe
 - Les deux applications doivent **déjà être publiées** sur `M:` (via leurs scripts
   `publier-asertools.bat` / `publier-metrologo.bat`). Si un `Setup.exe` manque, le
   composant est simplement ignoré avec un avertissement.
-- Pour **construire** la suite : **Inno Setup 6** installé sur le poste de build
-  (`winget install JRSoftware.InnoSetup`).
+- Pour **construire** la suite : rien à préparer — `construire-suite.bat` installe
+  automatiquement **Inno Setup** s'il est absent (via winget). (Sinon, installation
+  manuelle : https://jrsoftware.org/isdl.php)
 
 ## Construire / mettre à jour la suite (dev, au bureau, `M:` connecté)
 
