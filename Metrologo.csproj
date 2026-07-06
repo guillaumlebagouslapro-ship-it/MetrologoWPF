@@ -7,6 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Resources\logo.ico</ApplicationIcon>
+    <!-- Point d'entree explicite (Program.Main) requis par Velopack pour gerer
+         install / mise a jour / desinstallation avant l'ouverture de la fenetre. -->
+    <StartupObject>Metrologo.Program</StartupObject>
     <AssemblyTitle>Metrologo</AssemblyTitle>
     <Product>Metrologo</Product>
     <Company>ASERTI</Company>
@@ -17,6 +20,7 @@
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
     <PackageReference Include="WPF-UI" Version="3.0.4" />
     <PackageReference Include="NationalInstruments.Visa" Version="25.3.0.11" />
   </ItemGroup>

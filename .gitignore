@@ -402,3 +402,6 @@ FodyWeavers.xsd
 
 # Sortie de l outil graphify (graphe de connaissances, non versionne)
 graphify-out/
+
+# Dossier temporaire cree par publier-metrologo.bat
+_publish_tmp/

@@ -34,6 +34,14 @@ namespace Metrologo
             Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             StartupLap("ShutdownMode set");
 
+            // Mise a jour automatique (Velopack) : verifie le dossier reseau, telecharge
+            // et applique une version plus recente puis redemarre. Sans effet en dev ou
+            // si M: est indisponible. Place ici (avant les prerequis) pour tourner sur la
+            // derniere version des le lancement. ShutdownMode explicite ci-dessus evite
+            // que l'app se ferme pendant l'affichage de la fenetre de progression.
+            await UpdateService.CheckAndApplyAsync();
+            StartupLap("UpdateService.CheckAndApplyAsync");
+
             // Attribue automatiquement la fenêtre active comme Owner de toute modale sans
             // Owner explicite. Sans ça, ShowDialog peut passer derrière la principale
             // (désactivée → app gelée en apparence). Windows maintient alors la modale
