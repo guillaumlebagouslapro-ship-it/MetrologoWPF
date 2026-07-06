@@ -25,8 +25,9 @@ REM 1) Verifier l'outil vpk (Velopack CLI)
 where vpk >nul 2>&1
 if errorlevel 1 goto NO_VPK
 
-REM 2) Verifier l'acces au dossier reseau
-if not exist "%SORTIE_RESEAU%\" goto NO_RESEAU
+REM 2) Verifier l'acces au reseau, puis creer le dossier de sortie si absent
+if not exist "M:\exe_spe\Data_Metrologo\" goto NO_RESEAU
+if not exist "%SORTIE_RESEAU%\" mkdir "%SORTIE_RESEAU%"
 
 REM 3) Numero de version : auto-calcule d'apres la date/heure (toujours croissant)
 REM    Format 1.AAMMJJ.HHMM  ->  ex 1.260706.1043 (le 06/07/2026 a 10h43)
