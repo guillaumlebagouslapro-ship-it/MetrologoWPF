@@ -11,15 +11,16 @@ using Forme = System.Windows.Shapes;
 namespace Metrologo.Themes;
 
 /// <summary>Thème saisonnier affiché sur l'écran principal.</summary>
-public enum Saison { Aucune, Noel, Ski, Ete }
+public enum Saison { Aucune, Noel, Ski, Paques, Ete }
 
 /// <summary>
 /// Décorations saisonnières discrètes (guirlande, neige, télécabines, soleil...).
 /// <para/>
 /// La saison est choisie au démarrage d'après la date du jour, chaque année :
-/// Noël en décembre, ski en janvier-février, été en juillet-août, rien le reste du
-/// temps. Pour tester un thème avant sa date : variable d'environnement
-/// <c>ASERTI_THEME</c> = noel | ski | ete | aucun.
+/// Noël en décembre, ski en janvier-février, Pâques du lundi de Pâques pendant deux
+/// semaines (date calculée), été en juillet-août, rien le reste du temps. Pour tester un
+/// thème avant sa date : variable d'environnement
+/// <c>ASERTI_THEME</c> = noel | ski | paques | ete | aucun.
 /// <para/>
 /// Tout est purement visuel : non cliquable (IsHitTestVisible = false), animations
 /// limitées à 30 images/s et suspendues d'un coup par <see cref="Pause"/> (pendant une
@@ -42,10 +43,16 @@ public static class DecorSaisonnier
             {
                 "noel" or "noël" => Saison.Noel,
                 "ski" => Saison.Ski,
+                "paques" or "pâques" => Saison.Paques,
                 "ete" or "été" => Saison.Ete,
                 _ => Saison.Aucune,
             };
         }
+
+        // Pâques : du lundi de Pâques inclus, pendant 14 jours.
+        DateTime lundiPaques = DimanchePaques(jour.Year).AddDays(1);
+        if (jour.Date >= lundiPaques && jour.Date < lundiPaques.AddDays(14))
+            return Saison.Paques;
 
         return jour.Month switch
         {
@@ -54,6 +61,20 @@ public static class DecorSaisonnier
             7 or 8 => Saison.Ete,   // 1er juillet -> 31 août
             _ => Saison.Aucune,
         };
+    }
+
+    /// <summary>Dimanche de Pâques (calendrier grégorien, algorithme de Meeus/Jones/Butcher).</summary>
+    public static DateTime DimanchePaques(int annee)
+    {
+        int a = annee % 19, b = annee / 100, c = annee % 100;
+        int d = b / 4, e = b % 4, f = (b + 8) / 25, g = (b - f + 1) / 3;
+        int h = (19 * a + b - d - g + 15) % 30;
+        int i = c / 4, k = c % 4;
+        int l = (32 + 2 * e + 2 * i - h - k) % 7;
+        int m = (a + 11 * h + 22 * l) / 451;
+        int mois = (h + l - 7 * m + 114) / 31;
+        int jour = (h + l - 7 * m + 114) % 31 + 1;
+        return new DateTime(annee, mois, jour);
     }
 
     // ------------------------------------------------------------------ pause globale
@@ -76,9 +97,10 @@ public static class DecorSaisonnier
 
     // ------------------------------------------------------------------ éléments
 
-    /// <summary>Neige qui tombe sur toute la zone (Noël, ski). Null sinon.</summary>
+    /// <summary>Neige qui tombe sur toute la zone (Noël, ski), pétales pastel (Pâques). Null sinon.</summary>
     public static FrameworkElement? Neige(Saison s)
     {
+        if (s == Saison.Paques) return new Scene(Petales);
         if (s != Saison.Noel && s != Saison.Ski) return null;
         bool ski = s == Saison.Ski;
         return new Scene((sc, l, h) =>
@@ -112,16 +134,18 @@ public static class DecorSaisonnier
     }
 
     /// <summary>Bande décorative à poser sous une barre de navigation / un en-tête :
-    /// guirlande (Noël), câble + télécabines (ski), mouettes (été). Hauteur conseillée : 52.</summary>
+    /// guirlande (Noël), câble + télécabines (ski), fanions pastel (Pâques), mouettes (été).
+    /// Hauteur conseillée : 52.</summary>
     public static FrameworkElement? Bande(Saison s) => s switch
     {
         Saison.Noel => new Scene(Guirlande),
         Saison.Ski => new Scene(Telecabines),
+        Saison.Paques => new Scene(Fanions),
         Saison.Ete => new Scene(Mouettes),
         _ => null,
     };
 
-    /// <summary>Décor de fond d'un bandeau ou en-tête (congère, montagnes, soleil + vagues),
+    /// <summary>Décor de fond d'un bandeau ou en-tête (congère, montagnes, prairie + œufs, soleil + vagues),
     /// découpé aux coins arrondis <paramref name="rayon"/>. <paramref name="sombre"/> = fond
     /// marine (Metrologo) ou blanc (Asertools).</summary>
     public static FrameworkElement? FondBandeau(Saison s, bool sombre, double rayon)
@@ -134,6 +158,7 @@ public static class DecorSaisonnier
             {
                 case Saison.Noel: Congere(sc, l); break;
                 case Saison.Ski: Montagnes(sc, l, h, sombre); break;
+                case Saison.Paques: Prairie(sc, l, h, sombre); break;
                 case Saison.Ete: SoleilEtVagues(sc, l, h, sombre); break;
             }
         });
@@ -172,6 +197,20 @@ public static class DecorSaisonnier
                 c.Margin = new Thickness(0, -19, -14, 0);
                 c.RenderTransform = new RotateTransform(14, 18, 16);
                 return c;
+            case Saison.Paques:
+                // Serre-tête à oreilles de lapin, centré sur l'icône.
+                c.Width = 36; c.Height = 30;
+                var bandeau = Chemin("M4 29 Q 18 19 32 29", null);
+                bandeau.Stroke = Pinceau("#C3B1E1");
+                bandeau.StrokeThickness = 3;
+                bandeau.StrokeStartLineCap = PenLineCap.Round;
+                bandeau.StrokeEndLineCap = PenLineCap.Round;
+                c.Children.Add(Oreille(7, 1, -14));
+                c.Children.Add(Oreille(19, 1, 14));
+                c.Children.Add(bandeau);
+                c.HorizontalAlignment = HorizontalAlignment.Center;
+                c.Margin = new Thickness(0, -25, 0, 0);
+                return c;
             case Saison.Ete:
                 c.Width = 40; c.Height = 16;
                 c.Children.Add(Rect(2, 3, 15, 11, 5, "#1F2937"));
@@ -201,6 +240,7 @@ public static class DecorSaisonnier
         {
             Saison.Noel => ("Joyeuses fêtes", "#FBE7E7", "#A1231B"),
             Saison.Ski => ($"Bonne année {DateTime.Today.Year}", "#E2EFFA", "#12568A"),
+            Saison.Paques => ("Joyeuses Pâques", "#EFE7FA", "#5B2B91"),
             Saison.Ete => ("Bel été !", "#FFEFD6", "#8A4B00"),
             _ => ("", "", ""),
         };
@@ -323,6 +363,148 @@ public static class DecorSaisonnier
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
             });
         }
+    }
+
+    private static readonly string[] Pastels = { "#F4A7B9", "#F7D774", "#9ED9C3", "#C3B1E1", "#A7CDF2" };
+
+    private static void Petales(Scene sc, double l, double h)
+    {
+        var r = new Alea(5);
+        int n = (int)Math.Round(14 * Math.Max(0.5, l / 1180.0));
+        for (int i = 0; i < n; i++)
+        {
+            double duree = 16 + r.Suivant() * 10;
+            var petale = new Forme.Ellipse
+            {
+                Width = 7,
+                Height = 4.5,
+                Fill = Pinceau(i % 3 == 0 ? "#FFFFFF" : "#F4A7B9"),
+                Stroke = Pinceau("#E9B7C6"),
+                StrokeThickness = 0.5,
+                Opacity = 0.75,
+            };
+            Canvas.SetLeft(petale, r.Suivant() * l);
+            var rotation = new RotateTransform(0, 3.5, 2.25);
+            var chute = new TranslateTransform();
+            var groupe = new TransformGroup();
+            groupe.Children.Add(rotation);
+            groupe.Children.Add(chute);
+            petale.RenderTransform = groupe;
+            sc.Children.Add(petale);
+
+            var debut = TimeSpan.FromSeconds(-r.Suivant() * duree);
+            sc.Animer(chute, TranslateTransform.YProperty, Boucle(-10, h + 10, duree, debut));
+            sc.Animer(chute, TranslateTransform.XProperty, Boucle(0, (r.Suivant() < 0.5 ? -1 : 1) * 60, duree, debut));
+            sc.Animer(rotation, RotateTransform.AngleProperty, Boucle(0, r.Suivant() < 0.5 ? 360 : -360, 4 + r.Suivant() * 4, debut));
+        }
+    }
+
+    private static void Fanions(Scene sc, double l, double h)
+    {
+        int festons = Math.Max(2, (int)Math.Round(l / 300));
+        const double creux = 9;
+        const int parFeston = 6;
+        double pas = l / festons;
+
+        var d = new StringBuilder("M 0 2");
+        int n = 0;
+        var fanions = new List<(double x, double y)>();
+        for (int i = 0; i < festons; i++)
+        {
+            double x0 = i * pas, x1 = x0 + pas, xm = x0 + pas / 2;
+            d.Append(F($" Q {xm} {2 + 2 * creux} {x1} 2"));
+            for (int k = 1; k <= parFeston; k++)
+            {
+                double t = k / (double)(parFeston + 1);
+                fanions.Add(((1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * xm + t * t * x1,
+                             2 + 4 * (1 - t) * t * creux));
+            }
+        }
+        var fil = Chemin(d.ToString(), null);
+        fil.Stroke = Pinceau("#B9A5D6");
+        fil.StrokeThickness = 1.5;
+        sc.Children.Add(fil);
+
+        foreach (var (x, y) in fanions)
+        {
+            var fanion = Chemin("M0 0 L14 0 L7 15 Z", Pastels[n % Pastels.Length]);
+            Canvas.SetLeft(fanion, x - 7);
+            Canvas.SetTop(fanion, y);
+            var balance = new RotateTransform(0, 7, 0);
+            fanion.RenderTransform = balance;
+            sc.Children.Add(fanion);
+            sc.Animer(balance, RotateTransform.AngleProperty, new DoubleAnimation(-5, 5, new Duration(TimeSpan.FromSeconds(3)))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                BeginTime = TimeSpan.FromSeconds(-((n * 0.53) % 3)),
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            });
+            n++;
+        }
+    }
+
+    private static void Prairie(Scene sc, double l, double h, bool sombre)
+    {
+        double xLapin = l - (sombre ? 470 : 340);
+
+        // Oreilles de lapin qui sortent de l'herbe de temps en temps (dessinées avant l'herbe).
+        var lapin = new Canvas();
+        lapin.Children.Add(Oreille(0, 0, -10));
+        lapin.Children.Add(Oreille(13, 0, 10));
+        Canvas.SetLeft(lapin, xLapin);
+        Canvas.SetTop(lapin, h - 32);
+        var montee = new TranslateTransform(0, 28);
+        lapin.RenderTransform = montee;
+        sc.Children.Add(lapin);
+        var coucou = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(11), RepeatBehavior = RepeatBehavior.Forever };
+        coucou.KeyFrames.Add(new LinearDoubleKeyFrame(28, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        coucou.KeyFrames.Add(new LinearDoubleKeyFrame(28, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(5))));
+        coucou.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(5.7)), new SineEase()));
+        coucou.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(8))));
+        coucou.KeyFrames.Add(new EasingDoubleKeyFrame(28, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(8.7)), new SineEase()));
+        sc.Animer(montee, TranslateTransform.YProperty, coucou);
+
+        // Herbe : brins en dents de scie sur toute la largeur.
+        var herbe = new StringBuilder(F($"M 0 {h}"));
+        var r = new Alea(13);
+        for (double x = 0; x < l; x += 9)
+        {
+            double haut = 7 + r.Suivant() * 7;
+            herbe.Append(F($" L {x + 4.5} {h - haut} L {x + 9} {h - 2}"));
+        }
+        herbe.Append(F($" L {l} {h} Z"));
+        sc.Children.Add(Chemin(herbe.ToString(), sombre ? "#4E9A5B" : "#9ED39A"));
+
+        // Œufs décorés posés dans l'herbe.
+        double[] decalages = { 60, 98, 124 };
+        for (int i = 0; i < decalages.Length; i++)
+        {
+            var oeuf = new Canvas { Width = 15, Height = 19 };
+            oeuf.Children.Add(new Forme.Ellipse { Width = 15, Height = 19, Fill = Pinceau(Pastels[(i * 2) % Pastels.Length]) });
+            var motif = Chemin("M1.5 9 L4 7 L7.5 9.5 L11 7 L13.5 9", null);
+            motif.Stroke = Brushes.White;
+            motif.StrokeThickness = 1.4;
+            oeuf.Children.Add(motif);
+            Canvas.SetLeft(oeuf, xLapin + decalages[i]);
+            Canvas.SetTop(oeuf, h - 21 + (i == 1 ? 2 : 0));
+            oeuf.RenderTransform = new RotateTransform(i == 1 ? 12 : -8, 7.5, 9.5);
+            sc.Children.Add(oeuf);
+        }
+    }
+
+    /// <summary>Oreille de lapin (blanche, intérieur rose), inclinée de <paramref name="angle"/>.</summary>
+    private static Canvas Oreille(double x, double y, double angle)
+    {
+        var o = new Canvas { Width = 10, Height = 26 };
+        o.Children.Add(new Forme.Ellipse { Width = 10, Height = 26, Fill = Brushes.White, Stroke = Pinceau("#E5B8C8"), StrokeThickness = 1 });
+        var dedans = new Forme.Ellipse { Width = 5, Height = 18, Fill = Pinceau("#F4A7B9") };
+        Canvas.SetLeft(dedans, 2.5); Canvas.SetTop(dedans, 4);
+        o.Children.Add(dedans);
+        Canvas.SetLeft(o, x);
+        Canvas.SetTop(o, y);
+        o.RenderTransform = new RotateTransform(angle, 5, 26);
+        return o;
     }
 
     private static void Mouettes(Scene sc, double l, double h)
