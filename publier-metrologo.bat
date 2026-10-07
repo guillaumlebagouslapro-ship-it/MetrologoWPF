@@ -30,11 +30,18 @@ if not exist "M:\exe_spe\Data_Metrologo\" goto NO_RESEAU
 if not exist "%SORTIE_RESEAU%\" mkdir "%SORTIE_RESEAU%"
 
 REM 3) Numero de version : auto-calcule d'apres la date/heure (toujours croissant)
-REM    Format 1.AAMMJJ.HHMM  ->  ex 1.260706.1043 (le 06/07/2026 a 10h43)
-for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "Get-Date -Format '1.yyMMdd.HHmm'"`) do set AUTO_VER=%%v
+REM    Format 1.AAMMJJ.HMM  ->  ex 1.260706.1043 (le 06/07/2026 a 10h43),
+REM    1.261007.912 a 9h12 (pas de zero en tete : interdit en SemVer).
+REM    Une version tapee a la main doit rester PLUS GRANDE que la derniere
+REM    publiee (ex 1.3 < 1.260706.1451 : jamais vue comme une MAJ).
+for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "'1.' + (Get-Date -Format 'yyMMdd') + '.' + [int](Get-Date -Format 'HHmm')"`) do set AUTO_VER=%%v
 echo Version proposee (automatique, datee) : %AUTO_VER%
+:DEMANDE_VER
+set "VER="
 set /p VER="Entree = accepter, ou tape un numero manuel (ex 2.0.0) : "
 if "%VER%"=="" set VER=%AUTO_VER%
+powershell -NoProfile -ExecutionPolicy Bypass -File "outils\verifier-version.ps1" -Version "%VER%" -Feed "%SORTIE_RESEAU%"
+if errorlevel 1 goto DEMANDE_VER
 echo Version retenue : %VER%
 
 REM 4) Compilation autonome (runtime .NET embarque -> aucun prerequis .NET sur les postes)
