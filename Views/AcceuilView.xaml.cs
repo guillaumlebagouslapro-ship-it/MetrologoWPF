@@ -7,6 +7,16 @@ namespace Metrologo.Views
         public AcceuilView()
         {
             InitializeComponent();
+
+            string? version = UpdateService.VersionInstallee();
+            if (version != null)
+                MisesAJourTexte.Text = "Version " + HistoriqueMaj.Affichage(version);
+        }
+
+        /// <summary>Accueil > Mises à jour : historique + retour à la version précédente.</summary>
+        private void MisesAJour_Click(object sender, System.Windows.RoutedEventArgs e)
+        {
+            new MisesAJourWindow { Owner = System.Windows.Window.GetWindow(this) }.ShowDialog();
         }
 
         /// <summary>

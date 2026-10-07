@@ -1,0 +1,130 @@
+<Window x:Class="Metrologo.Views.MisesAJourWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mises à jour de Metrologo"
+        Icon="/Resources/logo.ico"
+        Width="720" Height="560" MinWidth="560" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Background="White" FontFamily="Segoe UI" FontSize="13">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="Navy" Color="#1E2D4F"/>
+        <SolidColorBrush x:Key="Orange" Color="#E89B2F"/>
+        <SolidColorBrush x:Key="Muted" Color="#6B7280"/>
+
+        <Style x:Key="BoutonMaj" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#1E2D4F"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Opacity" Value="0.88"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="b" Property="Background" Value="#C9CDD6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="BoutonOrange" TargetType="Button" BasedOn="{StaticResource BoutonMaj}">
+            <Setter Property="Background" Value="#E89B2F"/>
+        </Style>
+        <Style x:Key="BoutonSecondaire" TargetType="Button" BasedOn="{StaticResource BoutonMaj}">
+            <Setter Property="Background" Value="#EEF0F4"/>
+            <Setter Property="Foreground" Value="#1E2D4F"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24,20,24,18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- En-tête -->
+        <Grid Grid.Row="0" Margin="0,0,0,14">
+            <StackPanel>
+                <TextBlock Text="Mises à jour" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource Navy}"/>
+                <TextBlock x:Name="VersionTexte" Text="Version installée : ?" FontSize="14"
+                           FontWeight="SemiBold" Foreground="{StaticResource Orange}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <Image Source="/Resources/aserti-logo.png" Height="34" HorizontalAlignment="Right"
+                   VerticalAlignment="Top" RenderOptions.BitmapScalingMode="HighQuality"/>
+        </Grid>
+
+        <!-- Avertissement : MAJ suspendues / échouées / version de dev -->
+        <Border x:Name="BandeauAlerte" Grid.Row="1" Visibility="Collapsed" Margin="0,0,0,12"
+                Background="#FFF6E8" BorderBrush="#F5B856" BorderThickness="1" CornerRadius="8" Padding="14,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="AlerteTexte" TextWrapping="Wrap" VerticalAlignment="Center"
+                           Foreground="#7A4B00"/>
+                <Button x:Name="BoutonReactiver" Grid.Column="1" Margin="12,0,0,0"
+                        Style="{StaticResource BoutonOrange}" Content="Réactiver les mises à jour"
+                        Click="Reactiver_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- Version précédente : retour arrière (une seule version) -->
+        <Border Grid.Row="2" Background="#F7F8FA" CornerRadius="8" Padding="14,12" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Version précédente" FontWeight="SemiBold" Foreground="{StaticResource Navy}"/>
+                    <TextBlock x:Name="PrecedenteTexte" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+                <Button x:Name="BoutonRetour" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
+                        Style="{StaticResource BoutonMaj}" Content="Revenir à la version précédente"
+                        Click="Retour_Click"/>
+            </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="3" Text="Historique des mises à jour de ce poste" FontWeight="SemiBold"
+                   Foreground="{StaticResource Navy}" Margin="0,0,0,6"/>
+
+        <ListView x:Name="ListeHistorique" Grid.Row="4" BorderBrush="#E3E6EC" Foreground="#1E2D4F"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Date" Width="112" DisplayMemberBinding="{Binding Date}"/>
+                    <GridViewColumn Header="Opération" Width="100" DisplayMemberBinding="{Binding Operation}"/>
+                    <GridViewColumn Header="Version" Width="165" DisplayMemberBinding="{Binding Versions}"/>
+                    <GridViewColumn Header="Ce qui change" Width="240">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+        <TextBlock x:Name="HistoriqueVide" Grid.Row="4" Visibility="Collapsed" Margin="12"
+                   Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                   Text="Aucune mise à jour enregistrée pour l'instant sur ce poste."/>
+
+        <Button Grid.Row="5" HorizontalAlignment="Right" Margin="0,14,0,0" Content="Fermer"
+                Style="{StaticResource BoutonSecondaire}" IsCancel="True" Click="Fermer_Click"/>
+    </Grid>
+</Window>

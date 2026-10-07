@@ -34,17 +34,31 @@
             <!-- Changer d'utilisateur : accessible directement depuis l'accueil si on s'aperçoit
                  ici qu'on n'est pas le bon opérateur. Lié à la commande du MainViewModel (fenêtre
                  parente), car le DataContext de cette vue est l'AccueilViewModel. -->
-            <ui:Button Grid.Column="1"
-                       VerticalAlignment="Center"
-                       Appearance="Secondary"
-                       Cursor="Hand"
-                       Command="{Binding DataContext.ChangerUtilisateurCommand, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}}"
-                       ToolTip="Revenir à l'écran de connexion pour changer d'opérateur">
-                <StackPanel Orientation="Horizontal">
-                    <ui:SymbolIcon Symbol="Person24" FontSize="16" Margin="0,0,8,0"/>
-                    <TextBlock Text="Changer d'utilisateur" VerticalAlignment="Center"/>
-                </StackPanel>
-            </ui:Button>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Mises à jour : version installée, historique, retour à la version précédente -->
+                <ui:Button VerticalAlignment="Center"
+                           Appearance="Secondary"
+                           Cursor="Hand"
+                           Margin="0,0,8,0"
+                           Click="MisesAJour_Click"
+                           ToolTip="Version installée, historique des mises à jour, retour à la version précédente">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="ArrowSync24" FontSize="16" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="MisesAJourTexte" Text="Mises à jour" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+
+                <ui:Button VerticalAlignment="Center"
+                           Appearance="Secondary"
+                           Cursor="Hand"
+                           Command="{Binding DataContext.ChangerUtilisateurCommand, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}}"
+                           ToolTip="Revenir à l'écran de connexion pour changer d'opérateur">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Person24" FontSize="16" Margin="0,0,8,0"/>
+                        <TextBlock Text="Changer d'utilisateur" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+            </StackPanel>
         </Grid>
 
         <!-- Bandeau "Fiche en cours" — visible dès qu'une configuration a été validée.

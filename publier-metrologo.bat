@@ -5,6 +5,12 @@ cd /d "%~dp0"
 REM ============================================================
 REM  Publication d'une nouvelle version de Metrologo
 REM  (a lancer depuis un poste ou le lecteur M: est connecte)
+REM
+REM  Numero de version : MAJOR.MINOR (2.0, 2.1, 2.2...)
+REM    - Entree : MINOR + 1 (mise a jour courante)
+REM    - M      : MAJOR + 1 (mise a jour importante, ex 3.0)
+REM  Une ligne de description est demandee : elle apparait dans
+REM  l'historique (Accueil > Mises a jour) sur chaque poste.
 REM ============================================================
 
 REM --- Configuration (a adapter si besoin) --------------------
@@ -17,6 +23,7 @@ REM Dossier de travail : surtout PAS nomme TMP (TMP = dossier temporaire de Wind
 REM le compilateur et vpk y ecriraient leurs fichiers, qui finiraient dans le paquet
 REM de mise a jour -> paquet pollue, MAJ qui ne s'applique pas / boucle).
 set "PUBDIR=%~dp0_publish_tmp"
+set "INFO=%~dp0_publish_info"
 REM ------------------------------------------------------------
 
 echo ============================================
@@ -32,38 +39,35 @@ REM 2) Verifier l'acces au reseau, puis creer le dossier de sortie si absent
 if not exist "M:\exe_spe\Data_Metrologo\" goto NO_RESEAU
 if not exist "%SORTIE_RESEAU%\" mkdir "%SORTIE_RESEAU%"
 
-REM 3) Numero de version : auto-calcule d'apres la date/heure (toujours croissant)
-REM    Format 1.AAMMJJ.HMM  ->  ex 1.260706.1043 (le 06/07/2026 a 10h43),
-REM    1.261007.912 a 9h12 (pas de zero en tete : interdit en SemVer).
-REM    Une version tapee a la main doit rester PLUS GRANDE que la derniere
-REM    publiee (ex 1.3 < 1.260706.1451 : jamais vue comme une MAJ).
-for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "'1.' + (Get-Date -Format 'yyMMdd') + '.' + [int](Get-Date -Format 'HHmm')"`) do set AUTO_VER=%%v
-echo Version proposee (automatique, datee) : %AUTO_VER%
-:DEMANDE_VER
-set "VER="
-set /p VER="Entree = accepter, ou tape un numero manuel (ex 2.0.0) : "
-if "%VER%"=="" set VER=%AUTO_VER%
-powershell -NoProfile -ExecutionPolicy Bypass -File "outils\verifier-version.ps1" -Version "%VER%" -Feed "%SORTIE_RESEAU%"
-if errorlevel 1 goto DEMANDE_VER
-echo Version retenue : %VER%
+REM 3) Numero de version + description (lus/valides par outils\preparer-version.ps1 :
+REM    superieur a la derniere version publiee, pas de zero en tete).
+if exist "%INFO%" rmdir /s /q "%INFO%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "outils\preparer-version.ps1" -AppId %APP_ID% -Feed "%SORTIE_RESEAU%" -OutDir "%INFO%"
+if errorlevel 1 goto ANNULE
+if not exist "%INFO%\version.txt" goto ANNULE
+set /p VER=<"%INFO%\version.txt"
+set FULLVER=%VER%.0
+set NOTES=
+if exist "%INFO%\notes.md" set NOTES=--releaseNotes "%INFO%\notes.md"
 
 REM 4) Compilation autonome (runtime .NET embarque -> aucun prerequis .NET sur les postes)
 echo.
-echo == Compilation self-contained win-x64 ==
+echo == Compilation self-contained win-x64 (version %FULLVER%) ==
 REM Libere les fichiers encore tenus par le serveur de compilation
 dotnet build-server shutdown >nul 2>&1
 if exist "%PUBDIR%" rmdir /s /q "%PUBDIR%"
-dotnet publish "%PROJET%" -c Release -r win-x64 --self-contained true -o "%PUBDIR%"
+dotnet publish "%PROJET%" -c Release -r win-x64 --self-contained true -p:Version=%FULLVER% -o "%PUBDIR%"
 if errorlevel 1 goto ECHEC_BUILD
 
 REM 5) Empaquetage Velopack + depot sur le reseau
 echo.
 echo == Empaquetage vers %SORTIE_RESEAU% ==
-vpk pack --packId %APP_ID% --packVersion %VER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%SORTIE_RESEAU%" --splashImage "%SPLASH%"
+vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%SORTIE_RESEAU%" --splashImage "%SPLASH%" %NOTES%
 if errorlevel 1 goto ECHEC_PACK
 
 REM 6) Nettoyage
 rmdir /s /q "%PUBDIR%"
+rmdir /s /q "%INFO%"
 
 echo.
 echo ============================================
@@ -74,6 +78,11 @@ echo   - Postes deja installes : mise a jour automatique
 echo     au prochain demarrage de Metrologo.
 echo ============================================
 echo.
+pause
+goto FIN
+
+:ANNULE
+echo Publication annulee.
 pause
 goto FIN
 

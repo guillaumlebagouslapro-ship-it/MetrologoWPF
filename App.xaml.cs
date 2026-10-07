@@ -448,6 +448,22 @@ namespace Metrologo
 
         protected override void OnExit(ExitEventArgs e)
         {
+            NettoyerAvantArret();
+            base.OnExit(e);
+        }
+
+        private static bool _nettoyageFait;
+
+        /// <summary>
+        /// Ménage de fermeture (journaux, Excel caché). Appelé par <see cref="OnExit"/>, et
+        /// aussi juste avant un retour de version : Velopack coupe alors le processus sans
+        /// passer par OnExit. Ne s'exécute qu'une fois.
+        /// </summary>
+        internal static void NettoyerAvantArret()
+        {
+            if (_nettoyageFait) return;
+            _nettoyageFait = true;
+
             // FIN_SESSION dans Journal_<FI>.txt (récap mesures + durée). Idempotent.
             try { Metrologo.Services.Journal.JournalFIService.TerminerSession("Fermeture application"); }
             catch { /* best-effort */ }
@@ -466,7 +482,6 @@ namespace Metrologo
 
             // Ferme l'instance Excel cachée — sinon Excel.exe reste en tâche de fond.
             ExcelInteropHost.Instance.Dispose();
-            base.OnExit(e);
         }
     }
 }
