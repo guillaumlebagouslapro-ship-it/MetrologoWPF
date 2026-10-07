@@ -414,6 +414,94 @@ namespace Metrologo.Services
         public static bool MesuresLocalConfigure =>
             !string.IsNullOrWhiteSpace(MesuresLocal);
 
+        // ---------- Dossier de travail d'une FI : réseau si joignable, sinon local ----------
+
+        private static readonly Dictionary<string, string> _dossiersFI = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly object _verrouDossiersFI = new();
+
+        /// <summary>Nom de dossier d'une FI (caractères interdits remplacés), identique partout.</summary>
+        public static string NomDossierFI(string? numFI)
+        {
+            if (string.IsNullOrWhiteSpace(numFI)) return "sans-nom";
+            var invalides = new HashSet<char>(Path.GetInvalidFileNameChars());
+            var sb = new System.Text.StringBuilder(numFI.Length);
+            foreach (var c in numFI) sb.Append(invalides.Contains(c) ? '_' : c);
+            string resultat = sb.ToString().Trim(' ', '.');
+            return string.IsNullOrEmpty(resultat) ? "sans-nom" : resultat;
+        }
+
+        /// <summary>Dossier de REPLI d'une FI quand le réseau est injoignable : Bureau\Metrologo\&lt;FI&gt;.</summary>
+        public static string DossierFILocal(string numFI) => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Metrologo", NomDossierFI(numFI));
+
+        /// <summary>
+        /// Dossier où vivent le rapport Excel et le journal d'une FI. Choisi une fois par FI et par
+        /// session (une série de mesures reste au même endroit) :
+        /// <list type="bullet">
+        ///   <item>réseau (<see cref="MesuresLocal"/>\&lt;FI&gt;) s'il est joignable — AUCUNE copie locale,
+        ///         le logiciel extérieur lit directement le fichier à jour. Un dossier local laissé par
+        ///         une session hors réseau est d'abord rapatrié puis supprimé ;</item>
+        ///   <item>sinon Bureau\Metrologo\&lt;FI&gt;, recopié sur le réseau dès qu'il revient
+        ///         (<see cref="TransfertReseauService"/>).</item>
+        /// </list>
+        /// Appel potentiellement lent (test réseau, rapatriement) : hors thread UI de préférence.
+        /// </summary>
+        public static string DossierFI(string numFI)
+        {
+            string nom = NomDossierFI(numFI);
+            lock (_verrouDossiersFI)
+            {
+                if (_dossiersFI.TryGetValue(nom, out var deja)) return deja;
+
+                string choisi = DossierFILocal(numFI);
+                if (ReseauMesuresJoignable() && TransfertReseauService.RapatrierDossierLocal(numFI))
+                    choisi = Path.Combine(MesuresLocal, nom);
+
+                try { Directory.CreateDirectory(choisi); }
+                catch
+                {
+                    // Réseau perdu entre le test et la création : repli local.
+                    choisi = DossierFILocal(numFI);
+                    Directory.CreateDirectory(choisi);
+                }
+                _dossiersFI[nom] = choisi;
+                return choisi;
+            }
+        }
+
+        /// <summary>Vrai si la FI travaille directement sur le réseau pendant cette session.</summary>
+        public static bool FITravailleSurReseau(string numFI) =>
+            !string.Equals(Path.GetFullPath(DossierFI(numFI)), Path.GetFullPath(DossierFILocal(numFI)),
+                           StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Bascule la FI en local pour la suite de la session (réseau perdu en cours de
+        /// série). Retourne le dossier local.</summary>
+        public static string BasculerFIEnLocal(string numFI)
+        {
+            string local = DossierFILocal(numFI);
+            Directory.CreateDirectory(local);
+            lock (_verrouDossiersFI) _dossiersFI[NomDossierFI(numFI)] = local;
+            return local;
+        }
+
+        /// <summary>Le dossier réseau des mesures répond-il (avec délai max, un lecteur M:
+        /// déconnecté pouvant bloquer plusieurs secondes) ?</summary>
+        public static bool ReseauMesuresJoignable(int delaiMs = 2500)
+        {
+            string racine = MesuresLocal;
+            if (string.IsNullOrWhiteSpace(racine)) return false;
+            try
+            {
+                var test = Task.Run(() =>
+                {
+                    Directory.CreateDirectory(racine);
+                    return Directory.Exists(racine);
+                });
+                return test.Wait(delaiMs) && test.Result;
+            }
+            catch { return false; }
+        }
+
         /// <summary>
         /// Vérifie que le dossier <see cref="MesuresLocal"/> existe sur le poste et le crée
         /// au besoin. Idempotente, et en best-effort : si ça coince (permissions, disque

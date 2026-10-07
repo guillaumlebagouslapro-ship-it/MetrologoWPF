@@ -1248,6 +1248,9 @@ namespace Metrologo.Services
                     {
                         JournalLog.Warn(CategorieLog.Excel, "EXCEL_SAVE_COM_KO",
                             $"Save COM final échoué : {ex.Message}");
+                        // Rapport sur le réseau et réseau perdu en cours de série : on ne perd pas
+                        // la mesure, on l'enregistre en local (rapatriée dès le retour du réseau).
+                        EnregistrerEnLocalApresEchecInterne(mesure);
                     }
 
                     // Marque le classeur comme "non modifié" après le Save. Si Excel fait un
@@ -2526,6 +2529,41 @@ namespace Metrologo.Services
                 finally { try { Marshal.ReleaseComObject(nom); } catch { } }
             }
             catch { /* zone absente — silencieux */ }
+        }
+
+        /// <summary>
+        /// Repli quand l'enregistrement du classeur échoue (typiquement : rapport sur le réseau et
+        /// M: perdu pendant la mesure). Enregistre le classeur sous le même nom dans le dossier
+        /// local de repli de la FI (Bureau\Metrologo\FI), bascule la FI en local pour la suite de
+        /// la session et l'inscrit pour rapatriement automatique. À appeler SOUS LOCK (_sync).
+        /// </summary>
+        private void EnregistrerEnLocalApresEchecInterne(Mesure mesure)
+        {
+            if (_classeurActif == null || string.IsNullOrWhiteSpace(mesure.NumFI)) return;
+            try
+            {
+                string dossierLocal = CheminsMetrologo.BasculerFIEnLocal(mesure.NumFI);
+                string nom = Path.GetFileName(string.IsNullOrEmpty(_cheminClasseurActif)
+                    ? (mesure.TypeMesure == TypeMesure.Stabilite ? "stab.xlsx" : "freq.xlsx")
+                    : _cheminClasseurActif);
+                string cible = Path.Combine(dossierLocal, nom);
+                if (string.Equals(Path.GetFullPath(cible), Path.GetFullPath(_cheminClasseurActif ?? ""),
+                        StringComparison.OrdinalIgnoreCase))
+                    return; // déjà en local : rien de plus à tenter
+
+                try { _excel!.DisplayAlerts = false; } catch { }
+                _classeurActif.SaveAs(cible);
+                _cheminClasseurActif = cible;
+                TransfertReseauService.SignalerFIEnLocal(mesure.NumFI);
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_SAVE_REPLI_LOCAL",
+                    $"Rapport enregistré en local après échec de l'enregistrement : {cible} "
+                    + "(rapatrié sur le réseau dès son retour).");
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Erreur(CategorieLog.Excel, "EXCEL_SAVE_REPLI_LOCAL_KO",
+                    $"Enregistrement de secours en local impossible : {ex.Message}");
+            }
         }
 
         /// <summary>Écrit une valeur dans une zone nommée sheet-scope via COM.</summary>

@@ -126,15 +126,13 @@ namespace Metrologo.Services
         /// On l'expose pour l'afficher dans l'UI.</summary>
         public string CheminFichierGenere => _cheminFichier;
 
-        /// <summary>Refait le même calcul de chemin qu'InitialiserRapportAsync (Bureau\Metrologo\FI, puis freq.xlsx
-        /// ou stab.xlsx), mais sans effet de bord, histoire de savoir si le classeur déjà ouvert peut être réutilisé (même FI).
+        /// <summary>Refait le même calcul de chemin qu'InitialiserRapportAsync (dossier de la FI — réseau si
+        /// joignable, sinon Bureau\Metrologo\FI — puis freq.xlsx ou stab.xlsx), histoire de savoir si le classeur
+        /// déjà ouvert peut être réutilisé (même FI). Peut tester le réseau : hors thread UI de préférence.
         /// Attention : les noms freq/stab sont imposés par le logiciel tiers d'extraction, donc surtout pas de FI dedans.</summary>
         public string CalculerCheminFichierAttendu(Mesure mesure)
         {
-            string numFISafe = SanitizerNomFichier(mesure.NumFI ?? string.Empty);
-            string dossier = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                "Metrologo", numFISafe);
+            string dossier = CheminsMetrologo.DossierFI(mesure.NumFI ?? string.Empty);
             bool estStab = mesure.TypeMesure == TypeMesure.Stabilite;
             string baseNom = estStab ? "stab" : "freq";
             return Path.Combine(dossier, $"{baseNom}.xlsx");
@@ -157,15 +155,10 @@ namespace Metrologo.Services
                 //    itérations stab1, stab2...). Tout le reste (fréquence ET tachy) atterrit dans
                 //    freq.xlsx, ces noms étant imposés par le logiciel tiers d'extraction. Freq et tachy
                 //    se partagent donc freq.xlsx, et on évite de mélanger les deux sur une même FI.
-                string numFISafe = SanitizerNomFichier(numeroFI);
-
-                // Le fichier principal vit sur le Bureau de l'utilisateur (plutôt que dans Documents).
-                // La copie vers le partage réseau (par défaut M:\exe_spe\Data_Metrologo\Mesures,
-                // modifiable dans Admin > Chemins d'accès) se fait quand même après la mesure,
-                // via DupliquerSurReseauAsync.
-                string dossier = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    "Metrologo", numFISafe);
+                // Le rapport vit directement sur le partage réseau (Admin > Chemins d'accès >
+                // Mesures) quand il est joignable — aucune copie locale. Sinon : Bureau\Metrologo\FI,
+                // rapatrié sur le réseau dès son retour (CheminsMetrologo.DossierFI).
+                string dossier = CheminsMetrologo.DossierFI(numeroFI);
                 Directory.CreateDirectory(dossier);
 
                 // Noms imposés par le logiciel tiers d'extraction : tout ce qui n'est pas de la

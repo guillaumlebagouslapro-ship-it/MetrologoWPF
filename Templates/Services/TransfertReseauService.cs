@@ -13,18 +13,18 @@ using Metrologo.Services.Journal;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Transfert du dossier FI complet (rapport .xlsx + Journal_FI.txt + profilings + tout
-    /// le contenu de <c>C:\Users\…\Desktop\Metrologo\&lt;FI&gt;\</c>) vers le partage réseau
+    /// Synchronisation du dossier d'une FI avec le partage réseau
     /// (<c>CheminsMetrologo.MesuresLocal</c>, typiquement <c>M:\…\Mesures\&lt;FI&gt;\</c>).
     ///
-    /// Stratégie :
+    /// Stratégie (voir <see cref="CheminsMetrologo.DossierFI"/>) :
     /// <list type="bullet">
-    ///   <item>Pendant la mesure : aucune I/O réseau (tout reste en local).</item>
-    ///   <item>À la fin de chaque mesure : tentative de transfert complet du dossier FI.</item>
-    ///   <item>Si transfert échoue (M:\ down, latence, etc.) : on enregistre la FI dans
-    ///         <c>%LocalAppData%\Metrologo\Configuration\transferts_en_attente.json</c>
-    ///         pour reprise automatique au prochain démarrage de l'app.</item>
-    ///   <item>Au démarrage : on rejoue tous les transferts en attente si M:\ accessible.</item>
+    ///   <item>Réseau joignable : la FI travaille DIRECTEMENT sur le réseau, aucune copie locale,
+    ///         rien à transférer (le logiciel extérieur lit le fichier à jour).</item>
+    ///   <item>Réseau injoignable : la FI travaille dans Bureau\Metrologo\&lt;FI&gt;. À la fin de
+    ///         chaque mesure on tente d'en pousser une copie sur le réseau, et la FI reste inscrite
+    ///         dans <c>transferts_en_attente.json</c>.</item>
+    ///   <item>Dès que le réseau revient (démarrage suivant, ou reprise de la FI) : le dossier local
+    ///         est rapatrié sur le réseau, vérifié, puis SUPPRIMÉ — plus de double version.</item>
     /// </list>
     /// </summary>
     public static class TransfertReseauService
@@ -36,9 +36,10 @@ namespace Metrologo.Services
             Path.Combine(CheminsMetrologo.Configuration, "transferts_en_attente.json");
 
         /// <summary>
-        /// Transfère le dossier FI local (<c>Desktop\Metrologo\&lt;FI&gt;\</c>) vers le réseau.
-        /// En cas d'échec ou de chemin non configuré, la FI est ajoutée à la liste en attente.
-        /// Retourne <c>true</c> si succès.
+        /// Fin de mesure. FI sur le réseau : rien à faire (true). FI en local (réseau absent au
+        /// départ ou perdu en cours de série) : pousse une copie sur le réseau si possible, et garde
+        /// la FI en attente pour que le dossier local soit rapatrié puis supprimé dès qu'il n'est
+        /// plus utilisé. Retourne <c>false</c> si le réseau n'a pas pu être mis à jour.
         /// </summary>
         public static async Task<bool> TransfererDossierFIAsync(string numFI)
         {
@@ -46,10 +47,14 @@ namespace Metrologo.Services
 
             return await Task.Run(() =>
             {
-                string numFISafe = SanitizerNomFichier(numFI);
-                string dossierLocal = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    "Metrologo", numFISafe);
+                if (CheminsMetrologo.FITravailleSurReseau(numFI))
+                {
+                    RetirerFIEnAttente(numFI);
+                    return true;
+                }
+
+                string dossierLocal = CheminsMetrologo.DossierFILocal(numFI);
+                AjouterFIEnAttente(numFI);
 
                 if (!Directory.Exists(dossierLocal))
                 {
@@ -58,66 +63,138 @@ namespace Metrologo.Services
                     return false;
                 }
 
-                if (!CheminsMetrologo.MesuresLocalConfigure)
+                if (!CheminsMetrologo.ReseauMesuresJoignable())
                 {
-                    Journal.Journal.Warn(CategorieLog.Systeme, "TRANSFERT_RESEAU_PAS_CONFIGURE",
-                        "Aucun chemin réseau configuré (Admin > Chemins d'accès) — "
-                        + "le dossier reste en local.");
-                    AjouterFIEnAttente(numFI);
+                    Journal.Journal.Warn(CategorieLog.Systeme, "TRANSFERT_RESEAU_INJOIGNABLE",
+                        $"Réseau injoignable : la FI {numFI} reste en local ({dossierLocal}), "
+                        + "rapatriement automatique dès le retour du réseau.");
                     return false;
                 }
 
                 try
                 {
-                    string dossierCible = Path.Combine(CheminsMetrologo.MesuresLocal, numFISafe);
-                    Directory.CreateDirectory(dossierCible);
-                    CopierDossierRecursif(dossierLocal, dossierCible);
-                    RetirerFIEnAttente(numFI);
+                    string dossierCible = Path.Combine(CheminsMetrologo.MesuresLocal,
+                        CheminsMetrologo.NomDossierFI(numFI));
+                    CopierDossierRecursif(dossierLocal, dossierCible, seulementSiPlusRecent: false);
                     Journal.Journal.Info(CategorieLog.Systeme, "TRANSFERT_RESEAU_OK",
-                        $"Dossier FI {numFI} transféré sur le réseau : {dossierCible}");
+                        $"Copie de la FI {numFI} poussée sur le réseau : {dossierCible} "
+                        + "(dossier local supprimé au prochain démarrage).");
                     return true;
                 }
                 catch (Exception ex)
                 {
-                    AjouterFIEnAttente(numFI);
                     Journal.Journal.Warn(CategorieLog.Systeme, "TRANSFERT_RESEAU_KO",
                         $"Transfert FI {numFI} vers le réseau échoué : {ex.Message} — "
-                        + "FI ajoutée à la liste de reprise au prochain démarrage.");
+                        + "FI gardée en attente de rapatriement.");
                     return false;
                 }
             });
         }
 
         /// <summary>
-        /// Au démarrage, rejoue tous les transferts en attente. Best-effort : si le réseau est
-        /// toujours indisponible, les FI restent en liste pour la prochaine session.
+        /// Rapatrie sur le réseau le dossier local de repli d'une FI, vérifie chaque fichier, puis
+        /// supprime le dossier local. Ne remplace un fichier réseau que si la version locale est
+        /// plus récente (un autre poste a pu travailler sur la FI entre-temps) ; les journaux sont
+        /// fusionnés. Retourne <c>true</c> si la FI peut travailler sur le réseau (rien à rapatrier,
+        /// ou rapatriement réussi), <c>false</c> en cas d'échec (le local est alors conservé).
+        /// À n'appeler que si le dossier local n'est pas ouvert dans Excel (démarrage, reprise de FI).
+        /// </summary>
+        public static bool RapatrierDossierLocal(string numFI)
+        {
+            string dossierLocal = CheminsMetrologo.DossierFILocal(numFI);
+            if (!Directory.Exists(dossierLocal)) { RetirerFIEnAttente(numFI); return true; }
+            if (!Directory.EnumerateFileSystemEntries(dossierLocal).Any())
+            {
+                try { Directory.Delete(dossierLocal); } catch { }
+                RetirerFIEnAttente(numFI);
+                return true;
+            }
+
+            string dossierCible = Path.Combine(CheminsMetrologo.MesuresLocal, CheminsMetrologo.NomDossierFI(numFI));
+            try
+            {
+                CopierDossierRecursif(dossierLocal, dossierCible, seulementSiPlusRecent: true);
+                VerifierCopie(dossierLocal, dossierCible);
+            }
+            catch (Exception ex)
+            {
+                AjouterFIEnAttente(numFI);
+                Journal.Journal.Warn(CategorieLog.Systeme, "RAPATRIEMENT_FI_KO",
+                    $"Rapatriement de la FI {numFI} vers le réseau échoué : {ex.Message} — "
+                    + $"la FI reste en local ({dossierLocal}).");
+                return false;
+            }
+
+            try
+            {
+                Directory.Delete(dossierLocal, recursive: true);
+                RetirerFIEnAttente(numFI);
+                Journal.Journal.Info(CategorieLog.Systeme, "RAPATRIEMENT_FI_OK",
+                    $"FI {numFI} rapatriée sur le réseau ({dossierCible}), dossier local supprimé.");
+            }
+            catch (Exception ex)
+            {
+                // Copie réussie mais un fichier local est encore ouvert : on travaille quand même
+                // sur le réseau, le dossier local sera supprimé à la prochaine occasion.
+                AjouterFIEnAttente(numFI);
+                Journal.Journal.Warn(CategorieLog.Systeme, "RAPATRIEMENT_FI_SUPPR_KO",
+                    $"FI {numFI} rapatriée mais dossier local non supprimé : {ex.Message}");
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Au démarrage (aucun classeur ouvert) : rapatrie toutes les FI restées en local si le
+        /// réseau est revenu. Best-effort : sinon elles restent en attente pour la session suivante.
         /// </summary>
         public static async Task TenterTransfertsEnAttenteAsync()
         {
             var enAttente = LireFIEnAttente();
             if (enAttente.Count == 0) return;
 
-            if (!CheminsMetrologo.MesuresLocalConfigure)
+            if (!CheminsMetrologo.ReseauMesuresJoignable())
             {
-                Journal.Journal.Info(CategorieLog.Systeme, "TRANSFERT_REPRISE_PAS_CONFIGURE",
-                    $"{enAttente.Count} FI en attente de transfert, mais aucun chemin réseau "
-                    + "configuré — report à la prochaine session.");
+                Journal.Journal.Info(CategorieLog.Systeme, "TRANSFERT_REPRISE_RESEAU_ABSENT",
+                    $"{enAttente.Count} FI en attente de rapatriement, réseau injoignable — "
+                    + "report à la prochaine session.");
                 return;
             }
 
             Journal.Journal.Info(CategorieLog.Systeme, "TRANSFERT_REPRISE_DEBUT",
-                $"Reprise auto de {enAttente.Count} transfert(s) FI en attente : "
-                + string.Join(", ", enAttente));
+                $"Rapatriement de {enAttente.Count} FI restée(s) en local : " + string.Join(", ", enAttente));
 
             int nbOk = 0, nbKo = 0;
-            foreach (var fi in enAttente.ToList())
+            await Task.Run(() =>
             {
-                bool ok = await TransfererDossierFIAsync(fi);
-                if (ok) nbOk++; else nbKo++;
-            }
+                foreach (var fi in enAttente.ToList())
+                {
+                    if (RapatrierDossierLocal(fi)) nbOk++; else nbKo++;
+                }
+            });
 
             Journal.Journal.Info(CategorieLog.Systeme, "TRANSFERT_REPRISE_FIN",
-                $"Reprise terminée : {nbOk} OK, {nbKo} KO (restent en attente).");
+                $"Rapatriement terminé : {nbOk} OK, {nbKo} KO (restent en attente).");
+        }
+
+        /// <summary>Inscrit la FI comme restée en local (ex. enregistrement de secours après une
+        /// coupure réseau en cours de mesure).</summary>
+        public static void SignalerFIEnLocal(string numFI) => AjouterFIEnAttente(numFI);
+
+        /// <summary>Chaque fichier local doit exister côté réseau avec une taille identique (ou une
+        /// version réseau plus récente, conservée volontairement). Lève sinon.</summary>
+        private static void VerifierCopie(string source, string cible)
+        {
+            foreach (var fichier in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+            {
+                string relatif = Path.GetRelativePath(source, fichier);
+                var src = new FileInfo(fichier);
+                var dst = new FileInfo(Path.Combine(cible, relatif));
+                if (!dst.Exists)
+                    throw new IOException($"« {relatif} » absent sur le réseau après copie.");
+                bool journal = src.Name.StartsWith("Journal_", StringComparison.OrdinalIgnoreCase);
+                if (!journal && dst.LastWriteTimeUtc <= src.LastWriteTimeUtc && dst.Length != src.Length)
+                    throw new IOException($"« {relatif} » : taille différente sur le réseau après copie.");
+            }
         }
 
         /// <summary>Retourne la liste des FI actuellement en attente de transfert.</summary>
@@ -194,7 +271,7 @@ namespace Metrologo.Services
             File.WriteAllText(CheminFichierEnAttente, json);
         }
 
-        private static void CopierDossierRecursif(string source, string cible)
+        private static void CopierDossierRecursif(string source, string cible, bool seulementSiPlusRecent)
         {
             Directory.CreateDirectory(cible);
             foreach (var fichier in Directory.EnumerateFiles(source))
@@ -210,6 +287,13 @@ namespace Metrologo.Services
                 {
                     FusionnerOuCopierJournal(fichier, fichierCible);
                 }
+                else if (seulementSiPlusRecent && File.Exists(fichierCible)
+                         && File.GetLastWriteTimeUtc(fichierCible) > File.GetLastWriteTimeUtc(fichier))
+                {
+                    // Rapatriement : le réseau a une version plus récente (autre poste) → on la garde.
+                    Journal.Journal.Warn(CategorieLog.Systeme, "RAPATRIEMENT_RESEAU_PLUS_RECENT",
+                        $"« {fichierCible} » plus récent sur le réseau que la copie locale : conservé.");
+                }
                 else
                 {
                     // Le local fait foi : on écrase le réseau.
@@ -220,7 +304,7 @@ namespace Metrologo.Services
             foreach (var sousDossier in Directory.EnumerateDirectories(source))
             {
                 string nomSousDossier = Path.GetFileName(sousDossier);
-                CopierDossierRecursif(sousDossier, Path.Combine(cible, nomSousDossier));
+                CopierDossierRecursif(sousDossier, Path.Combine(cible, nomSousDossier), seulementSiPlusRecent);
             }
         }
 
@@ -344,17 +428,5 @@ namespace Metrologo.Services
             public DateTime? Debut;
         }
 
-        private static string SanitizerNomFichier(string nom)
-        {
-            if (string.IsNullOrWhiteSpace(nom)) return "sans-nom";
-            var invalides = new HashSet<char>(Path.GetInvalidFileNameChars());
-            var sb = new System.Text.StringBuilder(nom.Length);
-            foreach (var c in nom)
-            {
-                sb.Append(invalides.Contains(c) ? '_' : c);
-            }
-            string resultat = sb.ToString().Trim(' ', '.');
-            return string.IsNullOrEmpty(resultat) ? "sans-nom" : resultat;
-        }
     }
 }

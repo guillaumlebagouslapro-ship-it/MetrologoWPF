@@ -83,6 +83,14 @@ namespace Metrologo.ViewModels
 
         private double? _derniereFNominale;
 
+        /// <summary>Rapports pour lesquels la question « écraser / ajouter » a déjà été posée (ou
+        /// qui ont été créés) pendant cette session : les mesures suivantes de la série (feuilles
+        /// 2, 3…) s'y ajoutent sans redemander.</summary>
+        private readonly HashSet<string> _rapportsConfirmes = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>FI déjà signalées « restée en local » cette session (message une seule fois).</summary>
+        private readonly HashSet<string> _fiAvertiesLocal = new(StringComparer.OrdinalIgnoreCase);
+
         // ---- Suivi Besancon (panneau d'etat + voyant sur l'ecran principal) ----
 
         /// <summary>Affiche le panneau de suivi Besancon (vrai des qu'un rubidium actif est defini).</summary>
@@ -487,15 +495,19 @@ namespace Metrologo.ViewModels
             Log($"⏱ Gates à balayer : {string.Join(", ", MesureConfig.GateIndices)}");
 
             // 3bis) Anti-collision de FI : si un rapport du MÊME nom existe déjà pour cette FI
-            //    (N° repris), on demande explicitement à l'utilisateur. Sans ça, le flux réutilise
-            //    en silence l'ancien freq.xlsx (et, s'il était resté ouvert, une 2e instance Excel
-            //    apparaît avec sa fenêtre grise vide). Même UX que « Relancer » : Oui = fichier
-            //    vierge / Non = ajoute à la suite / Annuler. La Stabilité est exclue : elle gère
-            //    déjà son versionnage (stab1, stab2…) et n'écrase jamais.
+            //    (N° repris d'une session précédente), on demande explicitement à l'utilisateur.
+            //    Sans ça, le flux réutilise en silence l'ancien freq.xlsx (et, s'il était resté
+            //    ouvert, une 2e instance Excel apparaît avec sa fenêtre grise vide). Même UX que
+            //    « Relancer » : Oui = fichier vierge / Non = ajoute à la suite / Annuler.
+            //    Question posée UNE fois par rapport et par session : les mesures suivantes de la
+            //    série (feuilles 2, 3…) s'ajoutent sans redemander. La Stabilité est exclue : elle
+            //    gère déjà son versionnage (stab1, stab2…) et n'écrase jamais.
             if (MesureConfig.TypeMesure != TypeMesure.Stabilite)
             {
-                string cheminAttendu = _excelService.CalculerCheminFichierAttendu(MesureConfig);
-                if (System.IO.File.Exists(cheminAttendu))
+                // Hors thread UI : le choix du dossier de la FI peut tester le réseau.
+                var config = MesureConfig;
+                string cheminAttendu = await Task.Run(() => _excelService.CalculerCheminFichierAttendu(config));
+                if (System.IO.File.Exists(cheminAttendu) && !_rapportsConfirmes.Contains(cheminAttendu))
                 {
                     var choix = MessageBox.Show(
                         $"Un rapport existe déjà pour la FI {MesureConfig.NumFI} :\n{cheminAttendu}\n\n"
@@ -515,6 +527,7 @@ namespace Metrologo.ViewModels
                     if (choix == MessageBoxResult.Yes && !await EcraserRapportExistantAsync(cheminAttendu))
                         return;   // suppression impossible (fichier verrouillé) : message déjà affiché
                 }
+                _rapportsConfirmes.Add(cheminAttendu);
             }
 
             // 4) La frequence nominale est deja saisie dans ConfigurationWindow (bloc Indirect),
@@ -997,19 +1010,25 @@ namespace Metrologo.ViewModels
                     // démarrage de Metrologo (cf. TransfertReseauService).
                     if (result.TransfertReseauOk == false)
                     {
-                        Log("⚠ Transfert réseau échoué — le dossier FI reste en local.");
-                        // Premier plan forcé : Excel (rapport) est devant à ce moment-là.
-                        MessageBoxPremierPlan.Afficher(
-                            $"Le dossier de la FI {config.NumFI} n'a pas pu être copié sur "
-                          + $"le partage réseau ({CheminsMetrologo.MesuresLocal}).\n\n"
-                          + "Causes possibles :\n"
-                          + "  • Le lecteur réseau est temporairement indisponible\n"
-                          + "  • Latence ou perte de connexion\n"
-                          + "  • Droits insuffisants sur le dossier cible\n\n"
-                          + "Toutes les données restent en local sur ton Bureau. Au prochain "
-                          + "démarrage de Metrologo, le transfert sera retenté automatiquement.",
-                            "Transfert réseau différé",
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        Log("⚠ Réseau injoignable — la FI est enregistrée en local (Bureau\\Metrologo).");
+                        // Une seule fois par FI et par session : pas de pop-up à chaque feuille de la série.
+                        if (_fiAvertiesLocal.Add(config.NumFI ?? string.Empty))
+                        {
+                            // Premier plan forcé : Excel (rapport) est devant à ce moment-là.
+                            MessageBoxPremierPlan.Afficher(
+                                $"Le partage réseau ({CheminsMetrologo.MesuresLocal}) est injoignable : "
+                              + $"la FI {config.NumFI} est enregistrée sur ton Bureau "
+                              + $"({CheminsMetrologo.DossierFILocal(config.NumFI ?? string.Empty)}).\n\n"
+                              + "Causes possibles :\n"
+                              + "  • Le lecteur réseau est temporairement indisponible\n"
+                              + "  • Latence ou perte de connexion\n"
+                              + "  • Droits insuffisants sur le dossier cible\n\n"
+                              + "Rien n'est perdu. Dès que le réseau revient (au prochain démarrage de "
+                              + "Metrologo), le dossier y est rapatrié automatiquement puis supprimé du "
+                              + "Bureau. D'ici là, le logiciel extérieur ne voit pas ces mesures.",
+                                "Enregistrement en local",
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
                     }
 
                     // Saisie post-mesure : fréquence lue + incertitudes — uniquement pour

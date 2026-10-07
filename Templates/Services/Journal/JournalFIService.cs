@@ -83,9 +83,8 @@ namespace Metrologo.Services.Journal
                 try
                 {
                     string numFISafe = SanitizerNomFichier(numFI);
-                    string dossier = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                        "Metrologo", numFISafe);
+                    // Même dossier que le rapport : réseau si joignable, sinon Bureau\Metrologo\FI.
+                    string dossier = CheminsMetrologo.DossierFI(numFI);
                     Directory.CreateDirectory(dossier);
                     _cheminFichier = Path.Combine(dossier, $"Journal_{numFISafe}.txt");
                     _numFICourant = numFI;
