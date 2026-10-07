@@ -493,6 +493,11 @@
                            IsHitTestVisible="False"/>
                 </Grid>
 
+                <!-- Thème saisonnier : paysage en bas du panneau, derrière le texte (atténué,
+                     non cliquable : lecture et sélection des logs inchangées). -->
+                <ContentControl x:Name="PaysageSaison" Grid.Row="1"
+                                Opacity="0.7" IsHitTestVisible="False" IsTabStop="False"/>
+
                 <TextBox Grid.Row="1"
                          Text="{Binding InformationsGenerales}"
                          IsReadOnly="True"

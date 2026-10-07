@@ -38,6 +38,8 @@ namespace Metrologo.Views
 
             PastilleSaison.Content = DecorSaisonnier.Pastille(saison);
             FondBandeauSaison.Content = DecorSaisonnier.FondBandeau(saison, sombre: true, rayon: 10);
+            // Paysage en bas de la zone des logs : ~45 % de sa hauteur, entre 60 et 220 px.
+            PaysageSaison.Content = DecorSaisonnier.Paysage(saison, rayon: 10, part: 0.45, mini: 60, maxi: 220);
 
             int lignes = Racine.RowDefinitions.Count;
 
