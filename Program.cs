@@ -68,6 +68,10 @@ public static class Program
             _mutexInstance.Dispose();
             _mutexInstance = null;
         }
+
+        // Fin franche : un thread de premier plan oublié (mesure, GPIB...) ne doit pas
+        // garder un Metrologo invisible en vie après la fermeture de la fenêtre.
+        Environment.Exit(0);
     }
 
     /// <summary>

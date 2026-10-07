@@ -464,6 +464,18 @@ namespace Metrologo
             if (_nettoyageFait) return;
             _nettoyageFait = true;
 
+            // Filet de sécurité : quoi qu'il arrive pendant le ménage (Excel qui ne répond
+            // plus, verrou tenu par une mesure...), le processus ne doit pas survivre à sa
+            // fenêtre. Sinon il reste invisible en tâche de fond, garde le verrou d'instance
+            // unique et Metrologo ne peut plus être relancé. Thread d'arrière-plan : si la
+            // fermeture se passe bien, il disparaît avec le processus sans rien faire.
+            new System.Threading.Thread(() =>
+            {
+                System.Threading.Thread.Sleep(15000);
+                try { System.Diagnostics.Process.GetCurrentProcess().Kill(); } catch { }
+            })
+            { IsBackground = true, Name = "GardeFermeture" }.Start();
+
             // FIN_SESSION dans Journal_<FI>.txt (récap mesures + durée). Idempotent.
             try { Metrologo.Services.Journal.JournalFIService.TerminerSession("Fermeture application"); }
             catch { /* best-effort */ }
@@ -471,9 +483,14 @@ namespace Metrologo
             // Fermeture synchrone obligatoire : sessions.json doit être écrit avant
             // l'arrêt du process. En async void l'app pouvait se terminer avant
             // l'écriture → session restait « en cours » indéfiniment.
+            // Task.Run : SURTOUT pas GetAwaiter().GetResult() directement sur le thread UI.
+            // Les await internes (WriteAllTextAsync...) voulaient reprendre sur ce thread,
+            // bloqué à les attendre → interblocage : fenêtre fermée mais processus figé.
+            // Sur le pool de threads, pas de contexte à reprendre ; 5 s maximum.
             try
             {
-                Journal.TerminerSessionAsync().GetAwaiter().GetResult();
+                System.Threading.Tasks.Task.Run(() => Journal.TerminerSessionAsync())
+                    .Wait(TimeSpan.FromSeconds(5));
             }
             catch
             {
@@ -481,7 +498,8 @@ namespace Metrologo
             }
 
             // Ferme l'instance Excel cachée — sinon Excel.exe reste en tâche de fond.
-            ExcelInteropHost.Instance.Dispose();
+            try { ExcelInteropHost.Instance.Dispose(); }
+            catch { /* best-effort */ }
         }
     }
 }
