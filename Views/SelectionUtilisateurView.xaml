@@ -110,16 +110,6 @@
                                 </Rectangle>
 
                                 <StackPanel Orientation="Horizontal">
-                                    <Border Width="28" Height="28" CornerRadius="8"
-                                            Margin="0,0,10,0">
-                                        <Border.Background>
-                                            <SolidColorBrush Color="White" Opacity="0.14"/>
-                                        </Border.Background>
-                                        <ui:SymbolIcon Symbol="Calendar24" FontSize="14"
-                                                       Foreground="White"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
-                                    </Border>
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="DATE" FontSize="9" FontWeight="Bold">
                                             <TextBlock.Foreground>
