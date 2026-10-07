@@ -26,6 +26,11 @@ REM le compilateur et vpk y ecriraient leurs fichiers, qui finiraient dans le pa
 REM de mise a jour -> paquet pollue, MAJ qui ne s'applique pas / boucle).
 set "PUBDIR=%~dp0_publish_tmp"
 set "INFO=%~dp0_publish_info"
+REM Empaquetage fait EN LOCAL puis copie sur le reseau en une fois : vpk pack directement
+REM sur M: y relisait/ecrivait ~250 Mo par petits morceaux (5-6 min au lieu de ~10 s).
+set "RELDIR=%~dp0_publish_releases"
+REM Nombre de versions gardees sur le reseau (les plus anciennes sont supprimees).
+set GARDER=5
 REM ------------------------------------------------------------
 
 echo ============================================
@@ -61,14 +66,24 @@ if exist "%PUBDIR%" rmdir /s /q "%PUBDIR%"
 dotnet publish "%PROJET%" -c Release -r win-x64 --self-contained true -p:Version=%FULLVER% -o "%PUBDIR%"
 if errorlevel 1 goto ECHEC_BUILD
 
-REM 5) Empaquetage Velopack + depot sur le reseau
+REM 5) Empaquetage EN LOCAL (rapide), puis depot sur le reseau en une fois
 echo.
-echo == Empaquetage vers %SORTIE_RESEAU% ==
-vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%SORTIE_RESEAU%" --splashImage "%SPLASH%" --icon "%ICONE%" %NOTES%
+if exist "%RELDIR%" rmdir /s /q "%RELDIR%"
+echo == Recuperation de la derniere version publiee (base du delta) ==
+vpk download local --path "%SORTIE_RESEAU%" --outputDir "%RELDIR%"
+if errorlevel 1 echo    (aucune version sur le reseau : pas de delta, normal a la 1re publication)
+echo.
+echo == Empaquetage (local) ==
+vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%RELDIR%" --splashImage "%SPLASH%" --icon "%ICONE%" %NOTES%
 if errorlevel 1 goto ECHEC_PACK
+echo.
+echo == Depot sur %SORTIE_RESEAU% (garde les %GARDER% dernieres versions) ==
+vpk upload local --path "%SORTIE_RESEAU%" --outputDir "%RELDIR%" --keepMaxReleases %GARDER%
+if errorlevel 1 goto ECHEC_DEPOT
 
 REM 6) Nettoyage
 rmdir /s /q "%PUBDIR%"
+rmdir /s /q "%RELDIR%"
 rmdir /s /q "%INFO%"
 
 echo.
@@ -106,6 +121,13 @@ goto FIN
 
 :ECHEC_BUILD
 echo ECHEC de la compilation.
+pause
+goto FIN
+
+:ECHEC_DEPOT
+echo ECHEC du depot sur le reseau. Le paquet est intact dans :
+echo    %RELDIR%
+echo Verifie le lecteur M: puis relance la publication.
 pause
 goto FIN
 

@@ -406,3 +406,4 @@ graphify-out/
 # Dossier temporaire cree par publier-metrologo.bat
 _publish_tmp/
 _publish_info/
+_publish_releases/
