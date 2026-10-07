@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Threading.Tasks;
 using Metrologo.Views;
 using Velopack;
@@ -23,6 +25,16 @@ public static class UpdateService
     private const string FeedPath = @"M:\exe_spe\Data_Metrologo\SUITE ASERTI Guillaume\Metrologo";
 
     /// <summary>
+    /// Trace de chaque verification (version installee, version trouvee, erreur).
+    /// Les echecs restent silencieux pour l'utilisateur mais doivent etre
+    /// diagnosticables : sans ce fichier, une MAJ qui ne se fait pas ne laisse
+    /// aucune trace.
+    /// </summary>
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Metrologo", "Logs", "maj.log");
+
+    /// <summary>
     /// Recherche et applique une eventuelle mise a jour.
     /// Retourne apres avoir termine ; si une mise a jour est appliquee, le
     /// processus est relance par Velopack et ne revient pas de cet appel.
@@ -35,11 +47,19 @@ public static class UpdateService
 
             // Non installe via Velopack (dev / Visual Studio) : rien a faire.
             if (!mgr.IsInstalled)
+            {
+                Log("Non installe via Velopack (dev / copie manuelle) : verification ignoree.");
                 return;
+            }
 
             var updateInfo = await mgr.CheckForUpdatesAsync();
             if (updateInfo is null)
-                return; // deja a jour
+            {
+                Log($"Version {mgr.CurrentVersion} : deja a jour (canal {FeedPath}).");
+                return;
+            }
+
+            Log($"Version {mgr.CurrentVersion} -> {updateInfo.TargetFullRelease.Version} : mise a jour.");
 
             var win = new UpdateWindow();
             win.Show();
@@ -59,10 +79,24 @@ public static class UpdateService
             // Relance l'application sur la nouvelle version (ne revient pas).
             mgr.ApplyUpdatesAndRestart(updateInfo);
         }
-        catch
+        catch (Exception ex)
         {
             // Reseau indisponible (M: non connecte), dossier absent, etc.
             // On ignore : l'application doit demarrer normalement.
+            Log($"ECHEC verification (canal {FeedPath}) : {ex.GetType().Name} : {ex.Message}");
+        }
+    }
+
+    private static void Log(string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+            File.AppendAllText(LogPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Journal facultatif : ne doit jamais bloquer le demarrage.
         }
     }
 }
