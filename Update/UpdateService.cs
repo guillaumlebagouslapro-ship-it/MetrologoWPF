@@ -75,6 +75,11 @@ public static class UpdateService
             var etat = HistoriqueMaj.Synchroniser(actuelle);
             SupprimerAncienMarqueur();
 
+            // Raccourcis bureau / menu Démarrer : icône de CETTE version (nouveau logo
+            // visible dès la mise à jour, sans réinstallation). En arrière-plan : le
+            // démarrage ne l'attend pas.
+            _ = Task.Run(() => Log(IconeRaccourcis.Appliquer(actuelle)));
+
             if (!Directory.Exists(FeedPath))
             {
                 Log("Dossier reseau introuvable (lecteur M: non connecte ?) : " + FeedPath);
