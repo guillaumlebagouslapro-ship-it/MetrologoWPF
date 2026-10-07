@@ -224,6 +224,9 @@ namespace Metrologo
 
             // Reprend les transferts FI en attente (M:\ down ou latence lors des sessions
             // précédentes). No-op si liste vide ou M:\ toujours indispo. Fire-and-forget.
+            // Réveille le lecteur réseau des mesures en arrière-plan (un M: endormi met plusieurs
+            // secondes à répondre) : la 1re mesure saura tout de suite s'il est joignable.
+            CheminsMetrologo.ReveillerReseauMesures();
             _ = TransfertReseauService.TenterTransfertsEnAttenteAsync();
 
             // Tâche quotidienne Besançon : FTP → valeurs_besancon.txt. Le marqueur partagé

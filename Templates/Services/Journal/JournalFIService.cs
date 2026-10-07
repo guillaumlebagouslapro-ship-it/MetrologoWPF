@@ -131,11 +131,25 @@ namespace Metrologo.Services.Journal
         /// session ouverte (par ex. l'utilisateur n'a pas encore validé de FI). Thread-safe : on
         /// peut l'appeler depuis n'importe quel thread (UI, mesure GPIB, etc.).
         /// </summary>
+        /// <summary>Le journal suit le dossier ACTIF de la FI (passage local → réseau après un
+        /// rapatriement) : sans ça, il recréerait un dossier sur le Bureau. À appeler sous lock.</summary>
+        private static void SuivreDossierFI()
+        {
+            if (string.IsNullOrEmpty(_cheminFichier) || string.IsNullOrEmpty(_numFICourant)) return;
+            try
+            {
+                _cheminFichier = Path.Combine(CheminsMetrologo.DossierFI(_numFICourant),
+                    Path.GetFileName(_cheminFichier));
+            }
+            catch { /* on garde le chemin connu */ }
+        }
+
         public static void Ecrire(string typeAction, string detail = "")
         {
             lock (_sync)
             {
                 if (string.IsNullOrEmpty(_cheminFichier)) return;
+                SuivreDossierFI();
 
                 // Compteurs métier
                 if (typeAction == "MESURE_FIN") _nbMesuresEffectuees++;
@@ -181,6 +195,7 @@ namespace Metrologo.Services.Journal
         private static void TerminerSessionInterne(string motif)
         {
             if (string.IsNullOrEmpty(_cheminFichier)) return;
+            SuivreDossierFI();
             try
             {
                 TimeSpan duree = DateTime.Now - _debutSession;

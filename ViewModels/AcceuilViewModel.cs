@@ -504,8 +504,10 @@ namespace Metrologo.ViewModels
             //    gère déjà son versionnage (stab1, stab2…) et n'écrase jamais.
             if (MesureConfig.TypeMesure != TypeMesure.Stabilite)
             {
-                // Hors thread UI : le choix du dossier de la FI peut tester le réseau.
+                // Hors thread UI : le choix du dossier de la FI peut tester le réseau. Une FI passée
+                // en local revient d'abord sur le réseau s'il répond de nouveau.
                 var config = MesureConfig;
+                await CheminsMetrologo.ReevaluerDossierFIAsync(config.NumFI ?? string.Empty);
                 string cheminAttendu = await Task.Run(() => _excelService.CalculerCheminFichierAttendu(config));
                 if (System.IO.File.Exists(cheminAttendu) && !_rapportsConfirmes.Contains(cheminAttendu))
                 {
@@ -706,6 +708,10 @@ namespace Metrologo.ViewModels
 
         private async Task LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
         {
+            // FI passée en local (réseau absent ou lent au départ) : retour sur le réseau dès qu'il
+            // répond (rapatriement du dossier local, puis suppression).
+            await CheminsMetrologo.ReevaluerDossierFIAsync(config.NumFI ?? string.Empty);
+
             // On regarde si un Excel externe (autre que notre instance COM cachee) est ouvert : il
             // peut garder verrouille le .xlsx de la mesure et faire echouer ClosedXML. On distingue
             // les reliquats COM sans fenetre (les « fantomes ») des vrais classeurs ouverts.

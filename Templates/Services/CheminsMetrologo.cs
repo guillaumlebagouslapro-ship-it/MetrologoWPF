@@ -484,22 +484,82 @@ namespace Metrologo.Services
             return local;
         }
 
-        /// <summary>Le dossier réseau des mesures répond-il (avec délai max, un lecteur M:
-        /// déconnecté pouvant bloquer plusieurs secondes) ?</summary>
-        public static bool ReseauMesuresJoignable(int delaiMs = 2500)
+        private static bool _dernierResultatReseau;
+        private static DateTime _dateDernierTestReseau = DateTime.MinValue;
+        private static readonly object _verrouTestReseau = new();
+
+        /// <summary>
+        /// Le dossier réseau des mesures répond-il ? Un lecteur M: « endormi » met souvent plusieurs
+        /// secondes à se réveiller au premier accès : délai généreux, et résultat mémorisé (60 s si
+        /// joignable, 15 s sinon) pour ne pas re-tester à chaque appel. Voir aussi
+        /// <see cref="ReveillerReseauMesures"/>, lancé en arrière-plan au démarrage.
+        /// </summary>
+        public static bool ReseauMesuresJoignable(int delaiMs = 8000)
         {
             string racine = MesuresLocal;
             if (string.IsNullOrWhiteSpace(racine)) return false;
-            try
+
+            lock (_verrouTestReseau)
             {
-                var test = Task.Run(() =>
+                var age = DateTime.UtcNow - _dateDernierTestReseau;
+                if (age < TimeSpan.FromSeconds(_dernierResultatReseau ? 60 : 15))
+                    return _dernierResultatReseau;
+
+                bool ok;
+                try
                 {
-                    Directory.CreateDirectory(racine);
-                    return Directory.Exists(racine);
-                });
-                return test.Wait(delaiMs) && test.Result;
+                    var test = Task.Run(() =>
+                    {
+                        if (Directory.Exists(racine)) return true;
+                        Directory.CreateDirectory(racine);
+                        return Directory.Exists(racine);
+                    });
+                    ok = test.Wait(delaiMs) && test.Result;
+                }
+                catch { ok = false; }
+
+                _dernierResultatReseau = ok;
+                _dateDernierTestReseau = DateTime.UtcNow;
+                return ok;
             }
-            catch { return false; }
+        }
+
+        /// <summary>À lancer au démarrage, en arrière-plan : réveille le lecteur réseau pour que le
+        /// premier test (au lancement d'une mesure) réponde tout de suite.</summary>
+        public static void ReveillerReseauMesures() => Task.Run(() => ReseauMesuresJoignable());
+
+        /// <summary>
+        /// Au lancement de chaque mesure (hors thread UI) : une FI passée en local (réseau absent ou
+        /// trop lent au départ) revient sur le réseau dès qu'il répond. Le classeur local est refermé
+        /// (la mesure le ferme et le rouvre de toute façon), le dossier est rapatrié puis supprimé,
+        /// et la suite de la série se fait directement sur le réseau.
+        /// </summary>
+        public static async Task ReevaluerDossierFIAsync(string numFI)
+        {
+            if (string.IsNullOrWhiteSpace(numFI)) return;
+            string nom = NomDossierFI(numFI);
+            string local = DossierFILocal(numFI);
+            lock (_verrouDossiersFI)
+            {
+                if (!_dossiersFI.TryGetValue(nom, out var actuel)) return; // pas encore choisi : DossierFI testera
+                if (!string.Equals(Path.GetFullPath(actuel), Path.GetFullPath(local), StringComparison.OrdinalIgnoreCase))
+                    return; // déjà sur le réseau
+            }
+
+            if (!await Task.Run(() => ReseauMesuresJoignable())) return;
+
+            // Le classeur local encore ouvert empêcherait de le déplacer : on le referme d'abord.
+            var excel = ExcelInteropHost.Instance;
+            if (excel.AClasseurActif && !string.IsNullOrEmpty(excel.CheminClasseurActif)
+                && Path.GetFullPath(excel.CheminClasseurActif).StartsWith(Path.GetFullPath(local), StringComparison.OrdinalIgnoreCase))
+            {
+                try { await excel.FermerClasseurActifAsync(); } catch { return; }
+            }
+
+            if (await Task.Run(() => TransfertReseauService.RapatrierDossierLocal(numFI)))
+            {
+                lock (_verrouDossiersFI) _dossiersFI[nom] = Path.Combine(MesuresLocal, nom);
+            }
         }
 
         /// <summary>
