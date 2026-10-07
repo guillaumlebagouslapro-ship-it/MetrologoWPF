@@ -90,7 +90,7 @@ public static class UpdateService
             if (LireMarqueur() == cible)
             {
                 Log($"MAJ {cible} deja tentee sans succes (anti-boucle) : ignoree. " +
-                    $"Voir {Path.Combine(RacineLocale, "velopack.log")} ; supprimer {MarqueurTentative} pour reessayer.");
+                    $"Cause : {Path.Combine(Path.GetDirectoryName(RacineLocale)!, "velopack", "velopack_Metrologo.log")} ; supprimer {MarqueurTentative} pour reessayer.");
                 return;
             }
 
