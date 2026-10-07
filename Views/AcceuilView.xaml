@@ -76,17 +76,6 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Width="56" Height="56" CornerRadius="12"
-                        Margin="0,0,18,0" VerticalAlignment="Center">
-                    <Border.Background>
-                        <SolidColorBrush Color="White" Opacity="0.18"/>
-                    </Border.Background>
-                    <ui:SymbolIcon Symbol="DocumentText24" FontSize="28"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
-                </Border>
-
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="FICHE EN COURS"
                                FontSize="11" FontWeight="Bold"
@@ -122,7 +111,7 @@
                             ToolTip="Modifier la configuration"
                             Cursor="Hand"
                             Margin="16,0,0,0"
-                            Padding="10"
+                            Padding="12,8"
                             BorderThickness="0"
                             VerticalAlignment="Center">
                         <Button.Style>
@@ -143,7 +132,11 @@
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
-                        <ui:SymbolIcon Symbol="Edit24" FontSize="20" Foreground="White"/>
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Edit24" FontSize="18" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock Text="Modifier" Foreground="White" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="8,0,2,0"/>
+                        </StackPanel>
                     </Button>
                 </StackPanel>
             </Grid>

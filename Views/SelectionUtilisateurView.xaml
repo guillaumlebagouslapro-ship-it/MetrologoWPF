@@ -230,46 +230,6 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
 
-                                            <Border Grid.Column="0" Width="32" Height="32" CornerRadius="16"
-                                                    Margin="0,0,12,0">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <!-- Utilisateur : gris -->
-                                                        <Setter Property="Background" Value="#FF94A3B8"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Role}" Value="Administrateur">
-                                                                <Setter Property="Background">
-                                                                    <Setter.Value>
-                                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                                            <GradientStop Color="{StaticResource AsertiOrangeDarkColor}" Offset="0"/>
-                                                                            <GradientStop Color="{StaticResource AsertiOrangeColor}" Offset="1"/>
-                                                                        </LinearGradientBrush>
-                                                                    </Setter.Value>
-                                                                </Setter>
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Role}" Value="SuperAdministrateur">
-                                                                <Setter Property="Background">
-                                                                    <Setter.Value>
-                                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                                            <GradientStop Color="{StaticResource AsertiNavyDarkColor}" Offset="0"/>
-                                                                            <GradientStop Color="{StaticResource AsertiNavyColor}" Offset="1"/>
-                                                                        </LinearGradientBrush>
-                                                                    </Setter.Value>
-                                                                </Setter>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <TextBlock Foreground="White" FontWeight="Bold" FontSize="12"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <TextBlock.Text>
-                                                        <MultiBinding StringFormat="{}{0:1}{1:1}">
-                                                            <Binding Path="Prenom"/>
-                                                            <Binding Path="Nom"/>
-                                                        </MultiBinding>
-                                                    </TextBlock.Text>
-                                                </TextBlock>
-                                            </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock FontWeight="SemiBold" FontSize="13"
                                                            Foreground="{StaticResource AsertiNavyBrush}">
