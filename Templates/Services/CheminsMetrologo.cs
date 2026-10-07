@@ -451,6 +451,7 @@ namespace Metrologo.Services
             string nom = NomDossierFI(numFI);
             lock (_verrouDossiersFI)
             {
+                OublierSiDossierMesuresChange();
                 if (_dossiersFI.TryGetValue(nom, out var deja)) return deja;
 
                 string choisi = DossierFILocal(numFI);
@@ -467,6 +468,22 @@ namespace Metrologo.Services
                 _dossiersFI[nom] = choisi;
                 return choisi;
             }
+        }
+
+        private static string _dossierMesuresMemorise = string.Empty;
+
+        /// <summary>
+        /// Le dossier « Mesures » se règle dans Admin › Chemins d'accès (rien n'est figé). S'il a
+        /// changé depuis le dernier choix, on oublie les dossiers de FI mémorisés et le dernier test
+        /// réseau : la prochaine mesure part dans le nouveau dossier. À appeler sous _verrouDossiersFI.
+        /// </summary>
+        private static void OublierSiDossierMesuresChange()
+        {
+            string actuel = MesuresLocal ?? string.Empty;
+            if (string.Equals(actuel, _dossierMesuresMemorise, StringComparison.OrdinalIgnoreCase)) return;
+            _dossierMesuresMemorise = actuel;
+            _dossiersFI.Clear();
+            lock (_verrouTestReseau) _dateDernierTestReseau = DateTime.MinValue;
         }
 
         /// <summary>Vrai si la FI travaille directement sur le réseau pendant cette session.</summary>
@@ -541,6 +558,7 @@ namespace Metrologo.Services
             string local = DossierFILocal(numFI);
             lock (_verrouDossiersFI)
             {
+                OublierSiDossierMesuresChange();
                 if (!_dossiersFI.TryGetValue(nom, out var actuel)) return; // pas encore choisi : DossierFI testera
                 if (!string.Equals(Path.GetFullPath(actuel), Path.GetFullPath(local), StringComparison.OrdinalIgnoreCase))
                     return; // déjà sur le réseau
