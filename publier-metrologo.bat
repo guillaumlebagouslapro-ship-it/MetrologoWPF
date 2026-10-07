@@ -13,7 +13,10 @@ set MAIN_EXE=Metrologo.exe
 set PROJET=Metrologo.csproj
 set "SORTIE_RESEAU=M:\exe_spe\Data_Metrologo\SUITE ASERTI Guillaume\Metrologo"
 set SPLASH=Resources\splash.gif
-set TMP=%~dp0_publish_tmp
+REM Dossier de travail : surtout PAS nomme TMP (TMP = dossier temporaire de Windows :
+REM le compilateur et vpk y ecriraient leurs fichiers, qui finiraient dans le paquet
+REM de mise a jour -> paquet pollue, MAJ qui ne s'applique pas / boucle).
+set "PUBDIR=%~dp0_publish_tmp"
 REM ------------------------------------------------------------
 
 echo ============================================
@@ -47,18 +50,20 @@ echo Version retenue : %VER%
 REM 4) Compilation autonome (runtime .NET embarque -> aucun prerequis .NET sur les postes)
 echo.
 echo == Compilation self-contained win-x64 ==
-if exist "%TMP%" rmdir /s /q "%TMP%"
-dotnet publish "%PROJET%" -c Release -r win-x64 --self-contained true -o "%TMP%"
+REM Libere les fichiers encore tenus par le serveur de compilation
+dotnet build-server shutdown >nul 2>&1
+if exist "%PUBDIR%" rmdir /s /q "%PUBDIR%"
+dotnet publish "%PROJET%" -c Release -r win-x64 --self-contained true -o "%PUBDIR%"
 if errorlevel 1 goto ECHEC_BUILD
 
 REM 5) Empaquetage Velopack + depot sur le reseau
 echo.
 echo == Empaquetage vers %SORTIE_RESEAU% ==
-vpk pack --packId %APP_ID% --packVersion %VER% --packDir "%TMP%" --mainExe %MAIN_EXE% --outputDir "%SORTIE_RESEAU%" --splashImage "%SPLASH%"
+vpk pack --packId %APP_ID% --packVersion %VER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%SORTIE_RESEAU%" --splashImage "%SPLASH%"
 if errorlevel 1 goto ECHEC_PACK
 
 REM 6) Nettoyage
-rmdir /s /q "%TMP%"
+rmdir /s /q "%PUBDIR%"
 
 echo.
 echo ============================================

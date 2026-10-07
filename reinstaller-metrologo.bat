@@ -42,8 +42,13 @@ if errorlevel 2 goto ANNULE
 REM 2) Fermer Metrologo
 echo.
 echo == Fermeture de Metrologo ==
-taskkill /im Metrologo.exe /f >nul 2>&1
-timeout /t 2 /nobreak >nul
+REM Tout ce qui tourne depuis le dossier Metrologo (appli + Update.exe de Velopack,
+REM qui relance l'appli en cas de MAJ en boucle). Deux passes pour attraper une relance.
+for /l %%i in (1,1,2) do (
+  taskkill /im Metrologo.exe /f >nul 2>&1
+  powershell -NoProfile -Command "Get-Process | Where-Object { $_.Path -like ($env:LOCALAPPDATA + '\Metrologo\*') } | Stop-Process -Force -ErrorAction SilentlyContinue"
+  timeout /t 2 /nobreak >nul
+)
 
 REM 3) Sauvegarde des donnees locales (sans les fichiers d'installation Velopack)
 set "A_SAUVEGARDE=0"
