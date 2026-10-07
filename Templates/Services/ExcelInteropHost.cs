@@ -1107,10 +1107,11 @@ namespace Metrologo.Services
         /// <summary>
         /// Vrai si le classeur est un rapport de mesure Metrologo : nom de fichier imposé
         /// (<c>freq</c> / <c>stab</c>, éventuellement suffixé d'un n° de fallback : freq2, stab3…)
-        /// ET situé dans l'arborescence <c>…\Metrologo\&lt;FI&gt;\</c>. La double condition évite
-        /// de refermer un fichier Excel personnel de l'utilisateur qui porterait un nom proche.
-        /// Sert à ne fermer automatiquement QUE les feuilles de mesure, jamais les autres
-        /// classeurs ouverts par l'utilisateur.
+        /// ET situé dans un dossier de mesures : <c>…\Metrologo\&lt;FI&gt;\</c> (repli local) ou
+        /// le dossier réseau des mesures (<see cref="CheminsMetrologo.MesuresLocal"/>, par ex.
+        /// <c>M:\…\Data_Metrologo\Mesures\&lt;FI&gt;\</c>, qu'Excel peut aussi désigner en
+        /// <c>\\serveur\partage\…</c>). La double condition évite de refermer un fichier Excel
+        /// personnel de l'utilisateur qui porterait un nom proche.
         /// </summary>
         private static bool EstClasseurDeMesure(string fullName)
         {
@@ -1122,7 +1123,8 @@ namespace Metrologo.Services
                     nom, @"^(freq|stab)\d*$",
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 bool dansMetrologo =
-                    fullName.IndexOf(@"\Metrologo\", StringComparison.OrdinalIgnoreCase) >= 0;
+                    fullName.IndexOf(@"\Metrologo\", StringComparison.OrdinalIgnoreCase) >= 0
+                    || EstSousDossier(fullName, CheminsMetrologo.MesuresLocal);
                 return nomMesure && dansMetrologo;
             }
             catch { return false; }
@@ -3462,15 +3464,67 @@ namespace Metrologo.Services
             if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
             try
             {
-                string na = Path.GetFullPath(a);
-                string nb = Path.GetFullPath(b);
-                return string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
+                return string.Equals(NormaliserChemin(a), NormaliserChemin(b), StringComparison.OrdinalIgnoreCase);
             }
             catch
             {
                 return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
             }
         }
+
+        /// <summary>Vrai si <paramref name="chemin"/> est dans <paramref name="dossier"/> (lecteur
+        /// réseau et chemin UNC considérés équivalents).</summary>
+        private static bool EstSousDossier(string chemin, string dossier)
+        {
+            if (string.IsNullOrWhiteSpace(chemin) || string.IsNullOrWhiteSpace(dossier)) return false;
+            try
+            {
+                string c = NormaliserChemin(chemin);
+                string d = NormaliserChemin(dossier).TrimEnd('\\') + "\\";
+                return c.StartsWith(d, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        private static readonly Dictionary<string, string?> _racinesUnc = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Chemin complet, avec la lettre d'un lecteur RÉSEAU remplacée par sa racine UNC
+        /// (<c>M:\x</c> → <c>\\serveur\partage\x</c>). Selon sa configuration, Excel désigne un
+        /// fichier réseau par l'une ou l'autre forme : sans cette normalisation, notre propre rapport
+        /// ouvert sur M: n'était pas reconnu (fenêtre masquée = feuille grisée, doublon d'Excel).
+        /// </summary>
+        private static string NormaliserChemin(string chemin)
+        {
+            string complet = Path.GetFullPath(chemin);
+            if (complet.Length >= 2 && complet[1] == ':')
+            {
+                string lecteur = complet.Substring(0, 2);
+                string? unc;
+                lock (_racinesUnc)
+                {
+                    if (!_racinesUnc.TryGetValue(lecteur, out unc))
+                    {
+                        unc = null;
+                        try
+                        {
+                            var sb = new System.Text.StringBuilder(512);
+                            int taille = sb.Capacity;
+                            if (WNetGetConnection(lecteur, sb, ref taille) == 0)
+                                unc = sb.ToString().TrimEnd('\\');
+                        }
+                        catch { /* pas un lecteur réseau */ }
+                        _racinesUnc[lecteur] = unc;
+                    }
+                }
+                if (!string.IsNullOrEmpty(unc))
+                    complet = unc + complet.Substring(2);
+            }
+            return complet.TrimEnd('\\');
+        }
+
+        [DllImport("mpr.dll", CharSet = CharSet.Unicode)]
+        private static extern int WNetGetConnection(string localName, System.Text.StringBuilder remoteName, ref int length);
 
         private void FermerClasseurActifInterne()
         {
