@@ -19,6 +19,8 @@ set MAIN_EXE=Metrologo.exe
 set PROJET=Metrologo.csproj
 set "SORTIE_RESEAU=M:\exe_spe\Data_Metrologo\SUITE ASERTI Guillaume\Metrologo"
 set SPLASH=Resources\splash.gif
+REM Icone (raccourci bureau, installateur, Applications installees) = celle de l'exe
+set ICONE=Resources\logo.ico
 REM Dossier de travail : surtout PAS nomme TMP (TMP = dossier temporaire de Windows :
 REM le compilateur et vpk y ecriraient leurs fichiers, qui finiraient dans le paquet
 REM de mise a jour -> paquet pollue, MAJ qui ne s'applique pas / boucle).
@@ -62,7 +64,7 @@ if errorlevel 1 goto ECHEC_BUILD
 REM 5) Empaquetage Velopack + depot sur le reseau
 echo.
 echo == Empaquetage vers %SORTIE_RESEAU% ==
-vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%SORTIE_RESEAU%" --splashImage "%SPLASH%" %NOTES%
+vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%SORTIE_RESEAU%" --splashImage "%SPLASH%" --icon "%ICONE%" %NOTES%
 if errorlevel 1 goto ECHEC_PACK
 
 REM 6) Nettoyage

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<defs>
+<clipPath id="t"><polygon points="0,0 512,0 512,200 0,262"/></clipPath>
+<clipPath id="b"><polygon points="0,286 512,224 512,512 0,512"/></clipPath>
+</defs>
+<rect width="512" height="512" rx="96" fill="#263252"/>
+<polygon clip-path="url(#t)" transform="translate(16,-4)" fill="#DB912A" points="86,426 146,86 226,86 256,210 286,86 366,86 426,426 346,426 318,250 284,366 228,366 194,250 166,426"/>
+<polygon clip-path="url(#b)" fill="#FFFFFF" points="86,426 146,86 226,86 256,210 286,86 366,86 426,426 346,426 318,250 284,366 228,366 194,250 166,426"/>
+</svg>
