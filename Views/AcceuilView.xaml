@@ -5,7 +5,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </UserControl.Resources>
-    <Grid>
+    <Grid x:Name="Racine">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -25,10 +25,13 @@
                 <TextBlock Text="Tableau de bord"
                            FontSize="28" FontWeight="Bold"
                            Foreground="{StaticResource AsertiNavyBrush}"/>
-                <TextBlock Text="Lancez une mesure ou consultez les paramètres de votre banc"
-                           FontSize="13"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="0,4,0,0"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBlock Text="Lancez une mesure ou consultez les paramètres de votre banc"
+                               FontSize="13" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <!-- Thème saisonnier (Themes/DecorSaisonnier) : rempli par le code-behind -->
+                    <ContentControl x:Name="PastilleSaison" IsTabStop="False"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- Changer d'utilisateur : accessible directement depuis l'accueil si on s'aperçoit
@@ -75,6 +78,10 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+
+                <!-- Thème saisonnier : congère / montagnes / soleil + vagues, derrière le texte -->
+                <ContentControl x:Name="FondBandeauSaison" Grid.ColumnSpan="3" Margin="-22,-16"
+                                IsHitTestVisible="False" IsTabStop="False"/>
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="FICHE EN COURS"
@@ -153,7 +160,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Exécuter (action primaire orange) -->
-            <Button Grid.Column="0"
+            <Button x:Name="BoutonLancer" Grid.Column="0"
                     Command="{Binding ExecuterMesureCommand}"
                     Cursor="Hand"
                     BorderThickness="0"
@@ -166,16 +173,19 @@
                                 <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.2" Color="{StaticResource AsertiOrangeDarkColor}"/>
                             </Border.Effect>
                             <StackPanel>
-                                <Border Width="44" Height="44" CornerRadius="10"
-                                        HorizontalAlignment="Left" Margin="0,0,0,14">
-                                    <Border.Background>
-                                        <SolidColorBrush Color="White" Opacity="0.22"/>
-                                    </Border.Background>
-                                    <ui:SymbolIcon Symbol="Play24" FontSize="24"
-                                                   Foreground="White"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                </Border>
+                                <Grid Width="44" Height="44" HorizontalAlignment="Left" Margin="0,0,0,14">
+                                    <Border CornerRadius="10">
+                                        <Border.Background>
+                                            <SolidColorBrush Color="White" Opacity="0.22"/>
+                                        </Border.Background>
+                                        <ui:SymbolIcon Symbol="Play24" FontSize="24"
+                                                       Foreground="White"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                    </Border>
+                                    <!-- Thème saisonnier : bonnet / lunettes posés sur l'icône -->
+                                    <ContentControl x:Name="AccessoireSaison" IsHitTestVisible="False" IsTabStop="False"/>
+                                </Grid>
                                 <TextBlock Text="EXÉCUTER" FontSize="11" FontWeight="Bold"
                                            Foreground="White" Opacity="0.85" Margin="0,0,0,2"/>
                                 <TextBlock Text="Lancer la mesure" FontSize="16" FontWeight="SemiBold"
