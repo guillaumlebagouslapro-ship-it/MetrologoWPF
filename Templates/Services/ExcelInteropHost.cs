@@ -31,6 +31,11 @@ namespace Metrologo.Services
         private dynamic? _feuilleMesure;
         private string _cheminClasseurActif = string.Empty;
 
+        /// <summary>Nom complet du classeur actif TEL QU'EXCEL L'ÉCRIT (lettre de lecteur ou
+        /// \\serveur\partage selon sa configuration). Sert à reconnaître à coup sûr notre rapport
+        /// parmi les classeurs ouverts, quel que soit le dossier réglé dans Admin.</summary>
+        private string _fullNameActifExcel = string.Empty;
+
         /// <summary>
         /// Chemin du Metrologo.xla qu'on pré-ouvre dans Excel : c'est lui qui résout les formules
         /// [1]!Cal_xxx des rapports. On le mémorise pour le mettre à l'abri du nettoyage des classeurs
@@ -155,7 +160,7 @@ namespace Metrologo.Services
                         // et surtout jamais le classeur actif de notre instance hôte.
                         if (string.IsNullOrEmpty(nomAffiche)
                             || !EstClasseurDeMesure(nomAffiche)
-                            || ChemPathEgal(nomAffiche, _cheminClasseurActif))
+                            || EstClasseurActif(nomAffiche))
                             continue;
 
                         object? comObj = null;
@@ -580,6 +585,8 @@ namespace Metrologo.Services
                     // les liens (UpdateLinks=3 forcerait une recherche réseau lente et inutile).
                     _classeurActif = _excel.Workbooks.Open(cheminFichier, 0);
                     _cheminClasseurActif = cheminFichier;
+                    try { _fullNameActifExcel = (string)_classeurActif.FullName; }
+                    catch { _fullNameActifExcel = string.Empty; }
 
                     // Active la feuille de mesure (ModFeuille dupliquée en Freq1/Stab1/...)
                     foreach (dynamic ws in _classeurActif.Worksheets)
@@ -866,6 +873,7 @@ namespace Metrologo.Services
                 _classeurActif = null;
                 _feuilleMesure = null;
                 _cheminClasseurActif = string.Empty;
+                _fullNameActifExcel = string.Empty;
             }
         });
 
@@ -902,6 +910,7 @@ namespace Metrologo.Services
             _feuilleMesure = null;
             _excel = null;
             _cheminClasseurActif = string.Empty;
+            _fullNameActifExcel = string.Empty;
             _cheminXlaPreCharge = string.Empty;   // l'ancienne instance avait son propre .xla : il n'a plus de sens ici
 
             try
@@ -1021,7 +1030,7 @@ namespace Metrologo.Services
                             string fullName = (string)wb.FullName;
                             string caption = (string)w.Caption;
                             bool visAvant = (bool)w.Visible;
-                            bool estClasseurActif = ChemPathEgal(fullName, _cheminClasseurActif);
+                            bool estClasseurActif = EstClasseurActif(fullName);
                             string action = "skip";
                             if (!estClasseurActif)
                             {
@@ -1070,7 +1079,7 @@ namespace Metrologo.Services
                         // qui font échouer un simple string.Equals — ce qui faisait fermer
                         // le rapport tout juste ouvert et donnait une fenêtre Excel grise
                         // vide à côté.
-                        bool estClasseurActif = ChemPathEgal(fullName, _cheminClasseurActif);
+                        bool estClasseurActif = EstClasseurActif(fullName);
                         bool estXlaPreCharge = !string.IsNullOrEmpty(_cheminXlaPreCharge)
                             && ChemPathEgal(fullName, _cheminXlaPreCharge);
                         // On ne ferme QUE les classeurs de mesure Metrologo (freq/stab sous
@@ -2556,6 +2565,7 @@ namespace Metrologo.Services
                 try { _excel!.DisplayAlerts = false; } catch { }
                 _classeurActif.SaveAs(cible);
                 _cheminClasseurActif = cible;
+                try { _fullNameActifExcel = (string)_classeurActif.FullName; } catch { _fullNameActifExcel = cible; }
                 TransfertReseauService.SignalerFIEnLocal(mesure.NumFI);
                 JournalLog.Warn(CategorieLog.Excel, "EXCEL_SAVE_REPLI_LOCAL",
                     $"Rapport enregistré en local après échec de l'enregistrement : {cible} "
@@ -3459,6 +3469,19 @@ namespace Metrologo.Services
         /// les variations (capitalisation, slash, raccourcis 8.3) qui faisaient échouer
         /// un simple string.Equals et fermaient à tort le rapport actif.
         /// </summary>
+        /// <summary>Vrai si ce classeur (nom complet donné par Excel ou la ROT) est notre rapport
+        /// actif : même nom complet qu'Excel a donné à l'ouverture, ou même chemin une fois
+        /// normalisé. Évite de prendre notre propre rapport pour un « parasite » à masquer/fermer.</summary>
+        private bool EstClasseurActif(string fullName)
+        {
+            if (string.IsNullOrEmpty(fullName)) return false;
+            if (!string.IsNullOrEmpty(_fullNameActifExcel)
+                && string.Equals(fullName, _fullNameActifExcel, StringComparison.OrdinalIgnoreCase))
+                return true;
+            return ChemPathEgal(fullName, _cheminClasseurActif)
+                || ChemPathEgal(fullName, _fullNameActifExcel);
+        }
+
         private static bool ChemPathEgal(string a, string b)
         {
             if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
@@ -3558,6 +3581,7 @@ namespace Metrologo.Services
             }
 
             _cheminClasseurActif = string.Empty;
+            _fullNameActifExcel = string.Empty;
 
             // Force la libération immédiate des handles fichier détenus par Excel via les
             // proxys COM RCW. Sans ces 2 lignes, le fichier reste "verrouillé" côté OS pour
