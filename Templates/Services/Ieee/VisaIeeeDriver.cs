@@ -16,6 +16,11 @@ namespace Metrologo.Services.Ieee
     /// </summary>
     public sealed class VisaIeeeDriver : IIeeeDriver, IDisposable
     {
+        /// <summary>Taille d'un bloc de lecture VISA (une réponse plus longue est relue par blocs).</summary>
+        private const long TAILLE_BLOC_LECTURE = 4096;
+        /// <summary>Garde-fou contre une lecture sans fin (≈ 40 000 valeurs).</summary>
+        private const int TAILLE_MAX_REPONSE = 1_000_000;
+
         private readonly ResourceManager _rm;
         private readonly Dictionary<int, GpibSession> _sessions = new();
         private readonly int _gpibBoard;
@@ -83,9 +88,20 @@ namespace Metrologo.Services.Ieee
 
             // Synchrone direct, même logique que dans EcrireAsync. Le thread d'orchestration nous
             // appartient, on peut donc le bloquer le temps de l'IO GPIB sans gêner l'UI.
+            // PIÈGE : RawIO.ReadString() sans argument lit au plus 1024 octets (NI : Read() → Read(1024)).
+            // Une mesure en lot de 100 valeurs (~2 300 car.) était tronquée : le reste restait dans le
+            // buffer de sortie du compteur et la commande suivante provoquait -410 Query INTERRUPTED.
+            // On relit donc par blocs tant que VISA signale « nombre max atteint » (ni terminateur ni EOI).
             try
             {
-                return Task.FromResult(session.RawIO.ReadString());
+                var reponse = new System.Text.StringBuilder();
+                ReadStatus statut;
+                do
+                {
+                    reponse.Append(session.RawIO.ReadString(TAILLE_BLOC_LECTURE, out statut));
+                }
+                while (statut == ReadStatus.MaximumCountReached && reponse.Length < TAILLE_MAX_REPONSE);
+                return Task.FromResult(reponse.ToString());
             }
             catch (IOTimeoutException)
             {

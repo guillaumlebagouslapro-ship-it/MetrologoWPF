@@ -521,7 +521,7 @@ namespace Metrologo.Services
                     {
                         // Timeout : gate × N + 3 s, comme le bulk classique.
                         int timeoutStream = Math.Max(5000,
-                            (int)(gateSecondes * 1000 * mesure.NbMesures) + 3000);
+                            (int)(gateSecondes * 1000 * mesure.NbMesures) + 3000 + 100 * mesure.NbMesures);
                         _driver.DefinirTimeout(appareil.Adresse, timeoutStream);
 
                         var swStream = Stopwatch.StartNew();
@@ -587,9 +587,10 @@ namespace Metrologo.Services
                     {
                         // ----- Mode BULK : 1 seul aller-retour GPIB pour N mesures -----
                         // Timeout adapté au volume réel : gate × N + 3 s de marge (init mode
-                        // CONT, transmission CSV des N valeurs, parsing).
+                        // CONT, transmission CSV des N valeurs, parsing) + 100 ms par mesure pour le
+                        // temps mort entre deux portes (une marge fixe devenait juste à 100 mesures).
                         int timeoutBulk = Math.Max(5000,
-                            (int)(gateSecondes * 1000 * mesure.NbMesures) + 3000);
+                            (int)(gateSecondes * 1000 * mesure.NbMesures) + 3000 + 100 * mesure.NbMesures);
                         _driver.DefinirTimeout(appareil.Adresse, timeoutBulk);
 
                         // Message UI clair : en mode bulk, l'instrument fait les N mesures en
