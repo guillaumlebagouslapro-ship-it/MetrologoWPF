@@ -19,14 +19,17 @@ namespace Metrologo.Services
         private const double SECONDES_PAR_GATE = 6.0;
         /// <summary>Par mesure : aller-retour GPIB en plus du temps de porte.</summary>
         private const double SECONDES_PAR_MESURE = 0.06;
+        /// <summary>Marge de sécurité par stab (choix utilisateur : large, mieux vaut finir avant l'heure annoncée).</summary>
+        private const double SECONDES_MARGE_PAR_STAB = 10 * 60;
 
-        /// <summary>Durée estimée d'UN balayage : chaque gate = nbMesures × (temps de porte + GPIB).</summary>
+        /// <summary>Durée estimée d'UN balayage, marge comprise : init + marge + chaque gate =
+        /// nbMesures × (temps de porte + GPIB).</summary>
         public static TimeSpan EstimerBalayage(IEnumerable<int> gateIndices, int nbMesures)
         {
             var gates = gateIndices?.ToList() ?? new List<int>();
             if (gates.Count == 0 || nbMesures <= 0) return TimeSpan.Zero;
 
-            double secondes = SECONDES_INIT;
+            double secondes = SECONDES_INIT + SECONDES_MARGE_PAR_STAB;
             foreach (int g in gates)
                 secondes += SECONDES_PAR_GATE
                           + nbMesures * (EnTetesMesureHelper.SecondesGate(g) + SECONDES_PAR_MESURE);
