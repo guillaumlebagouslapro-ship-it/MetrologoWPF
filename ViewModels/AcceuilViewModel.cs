@@ -33,6 +33,10 @@ namespace Metrologo.ViewModels
         /// COM Excel mort (RPC ~60 s), il rend la main a l'UI sans attendre la fin de l'orchestration.</summary>
         private CancellationTokenSource? _abandonCts;
 
+        /// <summary>Vrai pendant toute une série de stabs répétées : bloque Lancer/Relancer entre deux
+        /// répétitions (MesureEnCours repasse brièvement à false entre la fin d'une stab et la suivante).</summary>
+        private bool _serieStabEnCours;
+
         [ObservableProperty] private bool _estSurBaie = true;
         [ObservableProperty] private string _informationsGenerales = "Prêt. En attente d'exécution...";
         [ObservableProperty] private string _rubidiumActifTexte = EtatApplication.RubidiumActifTexte;
@@ -409,7 +413,7 @@ namespace Metrologo.ViewModels
 
         private async Task ExecuterMesureInterneAsync(bool ouvrirConfigAvant)
         {
-            if (MesureEnCours) return;
+            if (MesureEnCours || _serieStabEnCours) return;
 
             // 1) Le rubidium est obligatoire (et ne se definit que dans le menu Administration).
             var rubi = EtatApplication.RubidiumActif;
@@ -477,12 +481,15 @@ namespace Metrologo.ViewModels
 
             // 3) Gate : deja choisie dans la fenetre Configuration (MesureConfig.GateIndex).
             //    Pour la Stabilite, on ouvre la fenetre dediee ou l'utilisateur selectionne les
-            //    gates a balayer (une ou plusieurs, via cases a cocher + presets).
+            //    gates a balayer (une ou plusieurs, via cases a cocher + presets) et le nombre
+            //    de repetitions a enchainer.
+            int nbRepetitions = 1;
             if (MesureConfig.TypeMesure == TypeMesure.Stabilite)
             {
                 var gateWin = new SelectionGateWindow(MesureConfig) { Owner = Application.Current.MainWindow };
                 if (gateWin.ShowDialog() != true) { Log("✖ Mesure annulée (sélection gates)."); return; }
                 MesureConfig.GateIndices = gateWin.ViewModel.IndicesGatesResultats;
+                nbRepetitions = gateWin.ViewModel.NbRepetitions;
             }
             else if (MesureConfig.GateIndices.Count > 1)
             {
@@ -538,13 +545,84 @@ namespace Metrologo.ViewModels
                 ? MesureConfig.FNominale
                 : (double?)null;
 
-            await LancerMesureAsync(MesureConfig, rubi, fNominale, preambule: "▶ Lancement");
+            if (nbRepetitions > 1)
+                await LancerSerieStabAsync(MesureConfig, rubi, fNominale, nbRepetitions);
+            else
+                await LancerMesureAsync(MesureConfig, rubi, fNominale, preambule: "▶ Lancement");
+        }
+
+        /// <summary>
+        /// Enchaîne <paramref name="nbRepetitions"/> stabs identiques. Chacune attend la fin RÉELLE de
+        /// la précédente (await) : deux stabs ne peuvent pas se chevaucher, l'estimation de durée ne
+        /// sert qu'à afficher l'heure de fin. Chaque stab crée son fichier (stab, stab1, stab2…, cf.
+        /// ExcelService.InitialiserRapportAsync). Un arrêt, une erreur ou un hors-module interrompt la série.
+        /// </summary>
+        private async Task LancerSerieStabAsync(Mesure config, Rubidium rubi, double? fNominale, int nbRepetitions)
+        {
+            _serieStabEnCours = true;
+            var swSerie = System.Diagnostics.Stopwatch.StartNew();
+            var estimation = EstimationDureeStab.EstimerBalayage(config.GateIndices, config.NbMesures);
+            int faites = 0;
+            try
+            {
+                var totalEstime = TimeSpan.FromTicks(estimation.Ticks * nbRepetitions);
+                Log("═══════════════════════════════════════════");
+                Log($"🔁 Série de {nbRepetitions} stabs · ≈ {EstimationDureeStab.Formater(estimation)} par stab"
+                  + $" · fin estimée vers {EstimationDureeStab.HeureFin(totalEstime)}");
+                Journal.Info(CategorieLog.Mesure, "STAB_SERIE_DEBUT",
+                    $"Série de {nbRepetitions} stabs, FI {config.NumFI}, gates {string.Join(",", config.GateIndices)}, "
+                  + $"durée estimée {EstimationDureeStab.Formater(estimation)} par stab.");
+                JournalFIService.Ecrire("STAB_SERIE_DEBUT",
+                    $"{nbRepetitions} stabs · ≈ {EstimationDureeStab.Formater(estimation)} par stab");
+
+                for (int r = 1; r <= nbRepetitions; r++)
+                {
+                    // Dès qu'une stab est finie, on remplace l'estimation par la durée réelle moyenne.
+                    var parStab = faites > 0 ? TimeSpan.FromTicks(swSerie.Elapsed.Ticks / faites) : estimation;
+                    var reste = TimeSpan.FromTicks(parStab.Ticks * (nbRepetitions - r + 1));
+                    if (r > 1)
+                        Log($"🔁 Stab {r}/{nbRepetitions} · fin de série estimée vers {EstimationDureeStab.HeureFin(reste)}");
+
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    bool ok = await LancerMesureAsync(config, rubi, fNominale,
+                        preambule: $"▶ Stab {r}/{nbRepetitions}");
+                    sw.Stop();
+
+                    if (!ok)
+                    {
+                        Log($"✖ Série interrompue à la stab {r}/{nbRepetitions} : les suivantes ne sont pas lancées.");
+                        Journal.Warn(CategorieLog.Mesure, "STAB_SERIE_INTERROMPUE",
+                            $"Série interrompue à la stab {r}/{nbRepetitions} ({faites} terminée(s)).");
+                        JournalFIService.Ecrire("STAB_SERIE_INTERROMPUE",
+                            $"stab {r}/{nbRepetitions}, {faites} terminée(s)");
+                        break;
+                    }
+
+                    faites++;
+                    Journal.Info(CategorieLog.Mesure, "STAB_SERIE_REPETITION_FIN",
+                        $"Stab {r}/{nbRepetitions} terminée en {EstimationDureeStab.Formater(sw.Elapsed)} "
+                      + $"(estimée {EstimationDureeStab.Formater(estimation)}).",
+                        new { r, nbRepetitions, reelleS = sw.Elapsed.TotalSeconds, estimeeS = estimation.TotalSeconds });
+                }
+
+                if (faites == nbRepetitions)
+                {
+                    Log("═══════════════════════════════════════════");
+                    Log($"✅ Série terminée : {faites} stabs en {EstimationDureeStab.Formater(swSerie.Elapsed)}.");
+                    JournalFIService.Ecrire("STAB_SERIE_FIN",
+                        $"{faites} stabs en {EstimationDureeStab.Formater(swSerie.Elapsed)}");
+                }
+            }
+            finally
+            {
+                _serieStabEnCours = false;
+            }
         }
 
         [RelayCommand(CanExecute = nameof(PeutRelancer))]
         private async Task RelancerMesureAsync()
         {
-            if (MesureEnCours || !DerniereMesureDisponible) return;
+            if (MesureEnCours || _serieStabEnCours || !DerniereMesureDisponible) return;
             var rubi = EtatApplication.RubidiumActif;
             if (rubi == null)
             {
@@ -706,8 +784,10 @@ namespace Metrologo.ViewModels
             return modele?.Nom ?? $"({config.IdModeleCatalogue})";
         }
 
-        private async Task LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
+        /// <returns>true si la mesure est allée au bout ; false si arrêt, échec ou erreur.</returns>
+        private async Task<bool> LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
         {
+            bool succes = false;
             // FI passée en local (réseau absent ou lent au départ) : retour sur le réseau dès qu'il
             // répond (rapatriement du dossier local, puis suppression).
             await CheminsMetrologo.ReevaluerDossierFIAsync(config.NumFI ?? string.Empty);
@@ -979,13 +1059,14 @@ namespace Metrologo.ViewModels
                         Journal.Warn(CategorieLog.Mesure, "MESURE_ABANDON",
                             "Mesure abandonnée par l'utilisateur (taskMesure orpheline en arrière-plan).");
                     }
-                    return;
+                    return false;
                 }
 
                 var result = await taskMesure;
 
                 if (result.Succes)
                 {
+                    succes = true;
                     Log("───────────────────────────────────────────");
                     Log($"✅ Moyenne : {result.Moyenne:F6} Hz");
                     Log($"✅ Écart-type : {result.EcartType:E3} Hz");
@@ -1084,6 +1165,8 @@ namespace Metrologo.ViewModels
                 }
                 catch { /* swallow — pas critique si la fermeture rate */ }
             }
+
+            return succes;
         }
 
         /// <summary>

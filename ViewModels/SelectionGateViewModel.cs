@@ -59,6 +59,34 @@ namespace Metrologo.ViewModels
         /// <summary>Le résultat renvoyé : un seul indice pour une mesure simple, plusieurs pour la stabilité.</summary>
         public List<int> IndicesGatesResultats { get; private set; } = new();
 
+        /// <summary>Stabilité : nombre de balayages identiques à enchaîner (chacun dans son fichier stab, stab1…).</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(DureeEstimeeTexte))]
+        private int _nbRepetitions = 1;
+
+        public const int NB_REPETITIONS_MAX = 50;
+
+        /// <summary>Durée estimée d'un balayage et de la série complète, recalculée à chaque case cochée.</summary>
+        public string DureeEstimeeTexte
+        {
+            get
+            {
+                var indices = GatesDisponibles.Where(g => g.EstCoche).Select(g => g.SlotCanonique).ToList();
+                if (indices.Count == 0) return "Cochez au moins un temps de porte.";
+                var unBalayage = EstimationDureeStab.EstimerBalayage(indices, _mesure.NbMesures);
+                string texte = $"≈ {EstimationDureeStab.Formater(unBalayage)} par stab "
+                             + $"({indices.Count} temps × {_mesure.NbMesures} mesures)";
+                int n = Math.Clamp(NbRepetitions, 1, NB_REPETITIONS_MAX);
+                if (n > 1)
+                {
+                    var total = TimeSpan.FromTicks(unBalayage.Ticks * n);
+                    texte += $"\n≈ {EstimationDureeStab.Formater(total)} pour les {n} stabs "
+                           + $"— fin vers {EstimationDureeStab.HeureFin(total)}";
+                }
+                return texte;
+            }
+        }
+
         public Action<bool>? CloseAction { get; set; }
 
         public SelectionGateViewModel(Mesure mesure)
@@ -98,7 +126,13 @@ namespace Metrologo.ViewModels
             {
                 int slot = EnTetesMesureHelper.IndexDepuisLibelle(lib);
                 if (slot < 0) continue;
-                GatesDisponibles.Add(new GateCochable(lib) { SlotCanonique = slot });
+                var gate = new GateCochable(lib) { SlotCanonique = slot };
+                gate.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(GateCochable.EstCoche))
+                        OnPropertyChanged(nameof(DureeEstimeeTexte));
+                };
+                GatesDisponibles.Add(gate);
             }
         }
 
@@ -219,6 +253,13 @@ namespace Metrologo.ViewModels
                 if (indices.Count == 0)
                 {
                     MessageErreur = "Cochez au moins un temps de porte à balayer.";
+                    OnPropertyChanged(nameof(HasError));
+                    return;
+                }
+
+                if (NbRepetitions < 1 || NbRepetitions > NB_REPETITIONS_MAX)
+                {
+                    MessageErreur = $"Nombre de répétitions : entre 1 et {NB_REPETITIONS_MAX}.";
                     OnPropertyChanged(nameof(HasError));
                     return;
                 }

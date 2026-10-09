@@ -130,6 +130,36 @@
 
                         <Separator Margin="0,12,0,12"/>
 
+                        <TextBlock Text="Répétitions (stabs identiques enchaînées)"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ui:TextBox Grid.Column="0"
+                                        Text="{Binding NbRepetitions, UpdateSourceTrigger=PropertyChanged}"
+                                        Padding="10,8"
+                                        ToolTip="Chaque stab est enregistrée dans son propre fichier (stab, stab1, stab2…). La suivante démarre quand la précédente est terminée."/>
+                            <TextBlock Grid.Column="1"
+                                       Text="fois (1 = une seule stab)"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"
+                                       Margin="10,0,0,0"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Clock24" FontSize="16"
+                                           Foreground="{StaticResource AsertiOrangeBrush}"
+                                           Margin="0,0,8,0" VerticalAlignment="Top"/>
+                            <TextBlock Text="{Binding DureeEstimeeTexte}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <Separator Margin="0,12,0,12"/>
+
                         <TextBlock Text="Sauver la sélection actuelle comme nouveau preset"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"/>
