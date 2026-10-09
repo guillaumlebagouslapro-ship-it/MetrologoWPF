@@ -289,7 +289,7 @@ namespace Metrologo.Services
                             await Task.Delay(500);
                         }
 
-                        // 3.a On crée une nouvelle feuille de mesure (Stab1, Stab2, … selon le slot dispo).
+                        // 3.a On crée une nouvelle feuille de mesure (1, 2, 3… en stab, selon le slot dispo).
                         // À la 1ère gate d'une session Stab, on signale "nouvelle session" pour qu'un
                         // suffixe _v2, _v3… soit ajouté si le fichier précédent existe déjà. Ça évite
                         // que le graphe Stab traîne encore les 7 valeurs de la mesure précédente sur le
@@ -441,6 +441,12 @@ namespace Metrologo.Services
                         && !string.IsNullOrWhiteSpace(appareil.CommandeMesureMultiple)
                         && mesure.TypeMesure == TypeMesure.Stabilite
                         && !bulkDejaEchoue;
+                    // Gates > 1 s : le bulk en un coup ne rendrait les N valeurs qu'à la fin (50 min
+                    // sans rien voir à 100 s × 30). On garde la MÊME commande (que l'appareil accepte)
+                    // mais avec {N}=1, une transaction par mesure : chaque valeur apparaît dans Excel
+                    // dès qu'elle arrive (choix utilisateur). Surtout pas de bascule sur le mode rapide
+                    // :INIT:CONT ON + :FETCh? : -113 Undefined header sur les 53230A et consorts.
+                    bool bulkUnitaire = modeBulk && gateSecondes > 1.0;
                     // Mode rapide :FETCh? : utilisable pour tout type avec NbMesures > 1, du moment que
                     // l'appareil l'autorise via le ModeRapideActif du catalogue. Compatible avec
                     // l'écriture live Excel, et environ 3× plus rapide que le :READ? classique sur le 53131A.
@@ -589,6 +595,7 @@ namespace Metrologo.Services
                         // Message UI clair : en mode bulk, l'instrument fait les N mesures en
                         // interne sans qu'on puisse les remonter une par une à l'utilisateur.
                         double dureeAttendueSec = gateSecondes * mesure.NbMesures;
+                        if (!bulkUnitaire)   // en unitaire, chaque mesure fait son propre report
                         progress?.Report(new ProgressionMesure
                         {
                             Message = nbIterations > 1
@@ -602,6 +609,55 @@ namespace Metrologo.Services
                         bool bulkOk = false;
                         var swBulkProgress = Stopwatch.StartNew();
 
+                        if (bulkUnitaire)
+                        {
+                            // Une mesure par transaction : timeout calé sur UNE gate (+5 s de marge).
+                            _driver.DefinirTimeout(appareil.Adresse,
+                                Math.Max(5000, (int)(gateSecondes * 1000) + 5000));
+                            try
+                            {
+                                for (int i = 0; i < mesure.NbMesures; i++)
+                                {
+                                    ct.ThrowIfCancellationRequested();
+                                    var lot1 = await appareil.MesurerEnLotAsync(
+                                        _driver, appareil.CommandeMesureMultiple, 1, ct);
+                                    if (lot1.Count < 1)
+                                        throw new InvalidOperationException(
+                                            $"réponse vide à la mesure {i + 1}/{mesure.NbMesures}");
+
+                                    double val = lot1[0];
+                                    var ts = DateTime.Now;
+                                    valeurs.Add(val);
+                                    if (ecritureBatch)
+                                        bufferBatch!.Add((ts, val));
+                                    else
+                                        pendingWrites.Add(ExcelInteropHost.Instance.EcrireValeurLiveAsync(i, val, ts));
+
+                                    // Gate > 1 s : un report par mesure ne sature pas l'UI.
+                                    progress?.Report(new ProgressionMesure
+                                    {
+                                        Message = nbIterations > 1
+                                            ? $"Gate {g + 1}/{nbIterations} — mesure {i + 1}/{mesure.NbMesures}"
+                                            : $"Mesure {i + 1}/{mesure.NbMesures}",
+                                        EtapeActuelle = etape + i + 1,
+                                        EtapesTotales = totalEtapes,
+                                        DerniereValeur = val
+                                    });
+                                }
+                                bulkOk = true;
+                                JournalLog.Info(CategorieLog.Mesure, "BULK_UNITAIRE",
+                                    $"{mesure.NbMesures} mesures lues une par une ({{N}}=1), gate {gateSecondes} s.");
+                            }
+                            catch (OperationCanceledException) { throw; }
+                            catch (Exception ex)
+                            {
+                                JournalLog.Warn(CategorieLog.Mesure, "BULK_UNITAIRE_ERR",
+                                    $"Mesure une par une échouée : {ex.Message} — fallback.");
+                                valeurs.Clear();
+                                bufferBatch?.Clear();
+                            }
+                        }
+                        else
                         try
                         {
                             var lot = await appareil.MesurerEnLotAsync(
@@ -680,7 +736,9 @@ namespace Metrologo.Services
                         _driver.DefinirTimeout(appareil.Adresse, timeoutNormal);
 
                         modeBulk = false;
-                        modeRapide = !string.IsNullOrEmpty(cmdFetch);
+                        // ModeRapideActif = false sur les compteurs modernes : leur :INIT:CONT ON +
+                        // :FETCh? donne -113 → on retombe alors sur le :READ? classique.
+                        modeRapide = !string.IsNullOrEmpty(cmdFetch) && appareil.ModeRapideActif;
                         if (modeRapide)
                         {
                             // Recalcule delayFetchMs (était à 0 car modeRapide était false avant le fallback).

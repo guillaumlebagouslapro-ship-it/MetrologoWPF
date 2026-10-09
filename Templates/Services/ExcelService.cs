@@ -89,6 +89,8 @@ namespace Metrologo.Services
         private XLWorkbook? _workbook;
         private IXLWorksheet? _feuilleMesure;   // la feuille tout juste créée pour cette mesure
         private string _cheminFichier = string.Empty;
+        /// <summary>Fichier de la stab en cours (stab, stab1…), fixé à sa 1re gate et réutilisé par les suivantes.</summary>
+        private string _cheminFichierStabSession = string.Empty;
         private string _nomFeuilleMesure = string.Empty;
         private TypeMesure _typeMesureCourant;  // gardé sous la main pour PreparerLignesMesureAsync (col K Tachy)
 
@@ -183,6 +185,17 @@ namespace Metrologo.Services
                         v++;
                     } while (File.Exists(candidat) && v < 1000);
                     _cheminFichier = candidat;
+                }
+
+                // Le fichier choisi à la 1re gate est mémorisé pour toute la stab : sans ça, les
+                // gates 2+ (nouvelleSession = false) recalculaient « stab.xlsx » et allaient écrire
+                // leurs feuilles dans l'ANCIEN fichier au lieu de stab1/stab2… tout juste créé.
+                if (estStab)
+                {
+                    if (nouvelleSession)
+                        _cheminFichierStabSession = _cheminFichier;
+                    else if (!string.IsNullOrEmpty(_cheminFichierStabSession))
+                        _cheminFichier = _cheminFichierStabSession;
                 }
 
                 // --- 2. Ouverture : fichier existant ou copie du template ---
@@ -1636,14 +1649,15 @@ namespace Metrologo.Services
             if (type == TypeMesure.FreqAvantInterv) return "F_avant_interv";
             if (type == TypeMesure.FreqFinale) return "F_finale";
 
-            // Préfixes courts (feuilles numérotées : stab1, inter1, …). La fréquence n'a
-            // pas de préfixe → onglets numérotés seuls (1, 2, 3, …).
+            // Préfixes courts (feuilles numérotées : inter1, topti1, …). La fréquence et la
+            // stabilité n'ont pas de préfixe → onglets numérotés seuls (1, 2, 3, …). En stab,
+            // c'est le FICHIER qui s'incrémente (stab, stab1…), les feuilles = 1 par temps de porte.
             // Les formules cross-sheet de la Récap sont écrites dynamiquement (cf. EcrireLigneRecap)
             // avec le nom réel de la feuille — elles s'adaptent automatiquement.
             string prefixe = type switch
             {
                 TypeMesure.Frequence    => "",
-                TypeMesure.Stabilite    => "stab",
+                TypeMesure.Stabilite    => "",
                 TypeMesure.Interval     => "inter",
                 TypeMesure.TachyOptique => "topti",
                 TypeMesure.TachyContact => "tcont",
@@ -1659,8 +1673,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Extrait le numéro de gate depuis un nom de feuille Stab (« stab1 » → 1).
-        /// Tolère aussi l'ancien format numérique pur (« 1 » → 1) au cas où on rouvre
+        /// Extrait le numéro de gate depuis un nom de feuille Stab (« 1 » → 1).
+        /// Tolère aussi l'ancien format préfixé (« stab1 » → 1) au cas où on rouvre
         /// un classeur historique généré avant le renommage.
         /// </summary>
         private static bool TryExtraireNumeroGate(string nomFeuille, out int numGate)

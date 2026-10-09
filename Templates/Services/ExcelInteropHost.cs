@@ -622,7 +622,7 @@ namespace Metrologo.Services
                     _excel.Visible = true;
 
                     // Élargit la zone des onglets en bas (par défaut ~60% de la barre, ce qui
-                    // tronque les onglets stab1..stab10 et oblige à naviguer avec les flèches).
+                    // tronque les onglets 1..13 d'une stab et oblige à naviguer avec les flèches).
                     // 0.85 = 85% de largeur réservée aux onglets, 15% restant pour la scrollbar
                     // horizontale → tous les onglets visibles d'un coup pour la plupart des FI.
                     try
@@ -2071,7 +2071,7 @@ namespace Metrologo.Services
             string prefixe = type switch
             {
                 TypeMesure.Frequence    => "",   // fréquence : numéros seuls (1, 2, 3, …)
-                TypeMesure.Stabilite    => "stab",
+                TypeMesure.Stabilite    => "",   // stab : 1 feuille par temps de porte (1, 2, 3, …)
                 TypeMesure.Interval     => "inter",
                 TypeMesure.TachyOptique => "topti",
                 TypeMesure.TachyContact => "tcont",
