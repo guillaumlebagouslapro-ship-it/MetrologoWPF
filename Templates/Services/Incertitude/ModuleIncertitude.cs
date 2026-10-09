@@ -46,8 +46,13 @@ namespace Metrologo.Services.Incertitude
         /// </summary>
         public LigneIncertitude? Trouver(string fonction, double tempsSec, double freqHz)
         {
+            // Le sous-dossier du CSV fixe déjà le type de mesure. Si le module ne contient
+            // aucune ligne de la fonction attendue (ex. module Stabilité saisi en « Freq »,
+            // fonction par défaut de l'ajout de temps), on ignore la colonne Fonction au lieu
+            // de déclarer toute la mesure hors domaine.
+            bool filtrerFonction = SupportFonction(fonction);
             return Lignes.FirstOrDefault(l =>
-                string.Equals(l.Fonction, fonction, System.StringComparison.OrdinalIgnoreCase) &&
+                (!filtrerFonction || string.Equals(l.Fonction, fonction, System.StringComparison.OrdinalIgnoreCase)) &&
                 (!UtiliseTempsDeMesure || System.Math.Abs(l.TempsDeMesure - tempsSec) < 1e-9) &&
                 l.Couvre(freqHz));
         }

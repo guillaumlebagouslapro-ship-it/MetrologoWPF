@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Windows;
@@ -31,10 +31,19 @@ namespace Metrologo.Views
         /// fourni, on filtre la ComboBox des temps pour retirer ceux déjà saisis sur la
         /// fonction sélectionnée, histoire d'éviter les doublons.
         /// </summary>
-        public AjoutTrioDialog(ModuleIncertitude? module)
+        public AjoutTrioDialog(ModuleIncertitude? module, string? fonctionParDefaut = null)
         {
             InitializeComponent();
             _module = module;
+
+            // Présélectionne la fonction de la catégorie éditée (Stabilité -> « Stab »…) :
+            // laisser « Freq » par défaut produisait des modules que la mesure ne trouvait pas.
+            if (!string.IsNullOrEmpty(fonctionParDefaut))
+            {
+                var item = CbFonction.Items.OfType<ComboBoxItem>().FirstOrDefault(i =>
+                    string.Equals(i.Content?.ToString(), fonctionParDefaut, System.StringComparison.OrdinalIgnoreCase));
+                if (item != null) CbFonction.SelectedItem = item;
+            }
 
             // Pour un module sans temps de mesure, on cache tout le bloc et OnValider mettra
             // TempsDeMesure à 0 : choisir un temps n'aurait aucun sens (tachy/strobo). Au

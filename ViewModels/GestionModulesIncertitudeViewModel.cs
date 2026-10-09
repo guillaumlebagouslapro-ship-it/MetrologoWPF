@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -264,7 +264,8 @@ namespace Metrologo.ViewModels
         {
             if (ModuleSelectionne == null) return;
 
-            var dlg = new Views.AjoutTrioDialog(ModuleSelectionne) { Owner = Application.Current.MainWindow };
+            var dlg = new Views.AjoutTrioDialog(ModuleSelectionne,
+                IncertitudeFonctionHelper.NomFonction(TypeMesureSelectionne)) { Owner = Application.Current.MainWindow };
             if (dlg.ShowDialog() != true) return;
 
             string fn = dlg.Fonction;
