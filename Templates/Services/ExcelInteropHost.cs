@@ -1214,7 +1214,8 @@ namespace Metrologo.Services
                                 ? nbGatesStabBalayees
                                 : _sigmasRelatifsParGate.Count;
                             AjusterPlagesGrapheStabViaComInterne(nbGates);
-                            CalibrerAxeYGrapheStabViaComInterne(_sigmasRelatifsParGate.Values);
+                            // Bornes de l'axe Y : posées après le recalcul (étape 4), car elles
+                            // se calent sur les valeurs calculées de la Récap.
                         }
                     }
 
@@ -1237,6 +1238,14 @@ namespace Metrologo.Services
                     //    réouverture propre, pas de cellule barrée.
                     try { _excel.Calculation = -4105; /* xlCalculationAutomatic */ } catch { }
                     try { _classeurActif.Calculate(); } catch { }
+
+                    if (mesure.TypeMesure == TypeMesure.Stabilite && isDerniereGate)
+                    {
+                        int nbGatesAxe = nbGatesStabBalayees > 0
+                            ? nbGatesStabBalayees
+                            : _sigmasRelatifsParGate.Count;
+                        CalibrerAxeYGrapheStabViaComInterne(nbGatesAxe, _sigmasRelatifsParGate.Values);
+                    }
 
                     // Configure le workbook pour ne PAS tenter d'actualiser les liens externes
                     // (vers Metrologo.xla) à la prochaine ouverture. Sans ce réglage, Excel
@@ -3038,14 +3047,18 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Calibre l'axe Y log du graphe Stab à partir des sigmas relatifs accumulés —
-        /// équivalent COM de <c>ExcelService.CalibrerAxeYGrapheStab</c>. Définit
-        /// <c>MinimumScale</c> et <c>MaximumScale</c> via la Chart Object Model.
+        /// Calibre l'axe Y log du graphe Stab sur les valeurs TRACÉES (Récap. colonnes C = écart
+        /// type, G = Valeurs Maxi, H = Valeurs Mini, lignes 6..5+nbGates, après recalcul) — avant,
+        /// seuls les sigmas comptaient et les Maxi (sigma + incertitude) sortaient par le haut.
+        /// Repli sur les sigmas si la Récap ne donne rien. Place aussi l'axe des abscisses en bas
+        /// (croisement au minimum) : le croisement fixe à 1E-12 hérité de Stab1.xls tombait au
+        /// milieu du graphe dès que l'échelle descendait sous 1E-12.
         /// </summary>
-        private void CalibrerAxeYGrapheStabViaComInterne(IEnumerable<double> sigmas)
+        private void CalibrerAxeYGrapheStabViaComInterne(int nbGates, IEnumerable<double> sigmas)
         {
             if (_classeurActif == null) return;
-            var positifs = sigmas.Where(s => s > 0).ToList();
+            var positifs = LireValeursTraceesRecapStab(nbGates);
+            if (positifs.Count == 0) positifs = sigmas.Where(s => s > 0).ToList();
             if (positifs.Count == 0) return;
 
             double minS = positifs.Min();
@@ -3072,6 +3085,7 @@ namespace Metrologo.Services
                                 dynamic valAxis = chart.Axes(2);   // xlValue
                                 valAxis.MinimumScale = minBorne;
                                 valAxis.MaximumScale = maxBorne;
+                                valAxis.Crosses = 4;               // xlAxisCrossesMinimum : axe X en bas
                                 try { Marshal.ReleaseComObject(valAxis); } catch { }
                             }
                             catch (Exception ex)
@@ -3089,6 +3103,36 @@ namespace Metrologo.Services
                     $"Axe Y graphe Stab calibré via COM : [{minBorne:E2} ; {maxBorne:E2}].");
             }
             catch { /* best-effort */ }
+        }
+
+        /// <summary>Valeurs > 0 des colonnes tracées de la Récap. Stab (C, G, H), lignes 6..5+nbGates.</summary>
+        private List<double> LireValeursTraceesRecapStab(int nbGates)
+        {
+            var valeurs = new List<double>();
+            if (_classeurActif == null || nbGates <= 0) return valeurs;
+            try
+            {
+                dynamic ws = _classeurActif.Worksheets.Item("Récap.");
+                try
+                {
+                    foreach (string col in new[] { "C", "G", "H" })
+                    {
+                        for (int ligne = 6; ligne <= 5 + nbGates; ligne++)
+                        {
+                            dynamic cell = ws.Range($"{col}{ligne}");
+                            try
+                            {
+                                object? v = cell.Value2;
+                                if (v is double d && d > 0) valeurs.Add(d);
+                            }
+                            finally { try { Marshal.ReleaseComObject(cell); } catch { } }
+                        }
+                    }
+                }
+                finally { try { Marshal.ReleaseComObject(ws); } catch { } }
+            }
+            catch { /* best-effort : repli sur les sigmas */ }
+            return valeurs;
         }
 
         /// <summary>

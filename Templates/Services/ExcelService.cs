@@ -301,10 +301,16 @@ namespace Metrologo.Services
 
                 _feuilleMesure = modFeuille.CopyTo(_nomFeuilleMesure);
 
-                // ModFeuille est masquée dans le template (c'est un modèle interne, pas destiné à
-                // l'utilisateur). La copie récupère cet attribut Hidden, donc il faut explicitement
-                // rendre visible chaque nouvelle feuille de mesure.
+                // ModFeuille est un modèle interne, pas destiné à l'utilisateur : on la masque dans
+                // les rapports (les templates la laissaient visible, et même active). Elle reste dans
+                // le classeur pour copier les feuilles suivantes. La copie peut hériter de l'attribut
+                // Hidden, donc on rend explicitement visible la nouvelle feuille de mesure, et on en
+                // fait l'onglet actif : Excel n'accepte pas un onglet actif masqué.
                 _feuilleMesure.Visibility = XLWorksheetVisibility.Visible;
+                foreach (var ws in _workbook.Worksheets) ws.TabSelected = false;
+                _feuilleMesure.SetTabActive();
+                _feuilleMesure.TabSelected = true;
+                modFeuille.Visibility = XLWorksheetVisibility.Hidden;
 
                 DeprotegerFeuille(_feuilleMesure);
 
@@ -1172,6 +1178,15 @@ namespace Metrologo.Services
                     },
                     System.Text.RegularExpressions.RegexOptions.Singleline);
 
+                // 3. Axe des abscisses en bas : le template croise l'axe Y à 1E-12 (Stab1.xls),
+                //    ce qui le met au milieu du graphe dès que l'échelle descend plus bas.
+                //    <c:crossesAt> du catAx → <c:crosses val="min"/>.
+                nouveau = System.Text.RegularExpressions.Regex.Replace(
+                    nouveau,
+                    "(<c:catAx>.*?)<c:crossesAt val=\"[^\"]*\"/>(.*?</c:catAx>)",
+                    "$1<c:crosses val=\"min\"/>$2",
+                    System.Text.RegularExpressions.RegexOptions.Singleline);
+
                 if (nouveau == contenu) continue;
 
                 string fullName = entry.FullName;
@@ -1522,6 +1537,11 @@ namespace Metrologo.Services
                 var recap = _workbook.Worksheet(NOM_RECAP);
                 DeprotegerFeuille(recap);
                 recap.Range("A6:H15").Clear(XLClearOptions.Contents);
+
+                // G19/H19 = GRANDE.VALEUR(G6:G15) / PETITE.VALEUR(H6:H15) héritées de Stab1.xls
+                // (bornes du graphe pour l'ancienne macro). Plus lues par personne et fausses
+                // au-delà de 10 temps de porte → retirées (choix utilisateur).
+                recap.Range("G19:H19").Clear(XLClearOptions.Contents);
             }
 
             // 3. Les zones nommées workbook-scope qui référençaient ces feuilles (ex.
