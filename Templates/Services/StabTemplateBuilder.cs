@@ -83,7 +83,7 @@ namespace Metrologo.Services
             // Les formules Maxi/Mini renvoient à C5/F5 et restent justes après duplication,
             // car ClosedXML décale tout seul les références relatives lors de l'insertion.
             recap.Cell("G5").FormulaA1 = "=C5+F5";
-            recap.Cell("H5").FormulaA1 = "=IF(ISBLANK(C5),,IF((C5-F5)<=0,0,C5-F5))";
+            recap.Cell("H5").FormulaA1 = "=IF(ISBLANK(C5),,IF((C5-F5)<=0,0.000000000001,MAX(0.000000000001,C5-F5)))";
 
             // Ligne 19 : le Max / Min global sur la zone de données (largement suffisant pour 13 gates).
             recap.Cell("A19").SetValue("Globale");

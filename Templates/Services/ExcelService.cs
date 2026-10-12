@@ -942,8 +942,10 @@ namespace Metrologo.Services
                 recap.Cell(ligne, 5).FormulaA1 = $"='{nomFeuille}'!ZNIncertAccreditee";
                 recap.Cell(ligne, 6).FormulaA1 = $"='{nomFeuille}'!ZNIncertGlobale";
                 recap.Cell(ligne, 7).FormulaA1 = $"=C{ligne}+F{ligne}";
+                // Valeurs Mini : formule d'origine de Stab1.xls, plancher 1E-12 quand sigma ≤
+                // incertitude (« * » en col I). Un 0 rendait le point invisible sur l'axe log.
                 recap.Cell(ligne, 8).FormulaA1 =
-                    $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0,C{ligne}-F{ligne}))";
+                    $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0.000000000001,MAX(0.000000000001,C{ligne}-F{ligne})))";
 
                 // Col K : n°Module (lu depuis la cellule « Module = » de la feuille de mesure,
                 // F10 pour la stabilité). La colonne Fonction a été retirée.

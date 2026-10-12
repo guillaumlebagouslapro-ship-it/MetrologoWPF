@@ -2862,8 +2862,10 @@ namespace Metrologo.Services
                 EcrireFormuleRecapInterne(recap, ligne, 5, $"={qf}ZNIncertAccreditee");
                 EcrireFormuleRecapInterne(recap, ligne, 6, $"={qf}ZNIncertGlobale");
                 EcrireFormuleRecapInterne(recap, ligne, 7, $"=C{ligne}+F{ligne}");
+                // Valeurs Mini : formule d'origine de Stab1.xls, plancher 1E-12 quand sigma ≤
+                // incertitude (« * » en col I). Un 0 rendait le point invisible sur l'axe log.
                 EcrireFormuleRecapInterne(recap, ligne, 8,
-                    $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0,C{ligne}-F{ligne}))");
+                    $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0.000000000001,MAX(0.000000000001,C{ligne}-F{ligne})))");
                 // n°Module lu depuis la cellule « Module = » (F10) ; colonne Fonction retirée.
                 EcrireFormuleRecapInterne(recap, ligne, 11, $"={qf}F10");
 
@@ -3087,6 +3089,18 @@ namespace Metrologo.Services
                                 valAxis.MaximumScale = maxBorne;
                                 valAxis.Crosses = 4;               // xlAxisCrossesMinimum : axe X en bas
                                 try { Marshal.ReleaseComObject(valAxis); } catch { }
+
+                                // Traits verticaux Maxi → Mini (lignes haut-bas) du Stab1.xls : Excel
+                                // les retire dès le 1er enregistrement COM (gate 1, Récap encore vide).
+                                // On les repose ici, juste avant le Save final : trait fin noir.
+                                dynamic groupe = chart.ChartGroups(1);
+                                groupe.HasHiLoLines = true;
+                                dynamic bordure = groupe.HiLoLines.Border;
+                                bordure.LineStyle = 1;             // xlContinuous
+                                bordure.Weight = 1;                // xlHairline (0,25 pt comme le template)
+                                bordure.Color = 0;                 // noir
+                                try { Marshal.ReleaseComObject(bordure); } catch { }
+                                try { Marshal.ReleaseComObject(groupe); } catch { }
                             }
                             catch (Exception ex)
                             {
