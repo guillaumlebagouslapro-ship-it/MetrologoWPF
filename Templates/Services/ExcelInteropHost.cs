@@ -578,6 +578,12 @@ namespace Metrologo.Services
                         if (_excel == null) return;   // redémarrage a échoué, on abandonne
                     }
 
+                    // L'instance peut répondre au COM sans avoir encore le .xla : fenêtre Excel
+                    // fermée par l'utilisateur entre deux mesures → Excel ferme tous ses classeurs,
+                    // .xla compris, mais le process reste vivant (on le pilote). Sans ce contrôle,
+                    // le rapport suivant s'ouvrait avec des #NOM? sur les cellules [1]!Cal_xxx.
+                    VerifierXlaChargeInterne();
+
                     // Ferme tout classeur précédent (une seule mesure live à la fois).
                     FermerClasseurActifInterne();
 
@@ -979,6 +985,31 @@ namespace Metrologo.Services
         /// <para/>
         /// Doit être appelée sous lock <see cref="_sync"/> avec <see cref="_excel"/> non null.
         /// </summary>
+        /// <summary>
+        /// Rouvre Metrologo.xla s'il n'est plus ouvert dans l'instance (vérifié par son nom : un
+        /// complément n'apparaît pas dans l'énumération de Workbooks mais reste accessible par
+        /// <c>Workbooks.Item(nom)</c>). Doit être appelée sous lock <see cref="_sync"/>.
+        /// </summary>
+        private void VerifierXlaChargeInterne()
+        {
+            if (_excel == null) return;
+            string nomXla = Path.GetFileName(Preferences.CheminMacroXLA ?? string.Empty);
+            if (string.IsNullOrEmpty(nomXla)) return;
+            try
+            {
+                dynamic wb = _excel.Workbooks.Item(nomXla);
+                try { Marshal.ReleaseComObject(wb); } catch { }
+                return;   // toujours là
+            }
+            catch { /* absent : on le recharge */ }
+
+            JournalLog.Warn(CategorieLog.Excel, "XLA_RECHARGE",
+                "Metrologo.xla n'était plus ouvert dans l'instance Excel (fenêtre Excel fermée entre "
+                + "deux mesures ?) — rechargement avant d'ouvrir le rapport.");
+            _cheminXlaPreCharge = string.Empty;
+            PreChargerXlaInterne();
+        }
+
         private void PreChargerXlaInterne()
         {
             if (_excel == null) return;
