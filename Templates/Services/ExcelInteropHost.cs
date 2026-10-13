@@ -470,7 +470,10 @@ namespace Metrologo.Services
         public bool EstProcessExcelEnVie()
         {
             int pid = _excelPid;
-            if (pid <= 0) return false;
+            // PID inconnu (pas encore résolu, ou instance en cours de redémarrage) : on ne peut
+            // rien conclure, on suppose vivant. Renvoyer « mort » ici faisait abandonner une
+            // mesure par la surveillance de l'accueil alors qu'Excel tournait.
+            if (pid <= 0) return true;
             try
             {
                 var p = Process.GetProcessById(pid);
@@ -912,6 +915,11 @@ namespace Metrologo.Services
             _cheminClasseurActif = string.Empty;
             _fullNameActifExcel = string.Empty;
             _cheminXlaPreCharge = string.Empty;   // l'ancienne instance avait son propre .xla : il n'a plus de sens ici
+            // L'ancien PID est mort : on l'oublie TOUT DE SUITE. Gardé jusqu'à la fin du
+            // redémarrage (pré-chargement du .xla compris, plusieurs secondes), il faisait
+            // conclure à la surveillance de l'accueil qu'Excel était mort → mesure abandonnée
+            // en silence juste après son lancement.
+            _excelPid = 0;
 
             try
             {
@@ -925,12 +933,10 @@ namespace Metrologo.Services
                 _excel.ScreenUpdating = false;
                 _excel.AskToUpdateLinks = false;
 
-                // On rouvre Metrologo.xla d'avance, sinon les formules [1]!Cal_xxx des prochains
-                // rapports ne se résoudraient pas toutes seules (voir PreChargerXlaInterne).
-                PreChargerXlaInterne();
-
-                // On récupère le PID du NOUVEAU process Excel : sans ça, TuerProcessExcelAsync
-                // viserait un PID périmé et ne ferait rien. Diff fiable, avec repli sur le HWND.
+                // On récupère le PID du NOUVEAU process Excel AVANT le pré-chargement du .xla :
+                // sans ça, TuerProcessExcelAsync viserait un PID périmé, et le nettoyage des Excel
+                // « fantômes » au lancement d'une mesure pourrait fermer notre propre instance.
+                // Diff fiable, avec repli sur le HWND.
                 _excelPid = ResoudrePidExcelCree(pidsAvant);
                 if (_excelPid == 0)
                 {
@@ -945,6 +951,12 @@ namespace Metrologo.Services
                     }
                     catch { _excelPid = 0; }
                 }
+
+                // On rouvre Metrologo.xla d'avance, sinon les formules [1]!Cal_xxx des prochains
+                // rapports ne se résoudraient pas toutes seules (voir PreChargerXlaInterne).
+                PreChargerXlaInterne();
+                JournalLog.Info(CategorieLog.Excel, "EXCEL_HOTE_REDEMARRE",
+                    $"Instance Excel recréée (PID={_excelPid}).");
             }
             catch (Exception ex)
             {

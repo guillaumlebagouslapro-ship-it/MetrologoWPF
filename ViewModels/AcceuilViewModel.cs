@@ -1009,6 +1009,10 @@ namespace Metrologo.ViewModels
                     // par la première écriture (cas où _excelPid n'est pas encore connu).
                     await Task.Delay(2000, abandonToken).ContinueWith(_ => { });
 
+                    // Il faut 3 constats « mort » consécutifs (≈ 3 s) avant d'abandonner : un
+                    // redémarrage d'Excel en cours de mesure (instance perdue entre deux mesures)
+                    // ne doit pas faire abandonner la mesure sur un seul relevé.
+                    int constatsMort = 0;
                     while (!abandonToken.IsCancellationRequested
                         && !mesureToken.IsCancellationRequested)
                     {
@@ -1016,13 +1020,14 @@ namespace Metrologo.ViewModels
                         catch (OperationCanceledException) { break; }
 
                         // Ne surveille que si Excel a été démarré (PID connu).
-                        if (!ExcelInteropHost.Instance.EstDemarre) continue;
+                        if (!ExcelInteropHost.Instance.EstDemarre) { constatsMort = 0; continue; }
 
-                        if (!ExcelInteropHost.Instance.EstProcessExcelEnVie())
+                        if (ExcelInteropHost.Instance.EstProcessExcelEnVie()) { constatsMort = 0; continue; }
+                        if (++constatsMort >= 3)
                         {
                             excelMortDetecte = true;
                             Journal.Erreur(CategorieLog.Excel, "EXCEL_FERME_BRUTAL",
-                                "Process Excel détecté mort pendant la mesure — abandon auto déclenché.");
+                                "Process Excel détecté mort pendant la mesure (3 relevés consécutifs) — abandon auto déclenché.");
 
                             // Cascade d'annulation : token + GPIB + signal abandon.
                             try { _cts?.Cancel(); } catch { }
