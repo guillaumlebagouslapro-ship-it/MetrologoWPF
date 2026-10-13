@@ -3049,17 +3049,30 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Calibre l'axe Y log du graphe Stab sur les valeurs TRACÉES (Récap. colonnes C = écart
-        /// type, G = Valeurs Maxi, H = Valeurs Mini, lignes 6..5+nbGates, après recalcul) — avant,
-        /// seuls les sigmas comptaient et les Maxi (sigma + incertitude) sortaient par le haut.
+        /// Calibre l'axe Y log du graphe Stab sur les valeurs de la Récap. (après recalcul) :
+        /// écart type (C), Valeurs Maxi (G) et Valeurs Mini réelles (C − F quand > 0), lignes
+        /// 6..5+nbGates — avant, seuls les sigmas comptaient et les Maxi sortaient par le haut.
         /// Repli sur les sigmas si la Récap ne donne rien. Place aussi l'axe des abscisses en bas
         /// (croisement au minimum) : le croisement fixe à 1E-12 hérité de Stab1.xls tombait au
         /// milieu du graphe dès que l'échelle descendait sous 1E-12.
+        /// <para>Plancher des Valeurs Mini : dans Stab1.xls, un Mini ≤ 0 (sigma ≤ incertitude) vaut
+        /// 1E-12, qui était AUSSI le bas du graphe (« hors échelle, en bas »). Quand l'échelle
+        /// descend plus bas (sigmas &lt; 1E-12 aux longs temps de porte), un plancher resté à 1E-12
+        /// passait AU-DESSUS de l'écart type. Le plancher suit donc le bas de l'échelle :
+        /// min(1E-12, borne basse), toujours sous les sigmas (la borne basse est au moins une
+        /// demi-décade sous le plus petit). Il ne reste à 1E-12 que si l'échelle ne descend pas plus bas.</para>
         /// </summary>
         private void CalibrerAxeYGrapheStabViaComInterne(int nbGates, IEnumerable<double> sigmas)
         {
             if (_classeurActif == null) return;
-            var positifs = LireValeursTraceesRecapStab(nbGates);
+            var lignes = LireLignesRecapStab(nbGates);
+            var positifs = new List<double>();
+            foreach (var (_, c, f, g) in lignes)
+            {
+                if (c > 0) positifs.Add(c);
+                if (g > 0) positifs.Add(g);
+                if (c - f > 0) positifs.Add(c - f);   // Mini réel ; le plancher n'entre pas dans le calcul
+            }
             if (positifs.Count == 0) positifs = sigmas.Where(s => s > 0).ToList();
             if (positifs.Count == 0) return;
 
@@ -3074,6 +3087,19 @@ namespace Metrologo.Services
                 dynamic ws = _classeurActif.Worksheets.Item("Récap.");
                 try
                 {
+                    const double PLANCHER_STAB1 = 1e-12;
+                    double plancher = Math.Min(PLANCHER_STAB1, minBorne);
+                    if (plancher < PLANCHER_STAB1)
+                    {
+                        string pl = plancher.ToString("0.###E+0", System.Globalization.CultureInfo.InvariantCulture);
+                        foreach (var (ligne, _, _, _) in lignes)
+                            EcrireFormuleRecapInterne(ws, ligne, 8,
+                                $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,{pl},MAX({pl},C{ligne}-F{ligne})))");
+                        try { ws.Calculate(); } catch { }
+                        JournalLog.Info(CategorieLog.Excel, "GRAPHE_STAB_PLANCHER_MINI",
+                            $"Plancher des Valeurs Mini abaissé à {pl} (bas de l'échelle, sigmas < 1E-12).");
+                    }
+
                     dynamic chartObjects = ws.ChartObjects();
                     int nbCharts = chartObjects.Count;
                     for (int i = 1; i <= nbCharts; i++)
@@ -3081,6 +3107,21 @@ namespace Metrologo.Services
                         dynamic chartObj = chartObjects.Item(i);
                         try
                         {
+                            // Le template ancre le graphe en ligne 18 (prévu pour 10 temps de porte,
+                            // lignes 6-15) : à 13 temps il recouvrait la ligne 100 s. On le place
+                            // sous la dernière ligne de mesure, une ligne vide entre les deux.
+                            try
+                            {
+                                dynamic ancre = ws.Range($"A{5 + nbGates + 2}");
+                                chartObj.Top = (double)ancre.Top;
+                                try { Marshal.ReleaseComObject(ancre); } catch { }
+                            }
+                            catch (Exception ex)
+                            {
+                                JournalLog.Warn(CategorieLog.Excel, "GRAPHE_STAB_POSITION_KO",
+                                    $"Déplacement du graphe Stab échoué : {ex.Message}");
+                            }
+
                             dynamic chart = chartObj.Chart;
                             try
                             {
@@ -3119,34 +3160,35 @@ namespace Metrologo.Services
             catch { /* best-effort */ }
         }
 
-        /// <summary>Valeurs > 0 des colonnes tracées de la Récap. Stab (C, G, H), lignes 6..5+nbGates.</summary>
-        private List<double> LireValeursTraceesRecapStab(int nbGates)
+        /// <summary>Lignes calculées de la Récap. Stab (6..5+nbGates) : écart type (C), incertitude
+        /// globale (F), Valeurs Maxi (G). Seules les lignes dont l'écart type est un nombre sont rendues.</summary>
+        private List<(int Ligne, double C, double F, double G)> LireLignesRecapStab(int nbGates)
         {
-            var valeurs = new List<double>();
-            if (_classeurActif == null || nbGates <= 0) return valeurs;
+            var lignes = new List<(int, double, double, double)>();
+            if (_classeurActif == null || nbGates <= 0) return lignes;
             try
             {
                 dynamic ws = _classeurActif.Worksheets.Item("Récap.");
                 try
                 {
-                    foreach (string col in new[] { "C", "G", "H" })
+                    double Lire(string adresse)
                     {
-                        for (int ligne = 6; ligne <= 5 + nbGates; ligne++)
-                        {
-                            dynamic cell = ws.Range($"{col}{ligne}");
-                            try
-                            {
-                                object? v = cell.Value2;
-                                if (v is double d && d > 0) valeurs.Add(d);
-                            }
-                            finally { try { Marshal.ReleaseComObject(cell); } catch { } }
-                        }
+                        dynamic cell = ws.Range(adresse);
+                        try { return cell.Value2 is double d ? d : double.NaN; }
+                        finally { try { Marshal.ReleaseComObject(cell); } catch { } }
+                    }
+                    for (int ligne = 6; ligne <= 5 + nbGates; ligne++)
+                    {
+                        double c = Lire($"C{ligne}");
+                        if (double.IsNaN(c)) continue;
+                        double f = Lire($"F{ligne}");
+                        lignes.Add((ligne, c, double.IsNaN(f) ? 0 : f, Lire($"G{ligne}")));
                     }
                 }
                 finally { try { Marshal.ReleaseComObject(ws); } catch { } }
             }
             catch { /* best-effort : repli sur les sigmas */ }
-            return valeurs;
+            return lignes;
         }
 
         /// <summary>
