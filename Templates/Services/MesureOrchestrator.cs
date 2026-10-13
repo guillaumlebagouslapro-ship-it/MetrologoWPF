@@ -100,6 +100,10 @@ namespace Metrologo.Services
             // la feuille courante, exactement comme pour un arrêt utilisateur.
             bool horsModule = false;
 
+            // Chronos réels pour l'estimation de durée des stabs (EstimationDureeStab apprend
+            // l'init de l'appareil et le surcoût de chaque temps de porte sur ce poste).
+            var swInit = Stopwatch.StartNew();
+
             try
             {
                 Perf("START");
@@ -194,6 +198,9 @@ namespace Metrologo.Services
                     bool isDernier = g == nbIterations - 1;
                     int gateIdx = gates[g];
                     Perf($"--- Gate {g + 1}/{nbIterations} ({EnTetesMesureHelper.LibelleGate(gateIdx)}) ---");
+                    if (g == 0 && mesure.TypeMesure == TypeMesure.Stabilite)
+                        EstimationDureeStab.EnregistrerInit(swInit.Elapsed);
+                    var swGate = Stopwatch.StartNew();
 
                     // --- On choisit ici entre la voie COM pure (option A v2) et la voie ClosedXML
                     // (le chemin historique). En mode visible, si Excel a déjà un classeur ouvert pour
@@ -1055,6 +1062,9 @@ namespace Metrologo.Services
                     // Gate terminée : sa feuille est complète. Si un arrêt survient pendant la
                     // gate suivante, on ne doit PAS supprimer cette feuille-ci.
                     feuilleCouranteIncomplete = false;
+
+                    if (mesure.TypeMesure == TypeMesure.Stabilite)
+                        EstimationDureeStab.EnregistrerGate(gateIdx, mesure.NbMesures, swGate.Elapsed);
                 }
 
                 if (cheminFichier != null) result.CheminExcel = cheminFichier;
