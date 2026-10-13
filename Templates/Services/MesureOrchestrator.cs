@@ -448,12 +448,12 @@ namespace Metrologo.Services
                         && !string.IsNullOrWhiteSpace(appareil.CommandeMesureMultiple)
                         && mesure.TypeMesure == TypeMesure.Stabilite
                         && !bulkDejaEchoue;
-                    // Gates > 1 s : le bulk en un coup ne rendrait les N valeurs qu'à la fin (50 min
+                    // Gates ≥ 1 s : le bulk en un coup ne rendrait les N valeurs qu'à la fin (50 min
                     // sans rien voir à 100 s × 30). On garde la MÊME commande (que l'appareil accepte)
                     // mais avec {N}=1, une transaction par mesure : chaque valeur apparaît dans Excel
                     // dès qu'elle arrive (choix utilisateur). Surtout pas de bascule sur le mode rapide
                     // :INIT:CONT ON + :FETCh? : -113 Undefined header sur les 53230A et consorts.
-                    bool bulkUnitaire = modeBulk && gateSecondes > 1.0;
+                    bool bulkUnitaire = modeBulk && gateSecondes >= 1.0;   // 1 s incluse (choix utilisateur)
                     // Mode rapide :FETCh? : utilisable pour tout type avec NbMesures > 1, du moment que
                     // l'appareil l'autorise via le ModeRapideActif du catalogue. Compatible avec
                     // l'écriture live Excel, et environ 3× plus rapide que le :READ? classique sur le 53131A.

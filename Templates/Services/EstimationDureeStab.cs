@@ -13,7 +13,7 @@ namespace Metrologo.Services
     /// <para>
     /// Le surcoût de chaque temps de porte (temps passé en plus de nbMesures × porte : dialogue
     /// GPIB, temps mort entre deux mesures) est APPRIS sur les mesures réelles de ce poste : le
-    /// mode d'acquisition change selon la porte (lot jusqu'à 1 s, une par une au-delà) et selon
+    /// mode d'acquisition change selon la porte (lot sous 1 s, une par une à partir de 1 s) et selon
     /// l'appareil, aucune constante ne tombait juste pour tous les temps. Appris dans
     /// <c>Configuration\durees-stab.json</c> ; valeurs par défaut tant que rien n'est mesuré.
     /// </para>
@@ -24,7 +24,7 @@ namespace Metrologo.Services
         private const double SECONDES_INIT = 8.0;
         /// <summary>Par gate : fermeture/préparation/sauvegarde/réouverture du classeur + programmation.</summary>
         private const double SECONDES_PAR_GATE = 6.0;
-        /// <summary>Surcoût par mesure par défaut : lot gap-free (porte ≤ 1 s) / une par une (porte > 1 s).</summary>
+        /// <summary>Surcoût par mesure par défaut : lot gap-free (porte < 1 s) / une par une (porte ≥ 1 s).</summary>
         private const double SURCOUT_DEFAUT_LOT = 0.06;
         private const double SURCOUT_DEFAUT_UNITAIRE = 0.4;
         /// <summary>Marge : 10 % de la durée calculée, plafonnée à 10 min (l'ancienne marge fixe de
@@ -94,7 +94,7 @@ namespace Metrologo.Services
         private static double Surcout(DureesApprises appris, int gateIndex) =>
             appris.SurcoutParMesure.TryGetValue(gateIndex.ToString(), out var s)
                 ? s
-                : EnTetesMesureHelper.SecondesGate(gateIndex) > 1.0 ? SURCOUT_DEFAUT_UNITAIRE : SURCOUT_DEFAUT_LOT;
+                : EnTetesMesureHelper.SecondesGate(gateIndex) >= 1.0 ? SURCOUT_DEFAUT_UNITAIRE : SURCOUT_DEFAUT_LOT;
 
         private static DureesApprises Charger()
         {
