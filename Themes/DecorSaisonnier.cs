@@ -11,16 +11,16 @@ using Forme = System.Windows.Shapes;
 namespace Metrologo.Themes;
 
 /// <summary>Thème saisonnier affiché sur l'écran principal.</summary>
-public enum Saison { Aucune, Noel, Ski, Paques, Ete }
+public enum Saison { Aucune, Noel, Ski, Paques, Ete, Halloween }
 
 /// <summary>
-/// Décorations saisonnières discrètes (guirlande, neige, télécabines, soleil...).
+/// Décorations saisonnières discrètes (guirlande, neige, télécabines, soleil, citrouilles...).
 /// <para/>
 /// La saison est choisie au démarrage d'après la date du jour, chaque année :
 /// Noël en décembre, ski en janvier-février, Pâques du lundi de Pâques pendant deux
-/// semaines (date calculée), été en juillet-août, rien le reste du temps. Pour tester un
-/// thème avant sa date : variable d'environnement
-/// <c>ASERTI_THEME</c> = noel | ski | paques | ete | aucun.
+/// semaines (date calculée), été en juillet-août, Halloween du 15 au 31 octobre, rien le
+/// reste du temps. Pour tester un thème avant sa date : variable d'environnement
+/// <c>ASERTI_THEME</c> = noel | ski | paques | ete | halloween | aucun.
 /// <para/>
 /// Tout est purement visuel : non cliquable (IsHitTestVisible = false), animations
 /// limitées à 30 images/s et suspendues d'un coup par <see cref="Pause"/> (pendant une
@@ -45,6 +45,7 @@ public static class DecorSaisonnier
                 "ski" => Saison.Ski,
                 "paques" or "pâques" => Saison.Paques,
                 "ete" or "été" => Saison.Ete,
+                "halloween" => Saison.Halloween,
                 _ => Saison.Aucune,
             };
         }
@@ -53,6 +54,10 @@ public static class DecorSaisonnier
         DateTime lundiPaques = DimanchePaques(jour.Year).AddDays(1);
         if (jour.Date >= lundiPaques && jour.Date < lundiPaques.AddDays(14))
             return Saison.Paques;
+
+        // Halloween : du 15 au 31 octobre.
+        if (jour.Month == 10 && jour.Day >= 15)
+            return Saison.Halloween;
 
         return jour.Month switch
         {
@@ -97,10 +102,12 @@ public static class DecorSaisonnier
 
     // ------------------------------------------------------------------ éléments
 
-    /// <summary>Neige qui tombe sur toute la zone (Noël, ski), pétales pastel (Pâques). Null sinon.</summary>
+    /// <summary>Neige qui tombe sur toute la zone (Noël, ski), pétales pastel (Pâques), feuilles
+    /// d'automne (Halloween). Null sinon.</summary>
     public static FrameworkElement? Neige(Saison s)
     {
         if (s == Saison.Paques) return new Scene(Petales);
+        if (s == Saison.Halloween) return new Scene(Feuilles);
         if (s != Saison.Noel && s != Saison.Ski) return null;
         bool ski = s == Saison.Ski;
         return new Scene((sc, l, h) =>
@@ -134,7 +141,8 @@ public static class DecorSaisonnier
     }
 
     /// <summary>Bande décorative à poser sous une barre de navigation / un en-tête :
-    /// guirlande (Noël), câble + télécabines (ski), fanions pastel (Pâques), mouettes (été).
+    /// guirlande (Noël), câble + télécabines (ski), fanions pastel (Pâques), mouettes (été),
+    /// fanions noir-orange-violet + chauve-souris (Halloween).
     /// Hauteur conseillée : 52.</summary>
     public static FrameworkElement? Bande(Saison s) => s switch
     {
@@ -142,10 +150,12 @@ public static class DecorSaisonnier
         Saison.Ski => new Scene(Telecabines),
         Saison.Paques => new Scene(Fanions),
         Saison.Ete => new Scene(Mouettes),
+        Saison.Halloween => new Scene(FanionsHalloween),
         _ => null,
     };
 
-    /// <summary>Décor de fond d'un bandeau ou en-tête (congère, montagnes, prairie + œufs, soleil + vagues),
+    /// <summary>Décor de fond d'un bandeau ou en-tête (congère, montagnes, prairie + œufs, soleil + vagues,
+    /// lune + tombes + citrouilles),
     /// découpé aux coins arrondis <paramref name="rayon"/>. <paramref name="sombre"/> = fond
     /// marine (Metrologo) ou blanc (Asertools).</summary>
     public static FrameworkElement? FondBandeau(Saison s, bool sombre, double rayon)
@@ -160,13 +170,14 @@ public static class DecorSaisonnier
                 case Saison.Ski: Montagnes(sc, l, h, sombre); break;
                 case Saison.Paques: Prairie(sc, l, h, sombre); break;
                 case Saison.Ete: SoleilEtVagues(sc, l, h, sombre); break;
+                case Saison.Halloween: NuitHalloween(sc, l, h, sombre); break;
             }
         });
     }
 
     /// <summary>Paysage de saison à poser en bas d'une zone (logs, écran de connexion) :
     /// sapins enneigés et bonhomme de neige, piste avec skieur, prairie fleurie avec lapin,
-    /// plage avec voilier. Proportions calées sur 130 px de haut, s'adapte à toute taille.
+    /// plage avec voilier, maison hantée avec fantôme et citrouilles. Proportions calées sur 130 px de haut, s'adapte à toute taille.
     /// <paramref name="rayon"/> = coins arrondis du cadre qui l'accueille.
     /// <para/>
     /// À poser en pleine zone (Stretch) : le paysage occupe le bas, sur une hauteur
@@ -188,6 +199,7 @@ public static class DecorSaisonnier
                 case Saison.Ski: PaysageSki(sc, l, h, k); break;
                 case Saison.Paques: PaysagePaques(sc, l, h, k); break;
                 case Saison.Ete: PaysageEte(sc, l, h, k); break;
+                case Saison.Halloween: PaysageHalloween(sc, l, h, k); break;
             }
         }) { VerticalAlignment = VerticalAlignment.Bottom };
 
@@ -202,7 +214,7 @@ public static class DecorSaisonnier
     }
 
     /// <summary>Petit accessoire posé sur une icône carrée de 44 px (bonnet de Noël,
-    /// bonnet de ski, lunettes de soleil). Déjà positionné (marges négatives).</summary>
+    /// bonnet de ski, lunettes de soleil, chapeau de sorcière). Déjà positionné (marges négatives).</summary>
     public static FrameworkElement? Accessoire(Saison s)
     {
         var c = new Canvas { IsHitTestVisible = false, VerticalAlignment = VerticalAlignment.Top };
@@ -265,12 +277,23 @@ public static class DecorSaisonnier
                 c.Margin = new Thickness(2, -9, 0, 0);
                 c.RenderTransform = new RotateTransform(-6, 20, 8);
                 return c;
+            case Saison.Halloween:
+                // Chapeau de sorcière, pointe repliée vers l'arrière.
+                c.Width = 38; c.Height = 30;
+                c.Children.Add(Chemin("M9 24 Q 13 14 16 6 Q 18 1 27 2 Q 21 5 22 12 L 28 24 Z", "#3B2F4A"));
+                c.Children.Add(Chemin("M10.5 20.5 L 26.4 20.5 L 27.4 23.6 L 9.6 23.6 Z", "#E8792A"));
+                c.Children.Add(Rect(16.5, 20, 4.5, 4, 0.8, "#F2C14E"));
+                c.Children.Add(Chemin("M1 25.5 Q 19 19.5 37 25.5 Q 19 30.5 1 25.5 Z", "#2A2235"));
+                c.HorizontalAlignment = HorizontalAlignment.Right;
+                c.Margin = new Thickness(0, -20, -15, 0);
+                c.RenderTransform = new RotateTransform(14, 19, 15);
+                return c;
             default:
                 return null;
         }
     }
 
-    /// <summary>Pastille de texte (« Joyeuses fêtes », « Bonne année 2027 », « Bel été ! »).</summary>
+    /// <summary>Pastille de texte (« Joyeuses fêtes », « Bonne année 2027 », « Bel été ! », « Joyeux Halloween »).</summary>
     public static FrameworkElement? Pastille(Saison s)
     {
         (string texte, string fond, string encre) = s switch
@@ -279,6 +302,7 @@ public static class DecorSaisonnier
             Saison.Ski => ($"Bonne année {DateTime.Today.Year}", "#E2EFFA", "#12568A"),
             Saison.Paques => ("Joyeuses Pâques", "#EFE7FA", "#5B2B91"),
             Saison.Ete => ("Bel été !", "#FFEFD6", "#8A4B00"),
+            Saison.Halloween => ("Joyeux Halloween", "#FDE3CF", "#8A3A00"),
             _ => ("", "", ""),
         };
         if (texte.Length == 0) return null;
@@ -1053,6 +1077,374 @@ public static class DecorSaisonnier
         vague.RenderTransform = tt;
         sc.Children.Add(vague);
         sc.Animer(tt, TranslateTransform.XProperty, Boucle(0, -periode, periode / vitesse, TimeSpan.Zero));
+    }
+
+    // ------------------------------------------------------------------ Halloween
+
+    private static readonly string[] CouleursFeuilles = { "#D9822B", "#B5541C", "#E8B23A", "#8C4A2F" };
+
+    /// <summary>Feuilles d'automne qui tombent en tournoyant (pendant des pétales de Pâques).</summary>
+    private static void Feuilles(Scene sc, double l, double h)
+    {
+        var r = new Alea(23);
+        int n = (int)Math.Round(13 * Math.Max(0.5, l / 1180.0));
+        for (int i = 0; i < n; i++)
+        {
+            double duree = 15 + r.Suivant() * 10;
+            var feuille = Chemin("M5 0 Q 10 3 9 8 Q 7 11 5 12 Q 3 11 1 8 Q 0 3 5 0 Z", CouleursFeuilles[i % CouleursFeuilles.Length]);
+            var nervure = Chemin("M5 1.5 L5 11.5", null);
+            nervure.Stroke = Pinceau("#7A3E1D");
+            nervure.StrokeThickness = 0.6;
+            var groupe = new Canvas { Opacity = 0.8 };
+            groupe.Children.Add(feuille);
+            groupe.Children.Add(nervure);
+            Canvas.SetLeft(groupe, r.Suivant() * l);
+            var rotation = new RotateTransform(0, 5, 6);
+            var chute = new TranslateTransform();
+            var tg = new TransformGroup();
+            tg.Children.Add(rotation);
+            tg.Children.Add(chute);
+            groupe.RenderTransform = tg;
+            sc.Children.Add(groupe);
+
+            var debut = TimeSpan.FromSeconds(-r.Suivant() * duree);
+            sc.Animer(chute, TranslateTransform.YProperty, Boucle(-14, h + 14, duree, debut));
+            sc.Animer(chute, TranslateTransform.XProperty, Boucle(0, (r.Suivant() < 0.5 ? -1 : 1) * 70, duree, debut));
+            sc.Animer(rotation, RotateTransform.AngleProperty, Boucle(0, r.Suivant() < 0.5 ? 360 : -360, 5 + r.Suivant() * 4, debut));
+        }
+    }
+
+    private static readonly string[] CouleursHalloween = { "#2A2235", "#E8792A", "#7B4FA0" };
+
+    /// <summary>Fanions noir / orange / violet, et une chauve-souris qui traverse de temps en temps.</summary>
+    private static void FanionsHalloween(Scene sc, double l, double h)
+    {
+        int festons = Math.Max(2, (int)Math.Round(l / 300));
+        const double creux = 9;
+        const int parFeston = 6;
+        double pas = l / festons;
+
+        var d = new StringBuilder("M 0 2");
+        var fanions = new List<(double x, double y)>();
+        for (int i = 0; i < festons; i++)
+        {
+            double x0 = i * pas, x1 = x0 + pas, xm = x0 + pas / 2;
+            d.Append(F($" Q {xm} {2 + 2 * creux} {x1} 2"));
+            for (int k = 1; k <= parFeston; k++)
+            {
+                double t = k / (double)(parFeston + 1);
+                fanions.Add(((1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * xm + t * t * x1,
+                             2 + 4 * (1 - t) * t * creux));
+            }
+        }
+        var fil = Chemin(d.ToString(), null);
+        fil.Stroke = Pinceau("#5B4A6E");
+        fil.StrokeThickness = 1.5;
+        sc.Children.Add(fil);
+
+        for (int n = 0; n < fanions.Count; n++)
+        {
+            var (x, y) = fanions[n];
+            var fanion = Chemin("M0 0 L14 0 L7 15 Z", CouleursHalloween[n % CouleursHalloween.Length]);
+            Canvas.SetLeft(fanion, x - 7);
+            Canvas.SetTop(fanion, y);
+            var balance = new RotateTransform(0, 7, 0);
+            fanion.RenderTransform = balance;
+            sc.Children.Add(fanion);
+            sc.Animer(balance, RotateTransform.AngleProperty, new DoubleAnimation(-5, 5, new Duration(TimeSpan.FromSeconds(3)))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                BeginTime = TimeSpan.FromSeconds(-((n * 0.53) % 3)),
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            });
+        }
+
+        ChauveSouris(sc, l + 30, -40, 22, 1.15, 40 * l / 1180.0 + 10, 0, "#2A2235");
+    }
+
+    /// <summary>Fond de bandeau : lune, colline avec tombes et citrouilles éclairées, chauves-souris.
+    /// Toujours sur la moitié droite (la gauche porte le numéro de fiche / le titre).</summary>
+    private static void NuitHalloween(Scene sc, double l, double h, bool sombre)
+    {
+        double kb = h / 100.0;
+        double x0 = Math.Max(l * 0.4, l - 560 * kb);
+        var groupe = new Canvas();
+
+        if (sombre)
+        {
+            var r = new Alea(31);
+            for (int i = 0; i < 7; i++)
+            {
+                var etoile = Rond(40 + r.Suivant() * 480, 8 + r.Suivant() * 36, 1.2 + r.Suivant(), "#E6EEF8");
+                groupe.Children.Add(etoile);
+                sc.Animer(etoile, UIElement.OpacityProperty, new DoubleAnimation(0.9, 0.2, new Duration(TimeSpan.FromSeconds(1.5 + r.Suivant() * 1.5)))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    BeginTime = TimeSpan.FromSeconds(-r.Suivant() * 3),
+                });
+            }
+        }
+        groupe.Children.Add(Lune(430, 36, 22, sombre ? "#F4E3A1" : "#F7E7B0"));
+
+        string colline = sombre ? "#2A3D63" : "#ECE6F4";
+        string pierre = sombre ? "#41588A" : "#D6CCE5";
+        groupe.Children.Add(Chemin("M0 100 C 80 100 120 84 220 82 S 420 70 560 72 L560 100 Z", colline));
+        groupe.Children.Add(ArbreNu(180, 85, 1.1, sombre ? "#16213A" : "#6B5A7E"));
+        groupe.Children.Add(Tombe(232, 84, 1.1, pierre));
+        groupe.Children.Add(Tombe(258, 84, 0.85, pierre));
+        groupe.Children.Add(Citrouille(sc, 300, 90, 1.25, 0));
+        groupe.Children.Add(Citrouille(sc, 338, 92, 0.95, 0.7));
+
+        groupe.RenderTransform = new ScaleTransform(kb, kb);
+        Canvas.SetLeft(groupe, x0);
+        Canvas.SetTop(groupe, h - 100 * kb);
+        sc.Children.Add(groupe);
+
+        // Chauves-souris : seulement au-dessus de la moitié droite, avec fondu aux extrémités.
+        string couleurChauve = sombre ? "#0E1628" : "#4A3B5C";
+        ChauveSouris(sc, l + 30, x0, 12 * kb, 1.25 * kb, 16, 0, couleurChauve);
+        ChauveSouris(sc, l + 30, x0, 34 * kb, 0.95 * kb, 23, 9, couleurChauve);
+    }
+
+    /// <summary>Paysage : lune, maison hantée aux fenêtres qui vacillent, fantôme, arbres nus,
+    /// tombes, citrouilles éclairées et chauves-souris.</summary>
+    private static void PaysageHalloween(Scene sc, double l, double h, double k)
+    {
+        sc.Children.Add(Lune(0.86 * l, 28 * k, 15 * k, "#F3E2A6"));
+
+        var r = new Alea(41);
+        for (int i = 0; i < 6; i++)
+        {
+            var etoile = Rond((0.05 + r.Suivant() * 0.7) * l, (8 + r.Suivant() * 30) * k, (1.2 + r.Suivant()) * k, "#B9A5D6");
+            sc.Children.Add(etoile);
+            sc.Animer(etoile, UIElement.OpacityProperty, new DoubleAnimation(0.9, 0.2, new Duration(TimeSpan.FromSeconds(1.6 + r.Suivant() * 1.4)))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                BeginTime = TimeSpan.FromSeconds(-r.Suivant() * 3),
+            });
+        }
+
+        Collines(sc, l, h, 58 * k, 9 * k, 3, "#E9E2F2", 1, null);
+        sc.Children.Add(MaisonHantee(sc, 0.6 * l, h - 46 * k, 0.85 * k));
+        sc.Children.Add(Fantome(sc, 0.46 * l, h - 60 * k, k, 0));
+        sc.Children.Add(ArbreNu(0.08 * l, h - 30 * k, 1.25 * k, "#5B4A6E"));
+        sc.Children.Add(ArbreNu(0.93 * l, h - 30 * k, 1.05 * k, "#5B4A6E"));
+
+        Collines(sc, l, h, 34 * k, 6 * k, 4, "#D8CCE7", 0, null);
+        sc.Children.Add(Tombe(0.19 * l, h - 24 * k, k, "#BFB2D3"));
+        sc.Children.Add(Tombe(0.225 * l, h - 22 * k, 0.8 * k, "#BFB2D3"));
+        sc.Children.Add(Citrouille(sc, 0.32 * l, h - 8 * k, 1.3 * k, 0));
+        sc.Children.Add(Citrouille(sc, 0.37 * l, h - 6 * k, 0.9 * k, 0.6));
+        sc.Children.Add(Citrouille(sc, 0.78 * l, h - 8 * k, 1.15 * k, 1.1));
+
+        double lent = Math.Max(1, l / 1100.0);
+        ChauveSouris(sc, l + 30, -40, 16 * k, 1.25 * k, 22 * lent, 0, "#4A3B5C");
+        ChauveSouris(sc, -40, l + 30, 40 * k, 0.95 * k, 30 * lent, 12, "#4A3B5C");
+    }
+
+    /// <summary>Citrouille (26 × 22 à l'échelle 1), bas centré en (x, yBas), visage qui vacille comme une bougie.</summary>
+    private static Canvas Citrouille(Scene sc, double x, double yBas, double echelle, double decalage)
+    {
+        var c = new Canvas { Width = 26, Height = 22 };
+        var gauche = new Forme.Ellipse { Width = 13, Height = 18, Fill = Pinceau("#D9661F") };
+        Canvas.SetLeft(gauche, 1); Canvas.SetTop(gauche, 4);
+        var droite = new Forme.Ellipse { Width = 13, Height = 18, Fill = Pinceau("#D9661F") };
+        Canvas.SetLeft(droite, 12); Canvas.SetTop(droite, 4);
+        var milieu = new Forme.Ellipse { Width = 14, Height = 19, Fill = Pinceau("#EE8433") };
+        Canvas.SetLeft(milieu, 6); Canvas.SetTop(milieu, 3);
+        c.Children.Add(gauche);
+        c.Children.Add(droite);
+        c.Children.Add(milieu);
+        c.Children.Add(Chemin("M12 4 Q 12.5 0 15 0.5 L 14.5 1.8 Q 13.6 2 13.8 4.5 Z", "#5E7D3A"));
+
+        var visage = new Canvas();
+        visage.Children.Add(Chemin("M7.5 11 L11 11 L9.3 7.8 Z", "#FFD45C"));
+        visage.Children.Add(Chemin("M15 11 L18.5 11 L16.7 7.8 Z", "#FFD45C"));
+        visage.Children.Add(Chemin("M7.5 14 L9.5 16 L11.2 14.6 L13 16.4 L14.8 14.6 L16.5 16 L18.5 14 Q 13 19.5 7.5 14 Z", "#FFD45C"));
+        c.Children.Add(visage);
+        var vacille = new DoubleAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromSeconds(2.3),
+            RepeatBehavior = RepeatBehavior.Forever,
+            BeginTime = TimeSpan.FromSeconds(-decalage),
+        };
+        vacille.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        vacille.KeyFrames.Add(new LinearDoubleKeyFrame(0.6, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.3))));
+        vacille.KeyFrames.Add(new LinearDoubleKeyFrame(0.95, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.55))));
+        vacille.KeyFrames.Add(new LinearDoubleKeyFrame(0.75, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(1.4))));
+        vacille.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(2.3))));
+        sc.Animer(visage, UIElement.OpacityProperty, vacille);
+
+        c.RenderTransform = new ScaleTransform(echelle, echelle);
+        Canvas.SetLeft(c, x - 13 * echelle);
+        Canvas.SetTop(c, yBas - 22 * echelle);
+        return c;
+    }
+
+    /// <summary>Chauve-souris qui traverse de <paramref name="xDe"/> à <paramref name="xA"/> en
+    /// battant des ailes, avec un léger tangage et un fondu aux deux bouts.</summary>
+    private static void ChauveSouris(Scene sc, double xDe, double xA, double y, double echelle,
+                                     double duree, double decalage, string couleur)
+    {
+        var corps = new Canvas();
+        corps.Children.Add(Chemin("M15 5 C 13 2 10 2 8 3.5 C 6.5 1.5 3.5 0.5 0 1.5 C 2 3.5 2.5 6 2 8.5 C 4.5 7 7 7.5 8.5 9.5 C 10.5 8 12.5 8 14 10 L15 8.5 L16 10 C 17.5 8 19.5 8 21.5 9.5 C 23 7.5 25.5 7 28 8.5 C 27.5 6 28 3.5 30 1.5 C 26.5 0.5 23.5 1.5 22 3.5 C 20 2 17 2 15 5 Z", couleur));
+        corps.Children.Add(Chemin("M13.6 4.4 L13.2 1.6 L14.6 3.4 L15.4 3.4 L16.8 1.6 L16.4 4.4 Z", couleur));
+        var aile = new ScaleTransform(1, 1, 15, 5);
+        corps.RenderTransform = aile;
+
+        var chauve = new Canvas();
+        chauve.Children.Add(corps);
+        var ondule = new TranslateTransform();
+        var vol = new TranslateTransform();
+        var g = new TransformGroup();
+        g.Children.Add(new ScaleTransform(echelle, echelle));
+        g.Children.Add(ondule);
+        g.Children.Add(vol);
+        chauve.RenderTransform = g;
+        Canvas.SetTop(chauve, y);
+        sc.Children.Add(chauve);
+
+        var debut = TimeSpan.FromSeconds(-decalage);
+        sc.Animer(vol, TranslateTransform.XProperty, Boucle(xDe, xA, duree, debut));
+        sc.Animer(aile, ScaleTransform.ScaleYProperty, new DoubleAnimation(1, 0.35, new Duration(TimeSpan.FromSeconds(0.22)))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+        });
+        sc.Animer(ondule, TranslateTransform.YProperty, new DoubleAnimation(-5 * echelle, 5 * echelle, new Duration(TimeSpan.FromSeconds(1.5)))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        });
+        double bord = Math.Min(1.5, duree / 6);
+        var fondu = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(duree), RepeatBehavior = RepeatBehavior.Forever, BeginTime = debut };
+        fondu.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        fondu.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(bord))));
+        fondu.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(duree - bord))));
+        fondu.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(duree))));
+        sc.Animer(chauve, UIElement.OpacityProperty, fondu);
+    }
+
+    /// <summary>Fantôme (22 × 28 à l'échelle 1), bas centré en (x, yBas), qui flotte doucement.</summary>
+    private static Canvas Fantome(Scene sc, double x, double yBas, double echelle, double decalage)
+    {
+        var f = new Canvas { Width = 22, Height = 28 };
+        var drap = Chemin("M2 26 L2 11 A 9 9 0 0 1 20 11 L20 26 L16.5 23 L13 26 L9.5 23 L6 26 Z", "#FFFFFF");
+        drap.Stroke = Pinceau("#C9C2D6");
+        drap.StrokeThickness = 1;
+        f.Children.Add(drap);
+        f.Children.Add(new Forme.Ellipse { Width = 3, Height = 4.5, Fill = Pinceau("#3B2F4A"), Margin = new Thickness(6.5, 9, 0, 0) });
+        f.Children.Add(new Forme.Ellipse { Width = 3, Height = 4.5, Fill = Pinceau("#3B2F4A"), Margin = new Thickness(12.5, 9, 0, 0) });
+        f.Children.Add(new Forme.Ellipse { Width = 3.5, Height = 3, Fill = Pinceau("#3B2F4A"), Margin = new Thickness(9.3, 15.5, 0, 0) });
+
+        var flotte = new TranslateTransform();
+        var g = new TransformGroup();
+        g.Children.Add(new ScaleTransform(echelle, echelle));
+        g.Children.Add(flotte);
+        f.RenderTransform = g;
+        Canvas.SetLeft(f, x - 11 * echelle);
+        Canvas.SetTop(f, yBas - 28 * echelle);
+        sc.Animer(flotte, TranslateTransform.YProperty, new DoubleAnimation(0, -9 * echelle, new Duration(TimeSpan.FromSeconds(2.4)))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            BeginTime = TimeSpan.FromSeconds(-decalage),
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        });
+        sc.Animer(f, UIElement.OpacityProperty, new DoubleAnimation(0.92, 0.6, new Duration(TimeSpan.FromSeconds(3.1)))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+        });
+        return f;
+    }
+
+    /// <summary>Maison hantée (silhouette avec tour), bas gauche en (x, yBas), fenêtres qui vacillent.</summary>
+    private static Canvas MaisonHantee(Scene sc, double x, double yBas, double echelle)
+    {
+        var m = new Canvas();
+        const string mur = "#4A3B5C";
+        m.Children.Add(Rect(0, -40, 60, 40, 0, mur));
+        m.Children.Add(Chemin("M-6 -39 L30 -62 L66 -39 Z", "#3B2F4A"));
+        m.Children.Add(Rect(58, -58, 22, 58, 0, mur));
+        m.Children.Add(Chemin("M54 -57 L69 -82 L84 -57 Z", "#3B2F4A"));
+        m.Children.Add(Rect(24, -17, 12, 17, 1, "#2A2235"));
+        (double fx, double fy, double fl, double fh)[] fenetres = { (8, -32, 10, 9), (42, -32, 10, 9), (65, -48, 8, 8), (65, -30, 8, 8) };
+        for (int i = 0; i < fenetres.Length; i++)
+        {
+            var (fx, fy, fl, fh) = fenetres[i];
+            var fenetre = Rect(fx, fy, fl, fh, 1, "#F7C948");
+            m.Children.Add(fenetre);
+            sc.Animer(fenetre, UIElement.OpacityProperty, new DoubleAnimation(1, 0.45, new Duration(TimeSpan.FromSeconds(1.3 + i * 0.4)))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                BeginTime = TimeSpan.FromSeconds(-i * 0.7),
+            });
+        }
+        m.RenderTransform = new ScaleTransform(echelle, echelle);
+        Canvas.SetLeft(m, x);
+        Canvas.SetTop(m, yBas);
+        return m;
+    }
+
+    /// <summary>Arbre sans feuilles, pied en (x, yPied).</summary>
+    private static Forme.Path ArbreNu(double x, double yPied, double echelle, string couleur)
+    {
+        var a = Chemin("M0 0 L0 -40 M0 -22 L-14 -34 L-20 -38 M-14 -34 L-15 -42 M0 -30 L12 -44 L18 -46 M12 -44 L12 -51 M0 -40 L-4 -52 M0 -40 L5 -50", null);
+        a.Stroke = Pinceau(couleur);
+        a.StrokeThickness = 3;
+        a.StrokeStartLineCap = PenLineCap.Round;
+        a.StrokeEndLineCap = PenLineCap.Round;
+        a.StrokeLineJoin = PenLineJoin.Round;
+        a.RenderTransform = new ScaleTransform(echelle, echelle);
+        Canvas.SetLeft(a, x);
+        Canvas.SetTop(a, yPied);
+        return a;
+    }
+
+    /// <summary>Pierre tombale arrondie, pied gauche en (x, yPied).</summary>
+    private static Canvas Tombe(double x, double yPied, double echelle, string couleur)
+    {
+        var t = new Canvas();
+        t.Children.Add(Chemin("M0 0 L0 -14 A 7 7 0 0 1 14 -14 L14 0 Z", couleur));
+        var croix = Chemin("M7 -17 L7 -7 M4 -14 L10 -14", null);
+        croix.Stroke = Pinceau("#8E80A6");
+        croix.StrokeThickness = 1.4;
+        t.Children.Add(croix);
+        t.RenderTransform = new ScaleTransform(echelle, echelle);
+        Canvas.SetLeft(t, x);
+        Canvas.SetTop(t, yPied);
+        return t;
+    }
+
+    /// <summary>Lune pleine avec un halo et deux cratères, centrée en (cx, cy).</summary>
+    private static Canvas Lune(double cx, double cy, double rayon, string couleur)
+    {
+        var c = new Canvas();
+        var teinte = (Color)ColorConverter.ConvertFromString(couleur);
+        var halo = new Forme.Ellipse
+        {
+            Width = rayon * 4,
+            Height = rayon * 4,
+            Fill = new RadialGradientBrush(Color.FromArgb(90, teinte.R, teinte.G, teinte.B),
+                                           Color.FromArgb(0, teinte.R, teinte.G, teinte.B)),
+        };
+        Canvas.SetLeft(halo, cx - rayon * 2);
+        Canvas.SetTop(halo, cy - rayon * 2);
+        c.Children.Add(halo);
+        c.Children.Add(Rond(cx, cy, rayon, couleur));
+        var cratere1 = Rond(cx - rayon * 0.3, cy - rayon * 0.2, rayon * 0.22, "#000000");
+        cratere1.Opacity = 0.07;
+        var cratere2 = Rond(cx + rayon * 0.35, cy + rayon * 0.3, rayon * 0.15, "#000000");
+        cratere2.Opacity = 0.07;
+        c.Children.Add(cratere1);
+        c.Children.Add(cratere2);
+        return c;
     }
 
     // ------------------------------------------------------------------ outils
