@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -161,6 +161,8 @@ namespace Metrologo.Services.Journal
                         Message = message ?? string.Empty,
                         Details = details == null ? null : JsonSerializer.Serialize(details, _jsonOpts),
                         Severite = severite,
+                        Utilisateur = UtilisateurActuel,
+                        Machine = Environment.MachineName,
                     };
 
                     string fichier = FichierEntreesDuMois(entry.Timestamp);
@@ -284,6 +286,35 @@ namespace Metrologo.Services.Journal
             {
                 _semaSessions.Release();
             }
+        }
+
+        public Task<List<LogEntry>> ChargerEntreesAsync(FiltreJournal? filtre = null)
+        {
+            return Task.Run(() =>
+            {
+                // Les anciennes entrées n'ont ni utilisateur ni machine : on les retrouve via leur session.
+                var sessionsParId = new Dictionary<string, SessionJournal>();
+                foreach (var s in LireFichierSessions())
+                    if (!string.IsNullOrEmpty(s.SessionId)) sessionsParId[s.SessionId] = s;
+
+                var entrees = new List<LogEntry>();
+                foreach (var e in LireToutesLesEntrees(filtre))
+                {
+                    if (!string.IsNullOrEmpty(filtre?.Utilisateur)
+                        && !string.Equals(e.Utilisateur, filtre.Utilisateur, StringComparison.OrdinalIgnoreCase)
+                        && !(sessionsParId.TryGetValue(e.SessionId, out var su)
+                             && string.Equals(su.Utilisateur, filtre.Utilisateur, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+
+                    if (sessionsParId.TryGetValue(e.SessionId, out var s))
+                    {
+                        if (string.IsNullOrWhiteSpace(e.Utilisateur)) e.Utilisateur = s.Utilisateur;
+                        if (string.IsNullOrWhiteSpace(e.Machine)) e.Machine = s.Machine;
+                    }
+                    entrees.Add(e);
+                }
+                return entrees.OrderByDescending(e => e.Timestamp).ToList();
+            });
         }
 
         public Task<List<string>> ChargerListeUtilisateursAsync()

@@ -101,7 +101,7 @@ namespace Metrologo.ViewModels
             await CatalogueAppareilsService.Instance.SupprimerAsync(modele.Id);
 
             JournalLog.Warn(CategorieLog.Administration, "CATALOGUE_SUPPR",
-                $"Modèle « {modele.Nom } » supprimé du catalogue par {_utilisateurActuel}.",
+                $"Modèle « {modele.Nom} » supprimé du catalogue.",
                 new { modele.Id, modele.Nom });
         }
 
@@ -130,7 +130,7 @@ namespace Metrologo.ViewModels
                     "Import terminé", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 JournalLog.Info(CategorieLog.Administration, "CATALOGUE_IMPORT_UI",
-                    $"{n} modèle(s) importé(s) depuis {dlg.FileName} par {_utilisateurActuel}.");
+                    $"{n} modèle(s) importé(s) depuis {System.IO.Path.GetFileName(dlg.FileName)}.");
             }
             catch (Exception ex)
             {

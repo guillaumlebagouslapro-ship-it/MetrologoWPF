@@ -50,6 +50,8 @@ namespace Metrologo.Views
             if (admin != null)
             {
                 AdminAuthentifie = admin;
+                // Posé dès maintenant pour que la ligne ACCES_ADMIN_OK du journal admin porte bien son nom.
+                Metrologo.Models.EtatApplication.AdminConnecte = admin;
                 ViewModel.MessageErreur = string.Empty;
                 JournalLog.Info(CategorieLog.Administration, "ACCES_ADMIN_OK",
                     $"Connexion admin : {admin.Login} ({admin.Role}).");

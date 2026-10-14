@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace Metrologo.Services.Journal
@@ -34,8 +34,23 @@ namespace Metrologo.Services.Journal
         public string? Details { get; set; }
         public SeveriteLog Severite { get; set; }
 
+        /// <summary>Login de l'opérateur au moment de l'entrée. Absent des anciennes entrées : la
+        /// lecture le complète alors depuis sessions.json (voir FichierJournalService.ChargerEntreesAsync).</summary>
+        public string? Utilisateur { get; set; }
+
+        /// <summary>Poste (nom de machine) qui a écrit l'entrée, même remarque que <see cref="Utilisateur"/>.</summary>
+        public string? Machine { get; set; }
+
         // Petits helpers d'affichage
         public string TimestampAffiche => Timestamp.ToString("HH:mm:ss");
+        public string HorodatageAffiche => Timestamp.ToString("dd/MM/yyyy HH:mm:ss");
+        public string UtilisateurAffiche => string.IsNullOrWhiteSpace(Utilisateur) ? "—" : Utilisateur;
+        public string SeveriteLibelle => Severite switch
+        {
+            SeveriteLog.Erreur        => "Erreur",
+            SeveriteLog.Avertissement => "Avert.",
+            _                         => "Info",
+        };
 
         /// <summary>
         /// Version lisible des Details JSON : on décode les échappements Unicode les plus

@@ -60,7 +60,7 @@ namespace Metrologo.Services.Journal
                 var e = autres[0];
                 string msg = e.ActionLisible
                     + (string.IsNullOrWhiteSpace(e.Detail) ? string.Empty : $" — {e.Detail}")
-                    + (string.IsNullOrWhiteSpace(e.Utilisateur) ? string.Empty : $"  (par {e.Utilisateur})");
+                    + (!e.AUnAuteur ? string.Empty : $"  (par {e.Utilisateur})");
                 ToastNotification.Afficher("Changement pris en compte", msg);
             }
             else

@@ -143,42 +143,6 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Lance tout de suite l'archivage du mois précédent, sans attendre le redémarrage de
-        /// l'app au 1er du mois. Pratique pour tester, ou pour rattraper un mois passé à la trappe
-        /// (PC resté éteint plusieurs jours).
-        /// </summary>
-        [RelayCommand]
-        private async System.Threading.Tasks.Task ArchiverMaintenantAsync()
-        {
-            var maintenant = DateTime.Now;
-            var moisPrec = new DateTime(maintenant.Year, maintenant.Month, 1).AddMonths(-1);
-
-            var conf = MessageBox.Show(
-                $"Archiver les logs de {moisPrec:MMMM yyyy} maintenant ?\n\n" +
-                "Les logs de ce mois seront exportés dans des fichiers JSON " +
-                $"({Metrologo.Services.Journal.ArchivesLogsService.DossierArchivesRacine}) " +
-                "puis supprimés de la base SQL Server.",
-                "Archiver les logs",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (conf != MessageBoxResult.Yes) return;
-
-            try
-            {
-                int n = await Metrologo.Services.Journal.ArchivesLogsService
-                    .ArchiverMoisAsync(moisPrec, force: true);
-                MessageBox.Show(
-                    $"Archivage terminé : {n} entrée(s) exportée(s).\n\n" +
-                    $"Dossier : {Metrologo.Services.Journal.ArchivesLogsService.DossierArchivesRacine}\\{moisPrec:yyyy-MM}",
-                    "Archivage OK", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Archivage échoué : {ex.Message}",
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        /// <summary>
         /// Déclenche à la main la récupération Besançon (téléchargement FTP du fichier corrigé,
         /// extraction des valeurs, ajout au fichier texte cumulatif), sans attendre l'heure
         /// quotidienne. Rien n'est écrit en base SQL ; le détail part dans le Journal (Système).

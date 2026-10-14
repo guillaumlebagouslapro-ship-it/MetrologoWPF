@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Journal administrateur"
-        Height="720" Width="1080"
+        Height="720" Width="1000"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
         ExtendsContentIntoTitleBar="True"
@@ -35,84 +35,102 @@
                     <TextBlock Text="Journal administrateur"
                                FontSize="20" FontWeight="Bold"
                                Foreground="{StaticResource AsertiNavyBrush}"/>
-                    <TextBlock Text="Actions de configuration (rubidium, incertitudes, catalogue, utilisateurs…) — hors consultations."
+                    <TextBlock Text="Qui s'est connecté à l'administration, et ce qu'il a modifié."
                                FontSize="11"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="2" Padding="24,0,24,8">
+        <Grid Grid.Row="2" Margin="24,0,24,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
             <ui:TextBox Text="{Binding Recherche, UpdateSourceTrigger=PropertyChanged}"
-                        PlaceholderText="Rechercher une action, un opérateur, un détail…" Padding="10,6">
+                        PlaceholderText="Rechercher un administrateur, une action, un poste…" Padding="10,6">
                 <ui:TextBox.Icon>
                     <ui:SymbolIcon Symbol="Search24"/>
                 </ui:TextBox.Icon>
             </ui:TextBox>
-        </Border>
+            <CheckBox Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"
+                      Content="Mises à jour automatiques (Besançon)"
+                      IsChecked="{Binding AfficherAutomatiques}"/>
+        </Grid>
 
-        <Border Grid.Row="3" Margin="24,0,24,8" Background="White"
-                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="10">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+        <!-- Une carte par connexion : en-tête (qui / quand / poste) puis ses actions -->
+        <ScrollViewer Grid.Row="3" Margin="24,0,24,8" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Blocs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border x:Name="Carte" CornerRadius="8" Padding="14,10" Margin="0,0,0,8"
+                                Background="White" BorderThickness="1,1,1,1"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="Titre" Grid.Column="0" Text="{Binding Titre}"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding SousTitre}" Margin="12,0,0,0"
+                                               FontSize="12" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <Border x:Name="Pastille" Grid.Column="2" CornerRadius="10" Padding="10,2"
+                                            Background="#FFE0E7FF" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TexteResume" Text="{Binding Resume}" FontSize="11"
+                                                   FontWeight="SemiBold" Foreground="#FF4338CA"/>
+                                    </Border>
+                                </Grid>
 
-                <!-- En-têtes (marges alignées sur le contenu + réservation scrollbar) -->
-                <Grid Grid.Row="0" Margin="11,2,28,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="150"/>
-                        <ColumnDefinition Width="150"/>
-                        <ColumnDefinition Width="240"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="DATE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
-                    <TextBlock Grid.Column="1" Text="OPÉRATEUR" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
-                    <TextBlock Grid.Column="2" Text="ACTION" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
-                    <TextBlock Grid.Column="3" Text="DÉTAIL" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AsertiOrangeBrush}"/>
-                </Grid>
-
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Visible">
-                    <ItemsControl ItemsSource="{Binding Entrees}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border CornerRadius="6" Padding="10,6" Margin="0,0,0,3"
-                                        Background="White"
-                                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                                        BorderThickness="1">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="150"/>
-                                            <ColumnDefinition Width="150"/>
-                                            <ColumnDefinition Width="240"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding HorodatageAffiche}"
-                                                   FontFamily="Cascadia Mono, Consolas" FontSize="11"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding Utilisateur}"
-                                                   FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource AsertiNavyBrush}"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Grid.Column="2" Text="{Binding ActionLisible}"
-                                                   FontSize="12" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource AsertiNavyBrush}"
-                                                   TextWrapping="Wrap"/>
-                                        <TextBlock Grid.Column="3" Text="{Binding Detail}"
-                                                   FontSize="12" VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                   TextWrapping="Wrap"/>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Grid>
-        </Border>
+                                <ItemsControl ItemsSource="{Binding Actions}" Margin="0,6,0,0"
+                                              Visibility="{Binding AActions, Converter={StaticResource BoolToVis}}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,3,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="52"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding HeureAffichee}" FontSize="12"
+                                                           FontFamily="Cascadia Mono, Consolas"
+                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding LibelleAffiche}" FontSize="12"
+                                                           FontWeight="SemiBold" Foreground="{StaticResource AsertiNavyBrush}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding Detail}" FontSize="12" Margin="10,0,0,0"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <!-- Connexion sans action : pastille grise, discrète -->
+                            <DataTrigger Binding="{Binding AActions}" Value="False">
+                                <Setter TargetName="Pastille" Property="Background" Value="#FFF1F5F9"/>
+                                <Setter TargetName="TexteResume" Property="Foreground" Value="#FF64748B"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Type}" Value="Refus">
+                                <Setter TargetName="Titre" Property="Foreground" Value="#FFC62828"/>
+                                <Setter TargetName="Carte" Property="Background" Value="#FFFDF2F2"/>
+                                <Setter TargetName="Pastille" Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Type}" Value="Automatique">
+                                <Setter TargetName="Titre" Property="Foreground" Value="#FF64748B"/>
+                                <Setter TargetName="Carte" Property="Background" Value="#FFF8FAFC"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
         <Border Grid.Row="4" Padding="24,12"
                 Background="{DynamicResource LayerFillColorDefaultBrush}"

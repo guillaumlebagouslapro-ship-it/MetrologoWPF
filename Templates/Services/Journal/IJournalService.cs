@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Metrologo.Services.Journal
@@ -23,6 +23,10 @@ namespace Metrologo.Services.Journal
         void Log(CategorieLog categorie, string action, string message, object? details = null, SeveriteLog severite = SeveriteLog.Info);
 
         Task<List<SessionJournal>> ChargerSessionsAsync(FiltreJournal? filtre = null);
+
+        /// <summary>Toutes les entrées (y compris celles écrites hors session, au démarrage par
+        /// ex.), les plus récentes d'abord, avec utilisateur et machine renseignés.</summary>
+        Task<List<LogEntry>> ChargerEntreesAsync(FiltreJournal? filtre = null);
         Task<List<string>> ChargerListeUtilisateursAsync();
     }
 }

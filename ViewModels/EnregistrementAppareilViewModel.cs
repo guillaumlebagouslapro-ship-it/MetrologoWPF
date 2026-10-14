@@ -378,7 +378,7 @@ namespace Metrologo.ViewModels
                 });
 
                 JournalLog.Info(CategorieLog.Administration, "CATALOGUE_MODIF",
-                    $"Modèle « {Nom} » modifié par {_utilisateurActuel}.",
+                    $"Modèle « {Nom} » modifié.",
                     new { Id = _modeleExistant.Id, Nom });
 
                 Resultat = _modeleExistant;
@@ -402,8 +402,8 @@ namespace Metrologo.ViewModels
 
                 await CatalogueAppareilsService.Instance.AjouterAsync(modele);
 
-                JournalLog.Info(CategorieLog.Configuration, "CATALOGUE_AJOUT",
-                    $"Modèle « {modele.Nom } » ajouté au catalogue par {_utilisateurActuel}.",
+                JournalLog.Info(CategorieLog.Administration, "CATALOGUE_AJOUT",
+                    $"Modèle « {modele.Nom} » ajouté au catalogue.",
                     new { modele.Nom, modele.FabricantIdn, modele.ModeleIdn });
 
                 Resultat = modele;

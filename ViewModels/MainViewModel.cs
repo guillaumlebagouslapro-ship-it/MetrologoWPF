@@ -88,7 +88,7 @@ namespace Metrologo.ViewModels
                   + string.Join("\n", _changementsAdmin
                         .Skip(System.Math.Max(0, _changementsAdmin.Count - 8))
                         .Select(e => $"• {e.Horodatage:HH:mm} — {e.ActionLisible}"
-                                   + (string.IsNullOrWhiteSpace(e.Utilisateur) ? "" : $" (par {e.Utilisateur})")));
+                                   + (!e.AUnAuteur ? "" : $" (par {e.Utilisateur})")));
 
         /// <summary>Pop-up rubidium sur CE poste : info (nouvelle valeur) ou avertissement (sous 1e-13).
         /// L'événement arrive déjà marshalé sur le thread UI par BesanconScheduler.</summary>
@@ -128,7 +128,7 @@ namespace Metrologo.ViewModels
             string liste = string.Join("\n", _changementsAdmin.Select(e =>
                 $"• {e.Horodatage:dd/MM HH:mm} — {e.ActionLisible}"
               + (string.IsNullOrWhiteSpace(e.Detail) ? "" : $" : {e.Detail}")
-              + (string.IsNullOrWhiteSpace(e.Utilisateur) ? "" : $"  (par {e.Utilisateur})")));
+              + (!e.AUnAuteur ? "" : $"  (par {e.Utilisateur})")));
 
             var choix = MessageBox.Show(
                 "Des changements de configuration ont été appliqués depuis un autre poste :\n\n" + liste
@@ -210,8 +210,78 @@ namespace Metrologo.ViewModels
             }
         }
 
+        // ---------- Déconnexion automatique après inactivité ----------
+
+        /// <summary>Au-delà de ce délai sans clic, frappe ni mesure, on revient au choix de l'utilisateur.</summary>
+        private static readonly System.TimeSpan DelaiInactivite = System.TimeSpan.FromMinutes(30);
+
+        private readonly System.Windows.Threading.DispatcherTimer _timerInactivite =
+            new() { Interval = System.TimeSpan.FromSeconds(30) };
+        private System.DateTime _derniereActivite = System.DateTime.Now;
+        private bool _deconnexionAutoEnCours;
+
+        /// <summary>Toute action clavier / souris / tactile dans l'application remet le compteur à zéro.
+        /// Un simple survol de la souris ne compte pas (un curseur qui bouge seul ne doit pas garder la session).</summary>
+        private void OnEntreeUtilisateur(object sender, System.Windows.Input.PreProcessInputEventArgs e)
+        {
+            if (e.StagingItem.Input is System.Windows.Input.KeyEventArgs
+                or System.Windows.Input.MouseButtonEventArgs
+                or System.Windows.Input.MouseWheelEventArgs
+                or System.Windows.Input.TouchEventArgs
+                or System.Windows.Input.StylusDownEventArgs)
+            {
+                _derniereActivite = System.DateTime.Now;
+            }
+        }
+
+        private async void OnTickInactivite(object? sender, System.EventArgs e)
+        {
+            // Déjà sur l'écran de connexion : rien à déconnecter.
+            if (EstEnSelectionUtilisateur || UtilisateurConnecte == null || _deconnexionAutoEnCours)
+            {
+                _derniereActivite = System.DateTime.Now;
+                return;
+            }
+
+            // Mesure ou série de stabs en cours : on ne touche à rien, et le délai repart de la fin de la mesure.
+            if (_accueilViewModel.ActiviteMesureEnCours)
+            {
+                _derniereActivite = System.DateTime.Now;
+                return;
+            }
+
+            if (System.DateTime.Now - _derniereActivite < DelaiInactivite) return;
+
+            // Une fenêtre modale (saisie post-mesure, message…) est ouverte : on ne la ferme pas d'autorité,
+            // la déconnexion aura lieu au tick suivant sa fermeture.
+            if (System.Windows.Interop.ComponentDispatcher.IsThreadModal) return;
+
+            _deconnexionAutoEnCours = true;
+            try
+            {
+                string login = UtilisateurConnecte.Login;
+                Journal.Info(CategorieLog.Session, "DECONNEXION_AUTO",
+                    $"Déconnexion automatique de {login} après {DelaiInactivite.TotalMinutes:0} min sans activité ni mesure.");
+
+                await RevenirAEcranConnexionAsync("Déconnexion automatique (inactivité)");
+
+                ToastNotification.Afficher("Déconnexion automatique",
+                    $"Aucune activité ni mesure depuis {DelaiInactivite.TotalMinutes:0} minutes : "
+                  + "sélectionnez votre nom pour reprendre.");
+            }
+            finally
+            {
+                _derniereActivite = System.DateTime.Now;
+                _deconnexionAutoEnCours = false;
+            }
+        }
+
         public MainViewModel()
         {
+            System.Windows.Input.InputManager.Current.PreProcessInput += OnEntreeUtilisateur;
+            _timerInactivite.Tick += OnTickInactivite;
+            _timerInactivite.Start();
+
             NotificationsAdminWatcher.ChangementsRecus += OnChangementsAdminRecus;
 
             // pop-up directe sur CE poste quand la valeur rubidium est mise à jour (écart hebdo

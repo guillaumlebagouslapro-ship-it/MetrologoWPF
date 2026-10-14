@@ -66,7 +66,12 @@ namespace Metrologo.Services.Journal
             if ((cat == CategorieLog.Administration || cat == CategorieLog.Rubidium)
                 && JournalAdminService.EstActionAudit(action))
             {
-                JournalAdminService.Ecrire(action, message, Utilisateur);
+                // On note l'ADMIN authentifié (et non l'opérateur connecté sur le poste) ; les tâches
+                // automatiques (Besançon) sont marquées comme telles.
+                string? qui = JournalAdminService.EstActionAutomatique(action)
+                    ? JournalAdminService.UtilisateurAutomatique
+                    : Metrologo.Models.EtatApplication.AdminConnecte?.Login ?? Utilisateur;
+                JournalAdminService.Ecrire(action, message, qui);
             }
         }
     }

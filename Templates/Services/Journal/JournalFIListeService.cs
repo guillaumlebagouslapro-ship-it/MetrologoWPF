@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -19,6 +19,10 @@ namespace Metrologo.Services.Journal
         public DateTime DerniereActivite { get; set; }
         public int NbMesures { get; set; }
 
+        /// <summary>Vrai si la FI n'existe que dans le dossier de repli local (Bureau\Metrologo),
+        /// faute de réseau au moment de la mesure : elle sera recopiée sur le partage plus tard.</summary>
+        public bool EstLocale { get; set; }
+
         public bool LogPresent => !string.IsNullOrEmpty(CheminFichierLog) && File.Exists(CheminFichierLog);
         public string OperateursAffiches => Operateurs.Count > 0 ? string.Join(", ", Operateurs) : "—";
         public string DerniereActiviteAffichee =>
@@ -37,18 +41,49 @@ namespace Metrologo.Services.Journal
         /// <summary>Dossier racine, avec un sous-dossier par FI.</summary>
         public static string DossierRacine => CheminsMetrologo.MesuresLocal;
 
+        /// <summary>Dossier de repli des FI mesurées hors réseau (Bureau\Metrologo).</summary>
+        public static string DossierRepliLocal => Path.GetDirectoryName(CheminsMetrologo.DossierFILocal("x"))!;
+
+        /// <summary>Vrai si le dossier Mesures (réseau) est accessible au moment de l'appel.</summary>
+        public static bool RacineAccessible()
+        {
+            try { return !string.IsNullOrWhiteSpace(DossierRacine) && Directory.Exists(DossierRacine); }
+            catch { return false; }
+        }
+
         public static List<FicheJournalInfo> Lister()
         {
             var resultats = new List<FicheJournalInfo>();
-            string racine = DossierRacine;
-            if (string.IsNullOrWhiteSpace(racine) || !Directory.Exists(racine))
-                return resultats;
+            var dejaVues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var dossier in Directory.EnumerateDirectories(racine))
+            // Le partage d'abord : une FI rapatriée y est la version de référence.
+            if (RacineAccessible())
+                AjouterFiches(DossierRacine, estLocale: false, resultats, dejaVues);
+
+            // Puis les FI restées en local (mesurées sans réseau, pas encore transférées).
+            try
+            {
+                if (Directory.Exists(DossierRepliLocal))
+                    AjouterFiches(DossierRepliLocal, estLocale: true, resultats, dejaVues);
+            }
+            catch { /* Bureau illisible : on se contente du partage */ }
+
+            return resultats.OrderByDescending(f => f.DerniereActivite).ToList();
+        }
+
+        private static void AjouterFiches(string racine, bool estLocale,
+            List<FicheJournalInfo> resultats, HashSet<string> dejaVues)
+        {
+            IEnumerable<string> dossiers;
+            try { dossiers = Directory.EnumerateDirectories(racine).ToList(); }
+            catch { return; }
+
+            foreach (var dossier in dossiers)
             {
                 try
                 {
                     string numFI = Path.GetFileName(dossier);
+                    if (!dejaVues.Add(numFI)) continue;
 
                     // On attend un Journal_<FI>.txt ; à défaut, on prend le premier Journal_*.txt venu.
                     string logAttendu = Path.Combine(dossier, $"Journal_{numFI}.txt");
@@ -61,6 +96,7 @@ namespace Metrologo.Services.Journal
                         NumFI = numFI,
                         CheminDossier = dossier,
                         CheminFichierLog = log ?? string.Empty,
+                        EstLocale = estLocale,
                         DerniereActivite = log != null
                             ? File.GetLastWriteTime(log)
                             : Directory.GetLastWriteTime(dossier),
@@ -72,30 +108,41 @@ namespace Metrologo.Services.Journal
                 }
                 catch { /* dossier illisible : on l'ignore */ }
             }
-
-            return resultats.OrderByDescending(f => f.DerniereActivite).ToList();
         }
 
-        /// <summary>Récupère les opérateurs (lignes d'en-tête « Utilisateur : … ») et le nombre de mesures.</summary>
+        /// <summary>
+        /// Récupère les opérateurs et le nombre de mesures réussies. Lit les deux formats :
+        /// le concis (en-tête « ── 14/10/2026 · 09:00 · Jean Dupont · Baie ── », lignes « ✔ … »)
+        /// et l'ancien (« Utilisateur : … », lignes MESURE_FIN).
+        /// </summary>
         private static void AnalyserLog(string chemin, FicheJournalInfo info)
         {
             try
             {
                 var operateurs = new List<string>();
                 int nbMesures = 0;
+                void AjouterOperateur(string u)
+                {
+                    u = u.Trim();
+                    if (u.Length > 0 && u != "?" && !operateurs.Contains(u, StringComparer.OrdinalIgnoreCase))
+                        operateurs.Add(u);
+                }
+
                 foreach (var ligne in File.ReadLines(chemin, Encoding.UTF8))
                 {
-                    if (ligne.StartsWith("Utilisateur", StringComparison.OrdinalIgnoreCase))
+                    if (ligne.StartsWith(JournalFIService.DebutEntete, StringComparison.Ordinal))
+                    {
+                        // date · heure · opérateur [· poste] ; une ligne de changement de jour n'a que la date.
+                        var parties = ligne.Trim('─', ' ').Split(" · ");
+                        if (parties.Length >= 3) AjouterOperateur(parties[2]);
+                    }
+                    else if (ligne.StartsWith("Utilisateur", StringComparison.OrdinalIgnoreCase))
                     {
                         int i = ligne.IndexOf(':');
-                        if (i >= 0)
-                        {
-                            string u = ligne[(i + 1)..].Trim();
-                            if (u.Length > 0 && !operateurs.Contains(u, StringComparer.OrdinalIgnoreCase))
-                                operateurs.Add(u);
-                        }
+                        if (i >= 0) AjouterOperateur(ligne[(i + 1)..]);
                     }
-                    else if (ligne.Contains("MESURE_FIN", StringComparison.Ordinal))
+                    else if (ligne.Contains("MESURE_FIN", StringComparison.Ordinal)
+                          || (ligne.Length > 7 && ligne[2] == ':' && ligne[7..].StartsWith(JournalFIService.MarqueOk, StringComparison.Ordinal)))
                     {
                         nbMesures++;
                     }

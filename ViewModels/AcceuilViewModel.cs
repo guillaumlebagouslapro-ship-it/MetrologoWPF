@@ -37,6 +37,10 @@ namespace Metrologo.ViewModels
         /// répétitions (MesureEnCours repasse brièvement à false entre la fin d'une stab et la suivante).</summary>
         private bool _serieStabEnCours;
 
+        /// <summary>Vrai tant qu'une mesure tourne, s'arrête, ou qu'une série de stabs est en cours
+        /// (y compris entre deux répétitions). Sert à ne jamais déconnecter en pleine acquisition.</summary>
+        public bool ActiviteMesureEnCours => MesureEnCours || ArretEnCours || _serieStabEnCours;
+
         [ObservableProperty] private bool _estSurBaie = true;
         [ObservableProperty] private string _informationsGenerales = "Prêt. En attente d'exécution...";
         [ObservableProperty] private string _rubidiumActifTexte = EtatApplication.RubidiumActifTexte;
@@ -393,12 +397,6 @@ namespace Metrologo.ViewModels
                         fNominale = MesureConfig.FNominale
                     });
 
-                // Journal utilisateur FI : une entree detaillee avec les parametres cles.
-                string gateLib = Metrologo.Services.EnTetesMesureHelper.LibelleGate(MesureConfig.GateIndex);
-                JournalFIService.Ecrire("CONFIG_VALIDEE",
-                    $"{MesureConfig.TypeMesure} · {MesureConfig.NbMesures} mesures · "
-                    + $"{nomAppareil} · gate {gateLib} · {MesureConfig.ModeMesure} · {MesureConfig.SourceMesure}");
-
                 // Enchainement automatique : une fois la config validee, on lance directement
                 // la mesure (ouvrirConfigAvant=false pour ne pas rouvrir la fenetre de config en boucle).
                 await ExecuterMesureInterneAsync(ouvrirConfigAvant: false);
@@ -572,7 +570,7 @@ namespace Metrologo.ViewModels
                 Journal.Info(CategorieLog.Mesure, "STAB_SERIE_DEBUT",
                     $"Série de {nbRepetitions} stabs, FI {config.NumFI}, gates {string.Join(",", config.GateIndices)}, "
                   + $"durée estimée {EstimationDureeStab.Formater(estimation)} par stab.");
-                JournalFIService.Ecrire("STAB_SERIE_DEBUT",
+                JournalFIService.NoterSerie(
                     $"{nbRepetitions} stabs · ≈ {EstimationDureeStab.Formater(estimation)} par stab");
 
                 for (int r = 1; r <= nbRepetitions; r++)
@@ -593,8 +591,8 @@ namespace Metrologo.ViewModels
                         Log($"✖ Série interrompue à la stab {r}/{nbRepetitions} : les suivantes ne sont pas lancées.");
                         Journal.Warn(CategorieLog.Mesure, "STAB_SERIE_INTERROMPUE",
                             $"Série interrompue à la stab {r}/{nbRepetitions} ({faites} terminée(s)).");
-                        JournalFIService.Ecrire("STAB_SERIE_INTERROMPUE",
-                            $"stab {r}/{nbRepetitions}, {faites} terminée(s)");
+                        JournalFIService.NoterSerie(
+                            $"interrompue à la stab {r}/{nbRepetitions} ({faites} terminée(s))");
                         break;
                     }
 
@@ -609,8 +607,8 @@ namespace Metrologo.ViewModels
                 {
                     Log("═══════════════════════════════════════════");
                     Log($"✅ Série terminée : {faites} stabs en {EstimationDureeStab.Formater(swSerie.Elapsed)}.");
-                    JournalFIService.Ecrire("STAB_SERIE_FIN",
-                        $"{faites} stabs en {EstimationDureeStab.Formater(swSerie.Elapsed)}");
+                    JournalFIService.NoterSerie(
+                        $"terminée · {faites} stabs en {EstimationDureeStab.Formater(swSerie.Elapsed)}");
                 }
             }
             finally
@@ -701,11 +699,6 @@ namespace Metrologo.ViewModels
                     }
                 }
             }
-
-            JournalFIService.Ecrire("RELANCE",
-                choix == MessageBoxResult.Yes
-                    ? "fichier neuf (ancien supprimé)"
-                    : "conserve historique");
 
             await LancerMesureAsync(MesureConfig, rubi, _derniereFNominale,
                 preambule: choix == MessageBoxResult.Yes
@@ -962,9 +955,10 @@ namespace Metrologo.ViewModels
             JournalFIService.DemarrerSession(config.NumFI ?? string.Empty,
                 utilisateurCourant, EstSurBaie ? "Baie" : "Paillasse");
 
-            // Journal utilisateur FI : ligne MESURE_DEBUT avec préambule (Lancement / Relance).
-            JournalFIService.Ecrire("MESURE_DEBUT",
-                $"{preambule} · {config.NbMesures} mesures · {nomAppareilLog}");
+            // Journal FI : la config (écrite ici, une fois les gates d'une stab choisies, et
+            // seulement si elle a changé) ; la mesure elle-même part sur la ligne du résultat.
+            JournalFIService.NoterConfiguration(ResumeConfigJournalFI(config, nomAppareilLog));
+            JournalFIService.DebutMesure(preambule);
 
             var progress = new Progress<ProgressionMesure>(p =>
             {
@@ -1055,6 +1049,7 @@ namespace Metrologo.ViewModels
                         Log("ℹ Tu peux relancer une nouvelle configuration.");
                         Journal.Warn(CategorieLog.Mesure, "MESURE_ABANDON_EXCEL_MORT",
                             "Mesure interrompue automatiquement (Excel fermé brutalement).");
+                        JournalFIService.NoterResultat(false, "Excel fermé pendant la mesure");
                     }
                     else
                     {
@@ -1063,6 +1058,7 @@ namespace Metrologo.ViewModels
                         Log("ℹ Tu peux relancer une nouvelle configuration.");
                         Journal.Warn(CategorieLog.Mesure, "MESURE_ABANDON",
                             "Mesure abandonnée par l'utilisateur (taskMesure orpheline en arrière-plan).");
+                        JournalFIService.NoterResultat(false, "arrêtée par l'opérateur");
                     }
                     return false;
                 }
@@ -1093,9 +1089,8 @@ namespace Metrologo.ViewModels
                         $"Mesure terminée : moyenne {result.Moyenne:F6} Hz, σ {result.EcartType:E3} Hz",
                         new { result.Moyenne, result.EcartType, nbValeurs = result.Valeurs.Count });
 
-                    // Journal utilisateur FI : ligne MESURE_FIN avec stats clés.
-                    JournalFIService.Ecrire("MESURE_FIN",
-                        $"{result.Valeurs.Count} valeurs · moy {result.Moyenne:F6} Hz · σ {result.EcartType:E3} Hz");
+                    // Journal FI : qui a fait quoi et quand ; les valeurs, elles, sont dans le rapport Excel.
+                    JournalFIService.NoterResultat(true, $"{result.Valeurs.Count} mesures");
 
                     // Si le transfert du dossier FI vers le réseau a échoué : prévenir l'utilisateur.
                     // Le dossier reste en local et sera retransféré automatiquement au prochain
@@ -1131,7 +1126,7 @@ namespace Metrologo.ViewModels
                 {
                     Log($"✖ Échec : {result.Erreur}");
                     Journal.Erreur(CategorieLog.Mesure, "MESURE_ECHEC", result.Erreur ?? "Échec inconnu.");
-                    JournalFIService.Ecrire("MESURE_ECHEC", result.Erreur ?? "Échec inconnu");
+                    JournalFIService.NoterResultat(false, result.Erreur ?? "Échec inconnu");
                     // Premier plan forcé : Excel est souvent devant (ex. valeur hors du
                     // module d'incertitude) — la pop-up doit passer PAR-DESSUS le rapport
                     // pour que l'utilisateur comprenne que la mesure n'est pas passée.
@@ -1143,7 +1138,7 @@ namespace Metrologo.ViewModels
             {
                 Log($"✖ Erreur inattendue : {ex.Message}");
                 Journal.Erreur(CategorieLog.Mesure, "MESURE_EXCEPTION", ex.Message, new { ex.StackTrace });
-                JournalFIService.Ecrire("MESURE_ECHEC", $"Exception : {ex.Message}");
+                JournalFIService.NoterResultat(false, $"erreur inattendue : {ex.Message}");
                 MessageBoxPremierPlan.Afficher(ex.Message, "Erreur inattendue",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -1290,11 +1285,40 @@ namespace Metrologo.ViewModels
                 }
                 Log("⏹ Arrêt demandé — en cours…");
                 Journal.Warn(CategorieLog.Mesure, "MESURE_STOP", "Arrêt demandé par l'utilisateur.");
-                JournalFIService.Ecrire("STOP_UTILISATEUR", "Arrêt manuel via bouton flottant");
+                JournalFIService.SignalerArret();
             }
         }
 
         private bool PeutStopper() => MesureEnCours && !ArretEnCours;
+
+        /// <summary>
+        /// La config telle qu'elle figure dans le journal FI : type, nombre de mesures, appareil et
+        /// gate(s). Pour une stabilité, ce sont les gates balayées (« toutes les gates » si elles y
+        /// sont toutes) ; mode et source n'y ont pas de sens. Ailleurs, le mode n'apparaît que s'il
+        /// est indirect.
+        /// </summary>
+        private static string ResumeConfigJournalFI(Mesure config, string nomAppareil)
+        {
+            bool stab = config.TypeMesure == TypeMesure.Stabilite;
+            string resume = $"{EnTetesMesureHelper.LibelleType(config.TypeMesure)} · {config.NbMesures} mesures"
+                          + (stab ? " par gate" : string.Empty);
+            if (!string.IsNullOrWhiteSpace(nomAppareil)) resume += $" · {nomAppareil}";
+
+            if (stab)
+            {
+                var gates = config.GateIndices.Distinct().OrderBy(i => i).ToList();
+                resume += gates.Count >= EnTetesMesureHelper.LibellesCanoniques.Count
+                    ? " · toutes les gates"
+                    : gates.Count == 1
+                        ? $" · gate {EnTetesMesureHelper.LibelleGate(gates[0])}"
+                        : $" · gates {string.Join(", ", gates.Select(EnTetesMesureHelper.LibelleGate))}";
+                return resume;
+            }
+
+            resume += $" · gate {EnTetesMesureHelper.LibelleGate(config.GateIndex)}";
+            if (config.ModeMesure == ModeMesure.Indirect) resume += " · indirect";
+            return resume;
+        }
 
         // -------- Utilitaires --------
 

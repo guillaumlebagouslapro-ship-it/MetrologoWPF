@@ -11,17 +11,19 @@ using System.Threading.Tasks;
 namespace Metrologo.ViewModels
 {
     /// <summary>
-    /// Journal d'audit administrateur. On y retrouve les actions de configuration : changement
-    /// de rubidium, modules d'incertitude, catalogue appareils, utilisateurs, mots de passe, etc.
-    /// Les données proviennent du fichier partagé <see cref="JournalAdminService.Chemin"/>. À noter :
-    /// la simple consultation d'un écran ou d'une FI n'y laisse aucune trace.
+    /// Journal d'audit administrateur, présenté par CONNEXION : qui s'est connecté (quand, sur quel
+    /// poste) puis les actions de configuration faites pendant cette connexion — ou « connexion
+    /// seule » s'il n'a rien modifié. Les refus d'accès sont regroupés, les mises à jour automatiques
+    /// (Besançon) masquées par défaut. Source : le fichier partagé <see cref="JournalAdminService.Chemin"/>,
+    /// regroupé par <see cref="JournalAdminRegroupement"/>.
     /// </summary>
     public partial class JournalAdminViewModel : ObservableObject
     {
-        private List<EntreeJournalAdmin> _toutes = new();
+        private List<BlocJournalAdmin> _tous = new();
 
-        [ObservableProperty] private ObservableCollection<EntreeJournalAdmin> _entrees = new();
+        [ObservableProperty] private ObservableCollection<BlocJournalAdmin> _blocs = new();
         [ObservableProperty] private string _recherche = string.Empty;
+        [ObservableProperty] private bool _afficherAutomatiques;
         [ObservableProperty] private string _statut = "Prêt.";
 
         public string Chemin => JournalAdminService.Chemin;
@@ -32,6 +34,7 @@ namespace Metrologo.ViewModels
         }
 
         partial void OnRechercheChanged(string value) => AppliquerFiltre();
+        partial void OnAfficherAutomatiquesChanged(bool value) => AppliquerFiltre();
 
         [RelayCommand]
         private async Task RafraichirAsync()
@@ -39,9 +42,9 @@ namespace Metrologo.ViewModels
             Statut = "Chargement…";
             try
             {
-                _toutes = await Task.Run(() => JournalAdminService.Lire());
+                _tous = await Task.Run(() =>
+                    JournalAdminRegroupement.Regrouper(JournalAdminService.LireChronologique()));
                 AppliquerFiltre();
-                Statut = $"{_toutes.Count} action(s) administrateur · fichier : {Chemin}";
             }
             catch (Exception ex)
             {
@@ -51,19 +54,21 @@ namespace Metrologo.ViewModels
 
         private void AppliquerFiltre()
         {
-            IEnumerable<EntreeJournalAdmin> src = _toutes;
-            string q = (Recherche ?? string.Empty).Trim();
-            if (q.Length > 0)
-            {
-                src = src.Where(e =>
-                    e.Utilisateur.Contains(q, StringComparison.OrdinalIgnoreCase)
-                    || e.ActionLisible.Contains(q, StringComparison.OrdinalIgnoreCase)
-                    || e.Action.Contains(q, StringComparison.OrdinalIgnoreCase)
-                    || e.Detail.Contains(q, StringComparison.OrdinalIgnoreCase));
-            }
+            IEnumerable<BlocJournalAdmin> src = _tous;
+            if (!AfficherAutomatiques) src = src.Where(b => b.Type != TypeBlocAdmin.Automatique);
 
-            Entrees.Clear();
-            foreach (var e in src) Entrees.Add(e);
+            string q = (Recherche ?? string.Empty).Trim();
+            if (q.Length > 0) src = src.Where(b => b.Contient(q));
+
+            var liste = src.ToList();
+            Blocs = new ObservableCollection<BlocJournalAdmin>(liste);
+
+            int connexions = liste.Count(b => b.Type == TypeBlocAdmin.Connexion);
+            int actions = liste.Where(b => b.Type != TypeBlocAdmin.Refus).Sum(b => b.Actions.Sum(a => a.Nombre));
+            int refus = liste.Where(b => b.Type == TypeBlocAdmin.Refus).Sum(b => b.NbTentatives);
+            Statut = $"{connexions} connexion(s) · {actions} action(s)"
+                   + (refus > 0 ? $" · {refus} accès refusé(s)" : string.Empty)
+                   + $" · fichier : {Chemin}";
         }
 
         [RelayCommand]

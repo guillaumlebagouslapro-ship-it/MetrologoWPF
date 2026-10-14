@@ -17,6 +17,10 @@ namespace Metrologo.Services.Journal
 
         public string HorodatageAffiche => Horodatage.ToString("dd/MM/yyyy HH:mm:ss");
         public string ActionLisible => JournalAdminService.LibelleAction(Action);
+
+        /// <summary>Faux pour une tâche automatique ou un auteur inconnu : on n'affiche pas « par … ».</summary>
+        public bool AUnAuteur => !string.IsNullOrWhiteSpace(Utilisateur) && Utilisateur != "?"
+                                 && Utilisateur != JournalAdminService.UtilisateurAutomatique;
     }
 
     /// <summary>
@@ -51,7 +55,8 @@ namespace Metrologo.Services.Journal
             // Modules d'incertitude
             "INCERT_MODULE_SAUVE", "INCERT_MODULE_COPIE", "INCERT_MODULE_SUPPR", "INCERT_MODULE_RENOMME",
             // Catalogue des appareils
-            "CATALOGUE_MODIF", "CATALOGUE_SUPPR", "CATALOGUE_IMPORT", "CATALOGUE_IMPORT_UI",
+            // (CATALOGUE_IMPORT, écrit par le service pour le même import, ferait doublon)
+            "CATALOGUE_AJOUT", "CATALOGUE_MODIF", "CATALOGUE_SUPPR", "CATALOGUE_IMPORT_UI",
             // Utilisateurs et comptes
             "UTILISATEUR_AJOUTE", "UTILISATEUR_SUPPRIME", "UTILISATEUR_RENOMME", "UTILISATEUR_ROLE",
             "MDP_REINITIALISE", "MDP_MODIFIE",
@@ -63,6 +68,18 @@ namespace Metrologo.Services.Journal
 
         public static bool EstActionAudit(string action) =>
             !string.IsNullOrEmpty(action) && _actionsAudit.Contains(action);
+
+        /// <summary>Actions faites par l'application elle-même (récupération Besançon), sans admin derrière.
+        /// Elles restent dans le fichier : c'est par lui que les autres postes apprennent le changement.</summary>
+        private static readonly HashSet<string> _actionsAutomatiques = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "RUBIDIUM_VALEUR_MAJ", "RUBIDIUM_HEBDO_SOUS_SEUIL",
+        };
+
+        public const string UtilisateurAutomatique = "(automatique)";
+
+        public static bool EstActionAutomatique(string action) =>
+            !string.IsNullOrEmpty(action) && _actionsAutomatiques.Contains(action);
 
         /// <summary>Ajoute une entrée d'audit (au mieux, et thread-safe). On note aussi le nom de la
         /// machine, ce qui sert à ne pas renotifier le poste qui est à l'origine du changement.</summary>
@@ -185,7 +202,8 @@ namespace Metrologo.Services.Journal
             "INCERT_MODULE_COPIE"     => "Module d'incertitude dupliqué",
             "INCERT_MODULE_SUPPR"     => "Module d'incertitude supprimé",
             "INCERT_MODULE_RENOMME"   => "Module d'incertitude renommé",
-            "CATALOGUE_MODIF"         => "Appareil ajouté / modifié au catalogue",
+            "CATALOGUE_AJOUT"         => "Appareil ajouté au catalogue",
+            "CATALOGUE_MODIF"         => "Appareil modifié dans le catalogue",
             "CATALOGUE_SUPPR"         => "Appareil supprimé du catalogue",
             "CATALOGUE_IMPORT"        => "Catalogue appareils importé",
             "CATALOGUE_IMPORT_UI"     => "Catalogue appareils importé",
