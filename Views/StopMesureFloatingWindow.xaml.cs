@@ -66,6 +66,13 @@ namespace Metrologo.Views
                 e.Handled = true;
             };
 
+            // Heure de fin d'une stab : relue toutes les 15 s. Le timer tourne sur le thread de
+            // cette fenêtre, donc le texte reste à jour même si le thread principal est saturé.
+            var timerFin = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+            timerFin.Tick += (_, _) => MettreAJourFinEstimee();
+            Loaded += (_, _) => { MettreAJourFinEstimee(); timerFin.Start(); };
+            Closed += (_, _) => timerFin.Stop();
+
             // Échappatoire clavier locale.
             KeyDown += (_, e) =>
             {
@@ -78,6 +85,13 @@ namespace Metrologo.Views
         }
 
         public void Configurer(Action onStop) => _onStop = onStop;
+
+        private void MettreAJourFinEstimee()
+        {
+            string? texte = Metrologo.Services.SuiviFinStab.TexteBandeau();
+            TxtFinEstimee.Text = texte ?? string.Empty;
+            TxtFinEstimee.Visibility = texte == null ? Visibility.Collapsed : Visibility.Visible;
+        }
 
         protected override void OnSourceInitialized(EventArgs e)
         {

@@ -37,6 +37,11 @@ namespace Metrologo.ViewModels
         /// répétitions (MesureEnCours repasse brièvement à false entre la fin d'une stab et la suivante).</summary>
         private bool _serieStabEnCours;
 
+        /// <summary>Position dans la série de stabs en cours (1/1 hors série) : sert à l'heure de fin
+        /// affichée dans le bandeau rouge (<see cref="SuiviFinStab"/>).</summary>
+        private int _repetitionStab = 1;
+        private int _nbRepetitionsStab = 1;
+
         /// <summary>Vrai tant qu'une mesure tourne, s'arrête, ou qu'une série de stabs est en cours
         /// (y compris entre deux répétitions). Sert à ne jamais déconnecter en pleine acquisition.</summary>
         public bool ActiviteMesureEnCours => MesureEnCours || ArretEnCours || _serieStabEnCours;
@@ -582,6 +587,8 @@ namespace Metrologo.ViewModels
                         Log($"🔁 Stab {r}/{nbRepetitions} · fin de série estimée vers {EstimationDureeStab.HeureFin(reste)}");
 
                     var sw = System.Diagnostics.Stopwatch.StartNew();
+                    _repetitionStab = r;
+                    _nbRepetitionsStab = nbRepetitions;
                     bool ok = await LancerMesureAsync(config, rubi, fNominale,
                         preambule: $"▶ Stab {r}/{nbRepetitions}");
                     sw.Stop();
@@ -614,6 +621,8 @@ namespace Metrologo.ViewModels
             finally
             {
                 _serieStabEnCours = false;
+                _repetitionStab = 1;
+                _nbRepetitionsStab = 1;
             }
         }
 
@@ -817,6 +826,12 @@ namespace Metrologo.ViewModels
             _cts = new CancellationTokenSource();
             _abandonCts = new CancellationTokenSource();
             MesureEnCours = true;
+
+            // Heure de fin estimée dans le bandeau rouge : stabilité seulement.
+            if (config.TypeMesure == TypeMesure.Stabilite)
+                SuiviFinStab.Demarrer(config.GateIndices, config.NbMesures, _repetitionStab, _nbRepetitionsStab);
+            else
+                SuiviFinStab.Arreter();
 
             // On affiche la fenetre flottante « ARRETER LA MESURE » sur un THREAD UI A PART
             // (STA + Dispatcher.Run). Comme ca le clic/raccourci est pris en compte tout de
@@ -1145,6 +1160,7 @@ namespace Metrologo.ViewModels
             }
             finally
             {
+                SuiviFinStab.Arreter();
                 MesureEnCours = false;
                 ArretEnCours = false;
                 _cts?.Dispose();

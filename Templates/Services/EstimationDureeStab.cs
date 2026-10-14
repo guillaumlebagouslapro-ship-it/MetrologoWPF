@@ -75,7 +75,12 @@ namespace Metrologo.Services
                     : surcout;
                 Sauver(appris);
             }
+            // Hors verrou : l'abonné (SuiviFinStab) rappelle EstimerBalayage sous son propre verrou.
+            try { GateEnregistree?.Invoke(gateIndex); } catch { /* indicatif, ne doit rien casser */ }
         }
+
+        /// <summary>Une gate de stab vient de se terminer (sert à recaler l'heure de fin affichée).</summary>
+        public static event Action<int>? GateEnregistree;
 
         /// <summary>Appelé au début de la 1re gate : durée réelle de l'init de l'appareil.</summary>
         public static void EnregistrerInit(TimeSpan duree)

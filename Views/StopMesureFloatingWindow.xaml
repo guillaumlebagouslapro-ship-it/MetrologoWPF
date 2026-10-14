@@ -38,6 +38,16 @@
                        FontWeight="Bold"
                        HorizontalAlignment="Center"
                        Margin="14,8,14,8"/>
+            <!-- Stabilité seulement : heure de fin estimée, rafraîchie par la fenêtre (SuiviFinStab) -->
+            <TextBlock x:Name="TxtFinEstimee"
+                       Foreground="White"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Margin="14,0,14,4"
+                       Visibility="Collapsed"/>
         </StackPanel>
 
         <Border Grid.Row="2" Background="#FF7F1D1D" Padding="14,10">
