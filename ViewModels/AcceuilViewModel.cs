@@ -957,7 +957,8 @@ namespace Metrologo.ViewModels
 
             // Journal FI : la config (écrite ici, une fois les gates d'une stab choisies, et
             // seulement si elle a changé) ; la mesure elle-même part sur la ligne du résultat.
-            JournalFIService.NoterConfiguration(ResumeConfigJournalFI(config, nomAppareilLog));
+            JournalFIService.NoterConfiguration(EnTetesMesureHelper.LibelleType(config.TypeMesure),
+                ResumeConfigJournalFI(config, nomAppareilLog));
             JournalFIService.DebutMesure(preambule);
 
             var progress = new Progress<ProgressionMesure>(p =>
@@ -1292,16 +1293,15 @@ namespace Metrologo.ViewModels
         private bool PeutStopper() => MesureEnCours && !ArretEnCours;
 
         /// <summary>
-        /// La config telle qu'elle figure dans le journal FI : type, nombre de mesures, appareil et
-        /// gate(s). Pour une stabilité, ce sont les gates balayées (« toutes les gates » si elles y
+        /// La config telle qu'elle figure dans le journal FI (le type est dans le séparateur qui la
+        /// précède) : nombre de mesures, appareil et gate(s). Pour une stabilité, ce sont les gates balayées (« toutes les gates » si elles y
         /// sont toutes) ; mode et source n'y ont pas de sens. Ailleurs, le mode n'apparaît que s'il
         /// est indirect.
         /// </summary>
         private static string ResumeConfigJournalFI(Mesure config, string nomAppareil)
         {
             bool stab = config.TypeMesure == TypeMesure.Stabilite;
-            string resume = $"{EnTetesMesureHelper.LibelleType(config.TypeMesure)} · {config.NbMesures} mesures"
-                          + (stab ? " par gate" : string.Empty);
+            string resume = $"{config.NbMesures} mesures" + (stab ? " par gate" : string.Empty);
             if (!string.IsNullOrWhiteSpace(nomAppareil)) resume += $" · {nomAppareil}";
 
             if (stab)
