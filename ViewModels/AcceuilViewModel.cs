@@ -42,6 +42,9 @@ namespace Metrologo.ViewModels
         private int _repetitionStab = 1;
         private int _nbRepetitionsStab = 1;
 
+        /// <summary>Nombre de stabs enchaînées au dernier lancement : « Relancer » rejoue la même série.</summary>
+        private int _derniereNbRepetitionsStab = 1;
+
         /// <summary>Vrai tant qu'une mesure tourne, s'arrête, ou qu'une série de stabs est en cours
         /// (y compris entre deux répétitions). Sert à ne jamais déconnecter en pleine acquisition.</summary>
         public bool ActiviteMesureEnCours => MesureEnCours || ArretEnCours || _serieStabEnCours;
@@ -493,6 +496,7 @@ namespace Metrologo.ViewModels
                 if (gateWin.ShowDialog() != true) { Log("✖ Mesure annulée (sélection gates)."); return; }
                 MesureConfig.GateIndices = gateWin.ViewModel.IndicesGatesResultats;
                 nbRepetitions = gateWin.ViewModel.NbRepetitions;
+                _derniereNbRepetitionsStab = Math.Max(1, nbRepetitions);
             }
             else if (MesureConfig.GateIndices.Count > 1)
             {
@@ -638,6 +642,17 @@ namespace Metrologo.ViewModels
                 return;
             }
 
+            // Stabilité : chaque stab écrit dans son propre fichier (stab, stab1, stab2…), il n'y a
+            // donc rien à « écraser ». L'ancien flux réinitialisait le classeur resté ouvert — le
+            // dernier rapport de la série — puis l'enregistrait vidé à la fermeture. On rejoue
+            // simplement la même stab (mêmes gates, même nombre de répétitions), sans toucher aux
+            // rapports existants.
+            if (MesureConfig.TypeMesure == TypeMesure.Stabilite)
+            {
+                await RelancerStabiliteAsync(rubi);
+                return;
+            }
+
             // Deux possibilites : conserver les anciennes mesures (= ajouter une feuille au
             // fichier existant) ou ecraser (= repartir d'un fichier neuf depuis le template).
             //   Oui = ecraser (fichier supprime)
@@ -716,6 +731,40 @@ namespace Metrologo.ViewModels
         }
 
         private bool PeutRelancer() => DerniereMesureDisponible && !MesureEnCours;
+
+        /// <summary>« Relancer » en stabilité : confirmation (gates, nombre de stabs, durée estimée)
+        /// puis même lancement que la dernière fois, chaque stab dans un nouveau fichier.</summary>
+        private async Task RelancerStabiliteAsync(Rubidium rubi)
+        {
+            int nb = Math.Max(1, _derniereNbRepetitionsStab);
+            var duree = TimeSpan.FromTicks(
+                EstimationDureeStab.EstimerBalayage(MesureConfig.GateIndices, MesureConfig.NbMesures).Ticks * nb);
+
+            var choix = MessageBox.Show(
+                "Relancer la même stabilité ?\n\n"
+              + $"• {DescriptionGatesStab(MesureConfig)} · {MesureConfig.NbMesures} mesures par gate\n"
+              + $"• {(nb > 1 ? $"{nb} stabs enchaînées" : "1 stab")}"
+              + $" · durée estimée ≈ {EstimationDureeStab.Formater(duree)} (fin vers {EstimationDureeStab.HeureFin(duree)})\n\n"
+              + "Chaque stab est enregistrée dans un nouveau fichier : les rapports précédents ne sont pas modifiés.",
+                "Relancer la stabilité", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (choix != MessageBoxResult.Yes) return;
+
+            if (nb > 1)
+                await LancerSerieStabAsync(MesureConfig, rubi, _derniereFNominale, nb);
+            else
+                await LancerMesureAsync(MesureConfig, rubi, _derniereFNominale, preambule: "🔁 Relance");
+        }
+
+        /// <summary>« toutes les gates », « gate 1 s » ou « gates 1 s, 10 s, 100 s ».</summary>
+        private static string DescriptionGatesStab(Mesure config)
+        {
+            var gates = config.GateIndices.Distinct().OrderBy(i => i).ToList();
+            return gates.Count >= EnTetesMesureHelper.LibellesCanoniques.Count
+                ? "toutes les gates"
+                : gates.Count == 1
+                    ? $"gate {EnTetesMesureHelper.LibelleGate(gates[0])}"
+                    : $"gates {string.Join(", ", gates.Select(EnTetesMesureHelper.LibelleGate))}";
+        }
 
         /// <summary>
         /// Écrase le rapport déjà présent (<paramref name="cheminAttendu"/>) avant une nouvelle
@@ -1320,16 +1369,7 @@ namespace Metrologo.ViewModels
             string resume = $"{config.NbMesures} mesures" + (stab ? " par gate" : string.Empty);
             if (!string.IsNullOrWhiteSpace(nomAppareil)) resume += $" · {nomAppareil}";
 
-            if (stab)
-            {
-                var gates = config.GateIndices.Distinct().OrderBy(i => i).ToList();
-                resume += gates.Count >= EnTetesMesureHelper.LibellesCanoniques.Count
-                    ? " · toutes les gates"
-                    : gates.Count == 1
-                        ? $" · gate {EnTetesMesureHelper.LibelleGate(gates[0])}"
-                        : $" · gates {string.Join(", ", gates.Select(EnTetesMesureHelper.LibelleGate))}";
-                return resume;
-            }
+            if (stab) return resume + $" · {DescriptionGatesStab(config)}";
 
             resume += $" · gate {EnTetesMesureHelper.LibelleGate(config.GateIndex)}";
             if (config.ModeMesure == ModeMesure.Indirect) resume += " · indirect";
