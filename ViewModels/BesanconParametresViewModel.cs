@@ -1,7 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Services.Besancon;
-using System;
 using System.Globalization;
 
 namespace Metrologo.ViewModels

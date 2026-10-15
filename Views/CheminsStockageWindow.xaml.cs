@@ -1,4 +1,3 @@
-using System.Windows;
 using Metrologo.ViewModels;
 using Wpf.Ui.Controls;
 

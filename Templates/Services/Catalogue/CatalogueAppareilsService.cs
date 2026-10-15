@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Metrologo.Models;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;
@@ -246,9 +241,6 @@ namespace Metrologo.Services.Catalogue
 
         public ModeleAppareil? TrouverParIdn(string? fabricant, string? modele)
             => Modeles.FirstOrDefault(m => m.Correspond(fabricant, modele));
-
-        public bool EstDansCatalogue(string? fabricant, string? modele)
-            => TrouverParIdn(fabricant, modele) != null;
 
         // -------------------------------------------------------------------------
         // I/O fichier

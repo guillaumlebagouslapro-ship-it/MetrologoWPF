@@ -5,12 +5,7 @@ using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using JournalLog = Metrologo.Services.Journal.Journal;
 

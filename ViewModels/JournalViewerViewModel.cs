@@ -2,13 +2,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Services;
 using Metrologo.Services.Journal;
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace Metrologo.ViewModels
@@ -392,7 +388,7 @@ namespace Metrologo.ViewModels
 
             try
             {
-                int n = await Task.Run(() => ArchivesLogsService.ArchiverMoisAsync(mois.Mois, force: true));
+                int n = await Task.Run(() => ArchivesLogsService.ArchiverMoisAsync(mois.Mois));
                 RafraichirMaintenance();
                 StatutMaintenance = n > 0
                     ? $"Archivage de {mois.Libelle} terminé : {n} fichier(s) déplacé(s)."

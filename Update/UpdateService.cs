@@ -1,7 +1,4 @@
-using System;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using Metrologo.Views;
 using Velopack;
 using Velopack.Locators;
@@ -123,7 +120,7 @@ public static class UpdateService
             win.SetStatus("Sauvegarde de la version actuelle...");
             win.SetIndeterminate();
 
-            await SauvegarderVersionActuelleAsync(mgr, etat, actuelle);
+            await SauvegarderVersionActuelleAsync(etat, actuelle);
 
             win.SetStatus("Telechargement de la mise a jour...");
             win.SetProgress(0);
@@ -229,7 +226,7 @@ public static class UpdateService
     /// local si present, sinon le dossier reseau. Sans copie, pas de retour arriere,
     /// mais la mise a jour se fait quand meme.
     /// </summary>
-    private static async Task SauvegarderVersionActuelleAsync(UpdateManager mgr, EtatMaj etat, string actuelle)
+    private static async Task SauvegarderVersionActuelleAsync(EtatMaj etat, string actuelle)
     {
         try
         {

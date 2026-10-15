@@ -1,8 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.IO;
 using System.Text;
 
 namespace Metrologo.Services
@@ -67,14 +64,5 @@ namespace Metrologo.Services
             return sb.ToString();
         }
 
-        /// <summary>Écrit le profiling dans un fichier texte après la mesure. Crée les dossiers manquants.</summary>
-        public void EcrireFichier(string cheminFichier, string entete)
-        {
-            string? dossier = Path.GetDirectoryName(cheminFichier);
-            if (!string.IsNullOrEmpty(dossier))
-                Directory.CreateDirectory(dossier);
-
-            File.WriteAllText(cheminFichier, FormaterTexte(entete), Encoding.UTF8);
-        }
     }
 }

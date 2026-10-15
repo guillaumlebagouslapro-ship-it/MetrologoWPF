@@ -1,7 +1,5 @@
 using ClosedXML.Excel;
-using System;
 using System.IO;
-using System.Linq;
 
 namespace Metrologo.Services
 {

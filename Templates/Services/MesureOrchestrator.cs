@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Metrologo.Models;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
@@ -508,11 +503,6 @@ namespace Metrologo.Services
 
                     var swBoucle = Stopwatch.StartNew();
 
-                    // Déclaré ici pour rester accessible après le goto FinBoucleMesures
-                    // (le bloc bulk ci-dessous peut sauter directement à la fin sans entrer
-                    // dans la boucle classique).
-                    int totalDoublons = 0;
-
                     // Écritures Excel via Interop COM lancées en fire-and-forget : chaque
                     // EcrireValeurLiveAsync prend ~50-100 ms (lock COM), ce qui ajoute autant
                     // de latence par mesure si on les await en série. En parallélisant avec
@@ -536,7 +526,6 @@ namespace Metrologo.Services
                         _driver.DefinirTimeout(appareil.Adresse, timeoutStream);
 
                         var swStream = Stopwatch.StartNew();
-                        bool streamOk = false;
                         try
                         {
                             // 1. Lancer l'acquisition gap-free en arrière-plan.
@@ -577,7 +566,6 @@ namespace Metrologo.Services
                             JournalLog.Info(CategorieLog.Mesure, "BULK_STREAM",
                                 $"Streaming gap-free : {mesure.NbMesures} valeurs lues en "
                               + $"{swStream.ElapsedMilliseconds} ms via DATA:REM (live UI).");
-                            streamOk = true;
                             etape += mesure.NbMesures;
                             goto FinBoucleMesures;
                         }
@@ -765,16 +753,10 @@ namespace Metrologo.Services
                         // La boucle classique ci-dessous va maintenant utiliser modeRapide ou :READ?
                     }
 
-                    // Détection des doublons : si :FETCh? retourne la même valeur que la
-                    // précédente, on attend gate/2 supplémentaire et on retry. Max 3 retries
-                    // pour ne pas boucler infiniment si l'instrument est figé.
-                    //
                     // Détection des timeouts FetchFresh : si la commande "fresh" retourne 0
                     // (= timeout VISA + Device Clear) 3 fois d'affilée, c'est qu'elle n'est
                     // pas reconnue par l'instrument — on désactive et on bascule en :FETCh?
                     // classique avec Task.Delay (sans avoir à arrêter la mesure).
-                    double valPrec = double.NaN;
-                    int doublonsConsecutifs = 0;
                     int freshTimeoutsConsec = 0;
 
                     // Legacy à SRQ (EIP 545...) : la config (SR01) puis le réglage de gate ont pu
@@ -832,27 +814,10 @@ namespace Metrologo.Services
                                 freshTimeoutsConsec = 0;
                             }
 
-                            // DÉTECTION DOUBLON RETIRÉE (cause des sauts de 3-4 s observés
-                            // sur signal stable, ex: générateur carré propre où chaque mesure
-                            // donne le même résultat au bit près). L'heuristique « si même
-                            // valeur que la précédente, c'est que l'instrument est figé »
-                            // pénalise injustement les sources stables, qui sont précisément
-                            // ce qu'on cherche à mesurer en métrologie.
-                            //
-                            // Le cas légitime (FETCh? appelé trop vite, relit ancienne valeur)
-                            // est déjà couvert en amont par `delayFetchMs = gate - 100 ms` qui
-                            // garantit qu'une nouvelle gate est complète avant la prochaine
-                            // lecture. Sur gate ≥ 1 s la marge est de 900 ms, donc aucun risque
-                            // de relire l'ancienne valeur. Sur gates très courtes (10/100 ms),
-                            // l'instrument lui-même rafraîchit ses registres à chaque cycle.
-                            //
-                            // Comportement avant retrait : 3 retries × gate/2 = +1,5 s par mesure
-                            // stable détectée → sur 30 mesures, jusqu'à +45 s ajoutées au temps
-                            // total. Maintenant : les valeurs identiques sont conservées telles
-                            // quelles, c'est de la donnée valide pas un bug.
-                            valPrec = val;
-                            // doublonsConsecutifs / totalDoublons gardés pour compat journal
-                            // mais ne s'incrémentent plus.
+                            // Pas de détection de doublons : deux valeurs identiques sur une source
+                            // stable sont des mesures valides. L'ancienne heuristique (retry si même
+                            // valeur) ajoutait jusqu'à +45 s sur 30 mesures. Le délai
+                            // delayFetchMs garantit déjà qu'on lit une gate complète.
                         }
                         else
                         {
@@ -860,7 +825,7 @@ namespace Metrologo.Services
                             // gère, sinon (legacy type EIP qui ne positionne pas le MAV via VISA) il cale
                             // un délai sur la gate avant de lire — sinon lecture trop tôt => 0 en rafale.
                             int gateMs = (int)(gateSecondes * 1000);
-                            val = await appareil.MesurerAsync(_driver, mesure, ct, gateMs);
+                            val = await appareil.MesurerAsync(_driver, ct, gateMs);
                         }
                         var ts = DateTime.Now;
                         valeurs.Add(val);
@@ -919,8 +884,7 @@ namespace Metrologo.Services
                     string modeTag = modeBulk ? "BULK"
                         : modeRapide ? (fetchBloquant ? "FETCH-FRESH" : "FETCH")
                         : "READ";
-                    string suffixe = modeRapide && totalDoublons > 0 ? $" / {totalDoublons} doublon(s) re-essayé(s)" : "";
-                    Perf($"Boucle GPIB {mesure.NbMesures} mesures ({swBoucle.ElapsedMilliseconds} ms total, ~{swBoucle.ElapsedMilliseconds / Math.Max(1, mesure.NbMesures)} ms/mesure — {modeTag}{suffixe})");
+                    Perf($"Boucle GPIB {mesure.NbMesures} mesures ({swBoucle.ElapsedMilliseconds} ms total, ~{swBoucle.ElapsedMilliseconds / Math.Max(1, mesure.NbMesures)} ms/mesure — {modeTag})");
 
                     // Désactive le mode continu après la boucle pour ne pas laisser
                     // l'instrument trigger en arrière-plan entre les gates ou après la mesure.

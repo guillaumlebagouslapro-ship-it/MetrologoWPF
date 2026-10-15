@@ -1,7 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Metrologo.Models;
 using System.Globalization;
-using System.Linq;
 
 namespace Metrologo.ViewModels
 {

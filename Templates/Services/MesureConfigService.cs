@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using Metrologo.Models;
 
@@ -118,8 +116,5 @@ namespace Metrologo.Services
             File.WriteAllText(chemin, contenu);
         }
 
-        private static string DossierConfig() => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Metrologo");
     }
 }

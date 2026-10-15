@@ -1,5 +1,4 @@
 using Metrologo.ViewModels;
-using System;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using Wpf.Ui.Controls;

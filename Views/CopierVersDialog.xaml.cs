@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Windows;
 using Metrologo.Models;
 using Metrologo.Services;

@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.Services.Journal
@@ -27,50 +23,7 @@ namespace Metrologo.Services.Journal
 
         // ---------- API publique, gardée telle quelle pour les ViewModels existants ----------
 
-        /// <summary>
-        /// Énumère les mois qui ont un fichier d'entrées : le mois actif (dans <c>Logs/</c>)
-        /// et les mois déjà archivés (dans <c>Logs/Archives/YYYY-MM/</c>).
-        /// </summary>
-        public static IEnumerable<DateTime> ListerMoisArchives()
-        {
-            var dejaVus = new HashSet<DateTime>();
-            string dossierLogs = CheminsMetrologo.Logs;
-
-            // Mois encore actifs (les entries-YYYY-MM.jsonl posés dans Logs/)
-            if (Directory.Exists(dossierLogs))
-            {
-                foreach (var fichier in Directory.EnumerateFiles(dossierLogs, "entries-*.jsonl"))
-                {
-                    if (TryExtraireMoisDuNom(fichier, out var mois) && dejaVus.Add(mois))
-                        yield return mois;
-                }
-            }
-
-            // Mois déjà archivés (un sous-dossier Logs/Archives/YYYY-MM/ par mois)
-            string dossierArchives = DossierArchivesRacine;
-            if (Directory.Exists(dossierArchives))
-            {
-                foreach (var sd in Directory.EnumerateDirectories(dossierArchives))
-                {
-                    string nom = Path.GetFileName(sd);
-                    if (DateTime.TryParseExact(nom, "yyyy-MM",
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            System.Globalization.DateTimeStyles.None, out var mois)
-                        && dejaVus.Add(mois))
-                    {
-                        yield return mois;
-                    }
-                }
-            }
-        }
-
-        public static IEnumerable<DateTime> ListerJoursDuMoisArchive(DateTime mois)
-            => Enumerable.Empty<DateTime>();
-
-        public static Task<List<SessionJournal>> ChargerJournauxArchivesAsync(DateTime jour)
-            => Task.FromResult(new List<SessionJournal>());
-
-        public static Task<int> ArchiverMoisAsync(DateTime mois, bool force = false)
+        public static Task<int> ArchiverMoisAsync(DateTime mois)
         {
             int n = ArchiverMoisVersDossierInterne(mois);
             return Task.FromResult(n);
@@ -187,16 +140,5 @@ namespace Metrologo.Services.Journal
 
         // ---------- Helpers ----------
 
-        private static bool TryExtraireMoisDuNom(string cheminFichier, out DateTime mois)
-        {
-            mois = default;
-            string nom = Path.GetFileNameWithoutExtension(cheminFichier);
-            const string prefix = "entries-";
-            if (!nom.StartsWith(prefix)) return false;
-            string moisStr = nom.Substring(prefix.Length);
-            return DateTime.TryParseExact(moisStr, "yyyy-MM",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out mois);
-        }
     }
 }

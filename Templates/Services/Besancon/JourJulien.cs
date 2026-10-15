@@ -1,5 +1,3 @@
-using System;
-
 namespace Metrologo.Services.Besancon
 {
     /// <summary>

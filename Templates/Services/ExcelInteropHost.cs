@@ -1,13 +1,9 @@
 using Metrologo.Models;
 using Metrologo.Services.Incertitude;
 using Metrologo.Services.Journal;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.Services
@@ -81,12 +77,6 @@ namespace Metrologo.Services
             }
             return liste;
         }
-
-        /// <summary>
-        /// Tue tous les EXCEL.EXE externes pour libérer un .xlsx verrouillé — à n'appeler qu'après
-        /// confirmation de l'utilisateur. Best-effort, renvoie le nombre de process fermés.
-        /// </summary>
-        public int FermerExcelsExternes() => FermerExcels(ListerExcelsExternes());
 
         /// <summary>
         /// Termine les process EXCEL.EXE qu'on lui passe. Best-effort, renvoie le nombre fermés.
@@ -283,114 +273,6 @@ namespace Metrologo.Services
             get { lock (_sync) { return _cheminClasseurActif; } }
         }
 
-        /// <summary>
-        /// Coupe le rendu Excel (ScreenUpdating=false) le temps d'une transition
-        /// fermeture/réouverture du classeur, pour éviter que la fenêtre Excel ne s'affiche
-        /// brièvement vide (le shell SDI gris) entre deux mesures. À appeler avant
-        /// <c>FermerClasseurActifAsync</c> + l'init ClosedXML ; le rendu est rétabli tout seul
-        /// par <c>OuvrirEtAfficherAsync</c> à la fin de la transition.
-        /// </summary>
-        public Task GelerAffichageAsync() => Task.Run(() =>
-        {
-            lock (_sync)
-            {
-                if (_excel == null) return;
-                try { _excel.ScreenUpdating = false; } catch { /* best-effort */ }
-            }
-        });
-
-
-        /// <summary>
-        /// Pousse toutes les fenêtres top-level Excel du process hôte hors de l'écran visible
-        /// (-32000, -32000), en mémorisant leur position pour pouvoir les remettre en place ensuite.
-        /// On s'en sert pendant la transition fermeture/réouverture du Workbook entre 2 mesures :
-        /// ça évite que la « shell SDI grise » apparaisse à l'écran pendant l'init ClosedXML, et sans
-        /// avoir à jouer sur Application.Visible (qui provoquait clignotement et perte de focus).
-        /// </summary>
-        public Task DeplacerExcelHorsEcranAsync() => Task.Run(() =>
-        {
-            lock (_sync)
-            {
-                if (_excel == null || _excelPid <= 0) return;
-                _positionsFenetresExcelSauvees.Clear();
-                try
-                {
-                    var positions = new Dictionary<IntPtr, (int, int)>();
-                    EnumWindows((hWnd, _) =>
-                    {
-                        try
-                        {
-                            GetWindowThreadProcessId(hWnd, out uint pid);
-                            if (pid != (uint)_excelPid) return true;
-                            if (GetParent(hWnd) != IntPtr.Zero) return true;   // ce n'est pas une top-level
-                            if (!IsWindowVisible(hWnd)) return true;
-                            if (GetWindowRect(hWnd, out RECT r))
-                            {
-                                positions[hWnd] = (r.Left, r.Top);
-                                SetWindowPos(hWnd, IntPtr.Zero, -32000, -32000, 0, 0,
-                                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-                            }
-                        }
-                        catch { }
-                        return true;
-                    }, IntPtr.Zero);
-                    foreach (var kv in positions) _positionsFenetresExcelSauvees[kv.Key] = kv.Value;
-                }
-                catch (Exception ex)
-                {
-                    JournalLog.Warn(CategorieLog.Excel, "EXCEL_OFFSCREEN_KO",
-                        $"Déplacement Excel hors écran échoué : {ex.Message}");
-                }
-            }
-        });
-
-        /// <summary>
-        /// Remet les fenêtres Excel à leur position d'origine après les avoir envoyées hors écran.
-        /// Si une fenêtre du process n'avait pas été mémorisée (parce qu'elle est apparue pendant la
-        /// transition, par exemple un nouveau Workbook), on la place à (100, 100) par défaut.
-        /// </summary>
-        public Task RemettreExcelEnEcranAsync() => Task.Run(() =>
-        {
-            lock (_sync)
-            {
-                if (_excel == null || _excelPid <= 0) return;
-                try
-                {
-                    var anciennesPositions = new Dictionary<IntPtr, (int X, int Y)>(_positionsFenetresExcelSauvees);
-                    EnumWindows((hWnd, _) =>
-                    {
-                        try
-                        {
-                            GetWindowThreadProcessId(hWnd, out uint pid);
-                            if (pid != (uint)_excelPid) return true;
-                            if (GetParent(hWnd) != IntPtr.Zero) return true;
-                            if (!IsWindowVisible(hWnd)) return true;
-                            // Si on connaît sa position d'origine, on l'y remet ; sinon on prend le défaut.
-                            if (anciennesPositions.TryGetValue(hWnd, out var pos))
-                            {
-                                SetWindowPos(hWnd, IntPtr.Zero, pos.X, pos.Y, 0, 0,
-                                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-                            }
-                            else
-                            {
-                                // Fenêtre apparue pendant la transition (par exemple un Workbook
-                                // ouvert après le Open). On lui donne une position d'écran par défaut.
-                                SetWindowPos(hWnd, IntPtr.Zero, 100, 100, 0, 0,
-                                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-                            }
-                        }
-                        catch { }
-                        return true;
-                    }, IntPtr.Zero);
-                    _positionsFenetresExcelSauvees.Clear();
-                }
-                catch (Exception ex)
-                {
-                    JournalLog.Warn(CategorieLog.Excel, "EXCEL_ONSCREEN_KO",
-                        $"Restauration position Excel échouée : {ex.Message}");
-                }
-            }
-        });
 
         /// <summary>
         /// PID du process EXCEL.EXE qu'on a démarré, qu'on garde sous la main pour pouvoir le tuer
@@ -413,8 +295,6 @@ namespace Metrologo.Services
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
         [DllImport("user32.dll")]
-        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
-        [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -422,8 +302,6 @@ namespace Metrologo.Services
         private static extern IntPtr GetParent(IntPtr hWnd);
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-        [DllImport("user32.dll")]
-        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll", SetLastError = true)]
@@ -434,20 +312,13 @@ namespace Metrologo.Services
         private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
         [DllImport("kernel32.dll")]
         private static extern uint GetCurrentThreadId();
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT { public int Left, Top, Right, Bottom; }
         private const int SW_HIDE = 0;
-        private const int SW_MINIMIZE = 6;
         private const int SW_FORCEMINIMIZE = 11;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
         private static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
-
-        // On y mémorise la position d'origine de la fenêtre Excel hôte avant de l'envoyer hors
-        // écran (transition entre 2 mesures), pour la restaurer une fois la réouverture faite.
-        private readonly Dictionary<IntPtr, (int X, int Y)> _positionsFenetresExcelSauvees = new();
 
         // Timer qui masque les fenêtres shell en continu : il se réveille toutes les 500 ms tant
         // qu'un classeur est ouvert dans Excel. Comme ça, n'importe quelle shell qui finirait par
@@ -2450,61 +2321,6 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Logue le scope effectif (sheet vs workbook) d'un sous-ensemble critique de zones
-        /// nommées sur la nouvelle feuille. Détecte les cas où le clonage Names sheet-scope
-        /// aurait échoué silencieusement (les formules métier seraient alors résolues vers
-        /// ModFeuille = données vides, comme dans la précédente tentative option A).
-        /// </summary>
-        private void VerifierNamesSheetScopeInterne(string nomFeuille)
-        {
-            if (_classeurActif == null) return;
-
-            // Sous-ensemble critique = celles dont la résolution sheet-scope est obligatoire pour
-            // que la mesure soit calculée correctement.
-            string[] zonesCritiques =
-            {
-                "ZNFreqMoyReel", "ZNVariance", "ZNEcartType", "ZNIncertEcartType", "ZNFreqCorr",
-                "ZNNoFiche", "ZNDate", "ZNTypeMesure", "ZNNbMesures", "ZNFreqRef",
-                "ZNCoeffA", "ZNCoeffB", "ZNValFNominale", "ZNCoeffMult"
-            };
-
-            var manquants = new List<string>();
-            try
-            {
-                dynamic ws = _classeurActif.Worksheets.Item(nomFeuille);
-                try
-                {
-                    foreach (string zone in zonesCritiques)
-                    {
-                        try
-                        {
-                            dynamic n = ws.Names.Item(zone);
-                            try { /* OK : sheet-scope présent */ }
-                            finally { try { Marshal.ReleaseComObject(n); } catch { } }
-                        }
-                        catch { manquants.Add(zone); }
-                    }
-                }
-                finally { try { Marshal.ReleaseComObject(ws); } catch { } }
-            }
-            catch { /* abandon validation */ }
-
-            if (manquants.Count > 0)
-            {
-                JournalLog.Warn(CategorieLog.Excel, "AJOUT_FEUILLE_NAMES_MANQUANTS",
-                    $"Zones nommées sheet-scope manquantes sur {nomFeuille} : "
-                    + string.Join(", ", manquants)
-                    + " — les formules métier qui y font référence risquent d'être KO.");
-            }
-            else
-            {
-                JournalLog.Info(CategorieLog.Excel, "AJOUT_FEUILLE_NAMES_VALIDES",
-                    $"Toutes les zones nommées critiques ({zonesCritiques.Length}) "
-                    + $"sont bien sheet-scope sur {nomFeuille}.");
-            }
-        }
-
-        /// <summary>
         /// Calcule la variance en appelant la macro VBA <c>Cal_variance</c> du Metrologo.xla
         /// via <c>Application.Run</c>, puis écrit le résultat comme valeur littérale dans
         /// <c>ZNVariance</c>. Workaround au rejet Excel 0x800A03EC de la formule
@@ -3446,154 +3262,6 @@ namespace Metrologo.Services
             }
             catch { /* best-effort : repli sur les sigmas */ }
             return lignes;
-        }
-
-        /// <summary>
-        /// Ferme proprement notre instance Excel COM (qui contient le <c>.xla</c> pré-chargé
-        /// causant la fenêtre Frame « grise ») et ouvre ensuite le rapport <paramref name="cheminFichier"/>
-        /// via le shell Windows (équivalent d'un double-clic utilisateur). Excel se charge
-        /// alors avec 1 SEULE fenêtre propre, fusionnée Application+Workbook, sans pollution.
-        /// La prochaine mesure relancera automatiquement une nouvelle instance COM via
-        /// <see cref="EstInstanceVivante"/> + <see cref="RedemarrerInstanceInterne"/>.
-        /// </summary>
-        public Task QuitterEtOuvrirViaShellAsync(string cheminFichier) => Task.Run(() =>
-        {
-            // OPTION C v2 : on NE quitte PAS notre instance Excel COM (qui détient le .xla
-            // pré-chargé). On ferme juste le Workbook actif et on laisse l'instance vivre
-            // en background avec le .xla en mémoire. Process.Start envoie le rapport à Excel ;
-            // si Excel détecte notre instance déjà en cours, il y ouvre le rapport dedans
-            // → le .xla est trouvé → [1]!Cal_xxx résolus, pas de popup « Liaisons ».
-            lock (_sync)
-            {
-                try
-                {
-                    FermerClasseurActifInterne();
-                    // L'instance Excel et le .xla restent en mémoire pour servir le shell open.
-                }
-                catch (Exception ex)
-                {
-                    JournalLog.Warn(CategorieLog.Excel, "EXCEL_FERME_CLASSEUR_KO",
-                        $"Fermeture du classeur actif échouée : {ex.Message}");
-                }
-            }
-            // Petit délai pour laisser Excel libérer le handle fichier avant le shell open.
-            System.Threading.Thread.Sleep(300);
-
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = cheminFichier,
-                    UseShellExecute = true
-                });
-                JournalLog.Info(CategorieLog.Excel, "EXCEL_OUVERT_VIA_SHELL",
-                    $"Rapport ouvert via shell (instance Excel + .xla en mémoire) : {Path.GetFileName(cheminFichier)}");
-            }
-            catch (Exception ex)
-            {
-                JournalLog.Warn(CategorieLog.Excel, "EXCEL_OUVERT_VIA_SHELL_KO",
-                    $"Ouverture via shell échouée : {ex.Message}");
-            }
-        });
-
-        /// <summary>
-        /// Déplace les fenêtres « shell » Excel hors écran (-32000,-32000) AVANT que
-        /// <c>Visible=true</c> ne les rende visibles. Élimine le clignotement résiduel
-        /// du <c>ShowWindow(SW_HIDE)</c> post-Visible (où la shell est brièvement visible
-        /// avant d'être masquée). Combiné ensuite avec SW_HIDE comme ceinture+bretelles.
-        /// </summary>
-        private void DeplacerHorsEcranFenetresShellInterne()
-        {
-            if (_excel == null || _excelPid <= 0 || _classeurActif == null) return;
-            try
-            {
-                IntPtr hwndRapport = IntPtr.Zero;
-                try
-                {
-                    dynamic w = _classeurActif.Windows[1];
-                    try { hwndRapport = new IntPtr((int)w.Hwnd); }
-                    finally { try { Marshal.ReleaseComObject(w); } catch { } }
-                }
-                catch { /* best-effort */ }
-
-                IntPtr hwndRapportLocal = hwndRapport;
-                EnumWindows((hWnd, _) =>
-                {
-                    try
-                    {
-                        GetWindowThreadProcessId(hWnd, out uint pid);
-                        if (pid != (uint)_excelPid) return true;
-                        if (hWnd == hwndRapportLocal) return true;
-                        if (GetParent(hWnd) != IntPtr.Zero) return true;
-                        // Déplacement hors écran — Excel ne repositionne pas la fenêtre quand
-                        // il fait son ShowWindow(SW_SHOW) interne, donc elle reste invisible.
-                        SetWindowPos(hWnd, IntPtr.Zero, -32000, -32000, 0, 0,
-                            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-                    }
-                    catch { /* best-effort */ }
-                    return true;
-                }, IntPtr.Zero);
-            }
-            catch (Exception ex)
-            {
-                JournalLog.Warn(CategorieLog.Excel, "EXCEL_SHELL_OFFSCREEN_KO",
-                    $"Déplacement hors écran des fenêtres shell échoué : {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Énumère TOUTES les fenêtres top-level du process Excel et logge HWND, titre, visible,
-        /// IsIconic, position, taille. Utilisé pour diagnostiquer précisément quelle fenêtre
-        /// est la "grise" perçue par l'utilisateur — si on voit dans le log une window avec
-        /// titre "Excel" (sans nom de fichier) qui reste visible et au premier plan, c'est elle.
-        /// Logge même les fenêtres invisibles pour repérer celles qui se réveillent.
-        /// </summary>
-        private void DiagnostiquerFenetresExcelInterne(string moment)
-        {
-            if (_excelPid <= 0) return;
-            try
-            {
-                var lignes = new List<string>();
-                IntPtr foreground = GetForegroundWindow();
-
-                EnumWindows((hWnd, _) =>
-                {
-                    try
-                    {
-                        GetWindowThreadProcessId(hWnd, out uint pid);
-                        if (pid != (uint)_excelPid) return true;
-
-                        // Récupère titre, visibilité, parent, rect.
-                        var sb = new System.Text.StringBuilder(256);
-                        GetWindowText(hWnd, sb, 256);
-                        string titre = sb.ToString();
-                        bool visible = IsWindowVisible(hWnd);
-                        bool topLevel = GetParent(hWnd) == IntPtr.Zero;
-                        bool isForeground = (hWnd == foreground);
-                        string rect = "??";
-                        if (GetWindowRect(hWnd, out RECT r))
-                            rect = $"{r.Left},{r.Top}->{r.Right - r.Left}x{r.Bottom - r.Top}";
-
-                        lignes.Add($"  hwnd=0x{hWnd.ToInt64():X} "
-                            + $"visible={(visible ? "Y" : "N")} "
-                            + $"top={(topLevel ? "Y" : "N")} "
-                            + $"fg={(isForeground ? "Y" : "N")} "
-                            + $"rect=[{rect}] "
-                            + $"titre=\"{titre}\"");
-                    }
-                    catch { }
-                    return true;
-                }, IntPtr.Zero);
-
-                JournalLog.Info(CategorieLog.Excel, "DIAG_FENETRES_EXCEL",
-                    $"[{moment}] {lignes.Count} fenêtre(s) Excel PID={_excelPid} :\n"
-                    + string.Join("\n", lignes));
-            }
-            catch (Exception ex)
-            {
-                JournalLog.Warn(CategorieLog.Excel, "DIAG_FENETRES_KO",
-                    $"Diag fenêtres échoué : {ex.Message}");
-            }
         }
 
         /// <summary>

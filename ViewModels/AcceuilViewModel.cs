@@ -7,10 +7,6 @@ using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 

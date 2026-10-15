@@ -1,14 +1,10 @@
-using Metrologo;
-using Metrologo.Models;
 using Metrologo.Services;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Journal;
 using Metrologo.ViewModels;
 using Metrologo.Views;
-using System;
 using System.IO;
 using System.Windows;
-using System.Threading.Tasks;
 
 namespace Metrologo
 {

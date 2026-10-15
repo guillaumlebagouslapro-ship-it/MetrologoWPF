@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace Metrologo.Services.Journal
+﻿namespace Metrologo.Services.Journal
 {
     public enum CategorieLog
     {
@@ -42,7 +39,6 @@ namespace Metrologo.Services.Journal
         public string? Machine { get; set; }
 
         // Petits helpers d'affichage
-        public string TimestampAffiche => Timestamp.ToString("HH:mm:ss");
         public string HorodatageAffiche => Timestamp.ToString("dd/MM/yyyy HH:mm:ss");
         public string UtilisateurAffiche => string.IsNullOrWhiteSpace(Utilisateur) ? "—" : Utilisateur;
         public string SeveriteLibelle => Severite switch
@@ -82,19 +78,6 @@ namespace Metrologo.Services.Journal
             CategorieLog.Erreur => "Erreur",
             _ => "Autre"
         };
-        public string CategorieEmoji => Categorie switch
-        {
-            CategorieLog.Authentification => "🔐",
-            CategorieLog.Session => "🚪",
-            CategorieLog.Configuration => "⚙",
-            CategorieLog.Mesure => "📊",
-            CategorieLog.Rubidium => "🎯",
-            CategorieLog.Administration => "🛡",
-            CategorieLog.Excel => "📈",
-            CategorieLog.Systeme => "💻",
-            CategorieLog.Erreur => "⚠",
-            _ => "•"
-        };
     }
 
     public class SessionJournal
@@ -109,28 +92,7 @@ namespace Metrologo.Services.Journal
         public List<LogEntry> Entrees { get; set; } = new();
 
         public bool Active => Fin == null;
-        public TimeSpan Duree => (Fin ?? DateTime.Now) - Debut;
-        public int NbEntrees => Entrees.Count;
 
-        public string DebutAffiche => Debut.ToString("dd/MM/yyyy HH:mm:ss");
-        public string FinAffiche => Fin.HasValue ? Fin.Value.ToString("HH:mm:ss") : "— en cours —";
-        public string DureeAffiche => Duree.TotalHours >= 1
-            ? $"{(int)Duree.TotalHours} h {Duree.Minutes} min"
-            : Duree.TotalMinutes >= 1
-                ? $"{(int)Duree.TotalMinutes} min {Duree.Seconds} s"
-                : $"{(int)Duree.TotalSeconds} s";
-
-        /// <summary>Le bandeau d'en-tête affiché dans la liste des sessions. Il reprend le poste
-        /// (Baie/Paillasse) s'il a été choisi ; la machine, elle, est masquée à dessein — c'est une
-        /// info technique qui n'apporte rien à la vue métier.</summary>
-        public string EnteteAffiche
-        {
-            get
-            {
-                string posteTag = string.IsNullOrEmpty(Poste) ? "" : $"{Poste} · ";
-                return $"{posteTag}{DebutAffiche} → {FinAffiche} ({DureeAffiche})";
-            }
-        }
         public int NbErreurs
         {
             get
@@ -140,18 +102,6 @@ namespace Metrologo.Services.Journal
                 return n;
             }
         }
-        public int NbAvertissements
-        {
-            get
-            {
-                int n = 0;
-                foreach (var e in Entrees) if (e.Severite == SeveriteLog.Avertissement) n++;
-                return n;
-            }
-        }
-
-        public bool HasErreurs => NbErreurs > 0;
-        public bool HasAvertissements => NbAvertissements > 0;
 
         /// <summary>Nombre de mesures faites pendant la session (on compte les MESURE_DEBUT).</summary>
         public int NbMesures
@@ -165,18 +115,6 @@ namespace Metrologo.Services.Journal
             }
         }
 
-        /// <summary>Résumé court pour la carte compacte, du genre : 47 actions · 2 mesures · 0 erreur.</summary>
-        public string ResumeAffiche
-        {
-            get
-            {
-                var parts = new List<string> { $"{NbEntrees} action{(NbEntrees > 1 ? "s" : "")}" };
-                if (NbMesures > 0) parts.Add($"{NbMesures} mesure{(NbMesures > 1 ? "s" : "")}");
-                if (NbErreurs > 0) parts.Add($"{NbErreurs} erreur{(NbErreurs > 1 ? "s" : "")}");
-                else if (NbAvertissements > 0) parts.Add($"{NbAvertissements} avert.");
-                return string.Join(" · ", parts);
-            }
-        }
     }
 
     public class FiltreJournal

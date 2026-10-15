@@ -5,9 +5,6 @@ using Metrologo.Services;
 using Metrologo.Services.Besancon;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace Metrologo.ViewModels

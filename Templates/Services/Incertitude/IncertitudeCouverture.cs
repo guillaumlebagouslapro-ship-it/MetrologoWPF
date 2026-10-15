@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Metrologo.Models;
 
 namespace Metrologo.Services.Incertitude

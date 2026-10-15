@@ -1,9 +1,5 @@
-using System;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Metrologo.Models;
 using Metrologo.Services.Journal;
 
@@ -459,9 +455,6 @@ namespace Metrologo.Services.Besancon
         /// <summary>Nombre de valeurs passées corrigées par la source (révisions Besançon).</summary>
         public int Corrections { get; set; }
         public int TotalJournalieres { get; set; }
-        public double? DerniereMoyenneHebdo { get; set; }
-        public int DerniereMoyenneHebdoMjd { get; set; }
-        public string RubidiumDesignation { get; set; } = "";
         public string? Erreur { get; set; }
 
         public bool Succes => Telecharge && Erreur == null;

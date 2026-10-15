@@ -12,10 +12,6 @@ namespace Metrologo.Models
         /// <summary>Les infos de détection sur le bus. Null si l'appareil n'a jamais été détecté.</summary>
         public AppareilDetecte? Detecte { get; init; }
 
-        public bool EstDetecte => Detecte != null;
-        public bool EstConnu => Detecte?.ModeleReconnu != null;
-        public string AdresseAffiche => Detecte?.AdresseCourte ?? "non connecté";
-
         // ---------------- mode adresses fixes (appareils legacy non détectés) ----------------
 
         /// <summary>

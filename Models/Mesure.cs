@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace Metrologo.Models
+﻿namespace Metrologo.Models
 {
     public class Mesure
     {
@@ -28,8 +25,6 @@ namespace Metrologo.Models
 
         // Paramètres issus des fichiers Delphi et .ini
         public bool InitManu { get; set; }
-        public int InputIndex { get; set; }    // Gamme/Entrée
-        public int CouplingIndex { get; set; } // Couplage AC/DC
 
         // --- Intervalle de temps piloté logiciel (53230A) ---
         // Paramètres SCPI envoyés quand l'init manuelle est décochée. Cf. CONF:TINT.

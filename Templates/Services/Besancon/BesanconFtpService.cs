@@ -1,7 +1,5 @@
-using System;
 using System.IO;
 using System.Net;
-using System.Threading.Tasks;
 using Metrologo.Services.Journal;
 
 namespace Metrologo.Services.Besancon

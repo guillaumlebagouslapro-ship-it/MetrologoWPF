@@ -26,12 +26,6 @@
             <SolidColorBrush x:Key="AsertiNavyDarkBrush" Color="{StaticResource AsertiNavyDarkColor}"/>
             <SolidColorBrush x:Key="AsertiNavyLightBrush" Color="{StaticResource AsertiNavyLightColor}"/>
 
-            <LinearGradientBrush x:Key="AsertiNavyGradient" StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="{StaticResource AsertiNavyDarkColor}" Offset="0"/>
-                <GradientStop Color="{StaticResource AsertiNavyColor}" Offset="0.6"/>
-                <GradientStop Color="{StaticResource AsertiNavyLightColor}" Offset="1"/>
-            </LinearGradientBrush>
-
             <!-- Ombres portées partagées — teintées navy plutôt que noir pur pour rester
                  dans la palette ASERTI. Posées sur un calque DERRIÈRE le contenu dans les
                  templates (jamais sur un élément contenant du texte : l'effet dégraderait
@@ -165,23 +159,6 @@
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-
-            <!-- Carte feature (Admin, non-cliquable). L'ombre est posée directement sur la
-                 bordure (pas de template ici) : volontairement très douce pour limiter
-                 l'impact sur le rendu du texte contenu. -->
-            <Style x:Key="FeatureCardStyle" TargetType="Border">
-                <Setter Property="Background" Value="White"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
-                <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="CornerRadius" Value="10"/>
-                <Setter Property="Padding" Value="18"/>
-                <Setter Property="Effect">
-                    <Setter.Value>
-                        <DropShadowEffect BlurRadius="10" ShadowDepth="1" Direction="270"
-                                          Color="{StaticResource AsertiNavyColor}" Opacity="0.08"/>
                     </Setter.Value>
                 </Setter>
             </Style>

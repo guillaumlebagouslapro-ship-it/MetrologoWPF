@@ -1,4 +1,3 @@
-using System.Linq;
 using Metrologo.Models;
 
 namespace Metrologo.Services

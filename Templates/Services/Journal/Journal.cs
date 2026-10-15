@@ -1,5 +1,3 @@
-using System.Threading.Tasks;
-
 namespace Metrologo.Services.Journal
 {
     /// <summary>

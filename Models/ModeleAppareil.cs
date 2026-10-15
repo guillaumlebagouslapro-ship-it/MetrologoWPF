@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Metrologo.Models
 {
     /// <summary>Modèle d'appareil du catalogue local. Id stable (slug) + signature IDN pour le matching au scan.</summary>

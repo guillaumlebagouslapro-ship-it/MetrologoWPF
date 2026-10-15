@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -384,10 +382,6 @@ namespace Metrologo.Services
         /// rubidium qui a été sélectionné.</summary>
         public static string FichierRubidiumActif =>
             Path.Combine(Rubidiums, "rubidium-actif.json");
-
-        /// <summary>Le fichier JSON-lines des sessions de journal.</summary>
-        public static string FichierJournalSessions =>
-            Path.Combine(Logs, "sessions.jsonl");
 
         /// <summary>
         /// L'emplacement par défaut (le même sur tous les postes) où l'on duplique les

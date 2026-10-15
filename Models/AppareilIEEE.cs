@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace Metrologo.Models
+﻿namespace Metrologo.Models
 {
     // la config d'un temps de porte (gate)
     public class GateConfig

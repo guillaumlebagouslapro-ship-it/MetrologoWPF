@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;
 

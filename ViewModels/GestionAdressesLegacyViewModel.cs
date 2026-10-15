@@ -3,9 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Journal;
-using System;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows;
 using JournalLog = Metrologo.Services.Journal.Journal;
 

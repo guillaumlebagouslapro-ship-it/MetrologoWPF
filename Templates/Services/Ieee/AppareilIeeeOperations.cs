@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Metrologo.Models;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;
@@ -168,7 +163,6 @@ namespace Metrologo.Services.Ieee
         public static async Task<double> MesurerAsync(
             this AppareilIEEE appareil,
             IIeeeDriver driver,
-            Mesure mesure,
             CancellationToken ct = default,
             int gateMs = 0)
         {

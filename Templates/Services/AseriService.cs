@@ -1,7 +1,5 @@
 using Metrologo.Services.Journal;
 using Microsoft.Data.SqlClient;
-using System;
-using System.Threading.Tasks;
 using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.Services

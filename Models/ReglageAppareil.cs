@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Metrologo.Models
 {
     /// <summary>Nature du réglage : c'est ce qui décide de la façon de l'afficher dans la fenêtre Configuration.</summary>

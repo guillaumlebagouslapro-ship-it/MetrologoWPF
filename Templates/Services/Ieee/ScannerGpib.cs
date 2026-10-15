@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using Ivi.Visa;
 using Metrologo.Models;
 using NationalInstruments.Visa;
@@ -175,17 +170,6 @@ namespace Metrologo.Services.Ieee
             }
 
             return resultats;
-        }
-
-        /// <summary>Scanne une seule adresse (test ciblé).</summary>
-        public static Task<ResultatScanGpib> InterrogerAsync(
-            int adresse, int gpibBoard = 0, int timeoutMs = 1000, CancellationToken ct = default)
-        {
-            return Task.Run(() =>
-            {
-                using var rm = new ResourceManager();
-                return InterrogerAdresse(rm, gpibBoard, adresse, timeoutMs);
-            }, ct);
         }
 
         // ---------------- Interne ----------------

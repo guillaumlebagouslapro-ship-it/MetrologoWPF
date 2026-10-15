@@ -1,18 +1,11 @@
-﻿using System;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Services;
 using Metrologo.Services.Incertitude;
-using Metrologo.Services.Journal;
-using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.ViewModels
 {
@@ -117,13 +110,6 @@ namespace Metrologo.ViewModels
         public string[] FonctionsDisponibles { get; } = new[]
         {
             "Freq", "FreqAv", "FreqFin", "Stab", "Interv", "TachyC", "TachyO", "Strobo"
-        };
-
-        /// <summary>Liste éditable des temps de mesure standards (en secondes) — l'admin
-        /// peut sélectionner ou taper sa propre valeur pour des cas atypiques.</summary>
-        public double[] TempsDeMesureSuggeres { get; } = new[]
-        {
-            0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1d, 2d, 5d, 10d, 20d, 50d, 100d
         };
 
         public GestionModulesIncertitudeViewModel()

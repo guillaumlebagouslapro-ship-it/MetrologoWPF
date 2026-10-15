@@ -1,7 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Threading.Tasks;
-
-namespace Metrologo.Services.Journal
+﻿namespace Metrologo.Services.Journal
 {
     public interface IJournalService
     {

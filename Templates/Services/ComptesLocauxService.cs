@@ -1,9 +1,5 @@
 using Metrologo.Models;
 using Metrologo.Services.Journal;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using JournalLog = Metrologo.Services.Journal.Journal;
 

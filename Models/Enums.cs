@@ -33,13 +33,6 @@ namespace Metrologo.Models
         Xlsx
     }
 
-    public enum ModeMetrologo
-    {
-        Exploitation,
-        Simulation,
-        Validation
-    }
-
     /// <summary>La voie concernée par la mesure. On n'envoie à l'appareil que les réglages de
     /// cette voie-là (impédance, couplage, filtre, trigger).</summary>
     public enum VoieActive

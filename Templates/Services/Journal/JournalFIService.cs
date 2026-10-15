@@ -1,4 +1,3 @@
-using System;
 using System.IO;
 using System.Text;
 
@@ -61,18 +60,6 @@ namespace Metrologo.Services.Journal
         // Compteurs de la session (récap de la ligne « Fin »).
         private static int _nbMesuresEffectuees;
         private static int _nbMesuresEchouees;
-
-        /// <summary>Numéro de FI de la session en cours (vide si aucune session n'est ouverte).</summary>
-        public static string NumFICourant
-        {
-            get { lock (_sync) { return _numFICourant; } }
-        }
-
-        /// <summary>Vrai s'il y a une session de journal FI ouverte en ce moment.</summary>
-        public static bool EstActif
-        {
-            get { lock (_sync) { return !string.IsNullOrEmpty(_cheminFichier); } }
-        }
 
         /// <summary>Chemin du fichier journal de la session courante (vide s'il n'y en a pas).</summary>
         public static string CheminFichier

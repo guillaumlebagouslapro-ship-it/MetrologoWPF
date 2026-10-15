@@ -10,11 +10,6 @@
         Icon="/Resources/logo.ico">
 
     <ui:FluentWindow.Resources>
-        <Style x:Key="ChampStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
-            <Setter Property="Foreground" Value="{StaticResource AsertiOrangeBrush}"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-        </Style>
         <Style x:Key="ParaStyle" TargetType="TextBlock">
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="Margin" Value="0,4,0,8"/>

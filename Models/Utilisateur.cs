@@ -1,5 +1,3 @@
-using System;
-
 namespace Metrologo.Models
 {
     public enum RoleUtilisateur

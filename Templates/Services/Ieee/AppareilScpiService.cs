@@ -1,6 +1,3 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Metrologo.Models;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;

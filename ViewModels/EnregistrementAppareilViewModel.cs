@@ -3,10 +3,6 @@ using CommunityToolkit.Mvvm.Input;
 using Metrologo.Models;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Journal;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.ViewModels
@@ -65,7 +61,6 @@ namespace Metrologo.ViewModels
         private ParametresIeee? _parametresClone;
 
         public string Titre => _modeleExistant != null ? "Modifier un appareil" : "Enregistrer un appareil";
-        public bool EstModification => _modeleExistant != null;
 
         [ObservableProperty] private string _nom = string.Empty;
         [ObservableProperty] private string _fabricantIdn = string.Empty;

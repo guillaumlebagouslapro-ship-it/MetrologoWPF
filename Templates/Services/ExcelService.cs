@@ -4,13 +4,9 @@ using Metrologo.Services.Catalogue;
 using Metrologo.Services.Incertitude;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace Metrologo.Services
 {
@@ -77,14 +73,6 @@ namespace Metrologo.Services
 
         // Ligne où commencent les mesures dans le template.
         private const int LIGNE_DEBUT_MESURES = 9;
-
-        // Zones nommées qui marquent l'endroit où insérer les lignes du Récap (voir le template xltm).
-        private const string ZN_RECAPF_DEBZONE = "ZNRecapF_DebZone";
-        private const string ZN_RECAPS_DEBZONE = "ZNRecapS_DebZone";
-
-        // Lignes de repli, au cas où les zones ZNRecapF/S_DebZone seraient absentes (ce sont les valeurs par défaut du template).
-        private const int LIGNE_FALLBACK_RECAPF = 19;
-        private const int LIGNE_FALLBACK_RECAPS = 19;
 
         private XLWorkbook? _workbook;
         private IXLWorksheet? _feuilleMesure;   // la feuille tout juste créée pour cette mesure
@@ -859,8 +847,6 @@ namespace Metrologo.Services
             string celluleModule = EnTetesMesureHelper.EstTachymetre(mesure.TypeMesure) ? "G10" : "F10";
 
             await Task.Run(() => EcrireLigneRecap(
-                nomFeuille,
-                ZN_RECAPF_DEBZONE, LIGNE_FALLBACK_RECAPF,
                 new[]
                 {
                     $"='{nomFeuille}'!ZNFreqMoyReel",       // Col 1 : fréquence moyenne
@@ -980,9 +966,6 @@ namespace Metrologo.Services
         /// d'une unité ; la plus récente reste ainsi toujours au sommet.
         /// </summary>
         private void EcrireLigneRecap(
-            string nomFeuilleMesure,
-            string zoneDebZone,
-            int ligneFallback,
             string?[] formulesParColonne,
             int colValeurDirecte = -1,
             object? valeurDirecte = null,
@@ -1073,25 +1056,6 @@ namespace Metrologo.Services
             return false;
         }
 
-
-        /// <summary>
-        /// Remplace les caractères interdits par Windows dans les noms de fichier/dossier
-        /// (<c>&lt; &gt; : " / \ | ? *</c> + caractères de contrôle) par un underscore. Utilisé
-        /// pour transformer un numéro FI saisi par l'utilisateur en nom de dossier sûr.
-        /// </summary>
-        private static string SanitizerNomFichier(string nom)
-        {
-            if (string.IsNullOrWhiteSpace(nom)) return "sans-nom";
-
-            var invalides = new HashSet<char>(Path.GetInvalidFileNameChars());
-            var sb = new System.Text.StringBuilder(nom.Length);
-            foreach (var c in nom)
-            {
-                sb.Append(invalides.Contains(c) ? '_' : c);
-            }
-            string resultat = sb.ToString().Trim(' ', '.');
-            return string.IsNullOrEmpty(resultat) ? "sans-nom" : resultat;
-        }
 
         /// <summary>
         /// Réécrit le Target de la relation externe dans le fichier .xlsx pour qu'il
