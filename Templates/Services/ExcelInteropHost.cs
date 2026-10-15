@@ -1917,6 +1917,13 @@ namespace Metrologo.Services
                                     finally { try { Marshal.ReleaseComObject(plage); } catch { } }
                                 }
                                 catch { }
+
+                                // Plages nommées du récap ramenées à une ligne (récap vide). Pas
+                                // pour la stabilité, dont le récap est encore exploité à la main.
+                                string nomClasseur = "";
+                                try { nomClasseur = (string)_classeurActif.Name; } catch { }
+                                if (!nomClasseur.StartsWith("stab", StringComparison.OrdinalIgnoreCase))
+                                    MettreAJourPlagesNommeesRecapInterne(recap);
                             }
                             finally { try { Marshal.ReleaseComObject(recap); } catch { } }
                         }
@@ -2595,6 +2602,80 @@ namespace Metrologo.Services
         }
 
         /// <summary>
+        /// Plages nommées du récap de freq.xlsx (fréquence, tachy, strobo, intervalle : même mise
+        /// en page), lues par le logiciel externe. Pas de plages en stabilité : son récap est encore
+        /// exploité à la main.
+        /// </summary>
+        private static readonly (string Nom, string Colonne)[] _plagesRecap =
+        {
+            ("Recap_FreqNominale",  "A"),
+            ("Recap_TempsMesure",   "B"),   // libellé de la gate, ex. « 1 s »
+            ("Recap_FreqCorrigee",  "C"),
+            ("Recap_IncertGlobale", "I"),
+        };
+
+        /// <summary>
+        /// (Re)pose les plages nommées du récap sur les lignes remplies : de la ligne qui suit la
+        /// ligne modèle du template (ZNRecapF_Ligne0, ligne 6) jusqu'à la dernière dont la colonne A
+        /// n'est pas vide. Appelé à chaque ligne ajoutée et à la réinitialisation : les plages
+        /// suivent le nombre de mesures. Récap vide : la plage se réduit à sa 1re ligne plutôt que
+        /// de disparaître. À appeler SOUS LOCK (_sync).
+        /// </summary>
+        private void MettreAJourPlagesNommeesRecapInterne(dynamic recap)
+        {
+            if (_classeurActif == null) return;
+            try
+            {
+                int ligneModele = 6;
+                try
+                {
+                    dynamic ligne0 = _classeurActif.Names.Item("ZNRecapF_Ligne0");
+                    try { ligneModele = (int)ligne0.RefersToRange.Row; }
+                    finally { try { Marshal.ReleaseComObject(ligne0); } catch { } }
+                }
+                catch { /* zone absente ou cassée : valeurs du template */ }
+
+                bool ColonneARemplie(int r)
+                {
+                    dynamic? cell = null;
+                    try
+                    {
+                        cell = recap.Cells[r, 1];
+                        try { return (Convert.ToString(cell.Formula) ?? "").Length > 0; } catch { return false; }
+                    }
+                    catch { return false; }
+                    finally { if (cell != null) { try { Marshal.ReleaseComObject(cell); } catch { } } }
+                }
+
+                // 1re ligne de mesure : d'habitude celle sous la ligne modèle, mais la ligne modèle
+                // elle-même accueille la 1re mesure après un « Relancer → écraser » (récap vidé).
+                int premiere = ligneModele + 1;
+                for (int r = ligneModele; r <= ligneModele + 2; r++)
+                    if (ColonneARemplie(r)) { premiere = r; break; }
+
+                int derniere = premiere;
+                for (int r = premiere; r <= 300 && ColonneARemplie(r); r++)
+                    derniere = r;
+
+                dynamic noms = _classeurActif.Names;
+                try
+                {
+                    foreach (var (nom, col) in _plagesRecap)
+                    {
+                        try { noms.Add(nom, $"='Récap.'!${col}${premiere}:${col}${derniere}"); }
+                        catch (Exception ex)
+                        {
+                            JournalLog.Warn(CategorieLog.Excel, "PLAGE_RECAP_KO",
+                                $"Plage nommée {nom} non posée : {ex.Message}");
+                        }
+                    }
+                }
+                finally { try { Marshal.ReleaseComObject(noms); } catch { } }
+            }
+            catch { /* best-effort : l'absence des plages ne doit pas casser la mesure */ }
+        }
+
+        /// <summary>
         /// Repli quand l'enregistrement du classeur échoue (typiquement : rapport sur le réseau et
         /// M: perdu pendant la mesure). Enregistre le classeur sous le même nom dans le dossier
         /// local de repli de la FI (Bureau\Metrologo\FI), bascule la FI en local pour la suite de
@@ -2787,6 +2868,8 @@ namespace Metrologo.Services
 
                 // En-tête K si vide
                 EcrireValeurRecapSiVideInterne(recap, ligneEntete, 11, "n°Module");
+
+                MettreAJourPlagesNommeesRecapInterne(recap);
             }
             finally
             {
