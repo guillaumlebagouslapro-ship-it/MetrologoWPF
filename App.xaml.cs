@@ -174,6 +174,10 @@ namespace Metrologo
             Journal.Configurer(new FichierJournalService());
             StartupLap("Journal.Configurer");
 
+            // Format des rapports Excel (.xls / .xlsx, réglage Admin commun) : lu une fois ici,
+            // valable pour toute la session — un changement est pris au prochain démarrage.
+            Metrologo.Models.Preferences.RechargerFormatRapports();
+
             // (Diagnostic SQL retiré : suivi Besançon 100 % fichier txt. Évite le timeout
             // de 6 s au démarrage quand SVR-OR est injoignable.)
 
@@ -453,6 +457,31 @@ namespace Metrologo
         {
             NettoyerAvantArret();
             base.OnExit(e);
+        }
+
+        /// <summary>
+        /// Relance Metrologo (ex. après un changement de réglage figé au démarrage). La nouvelle
+        /// instance est lancée avec <see cref="Program.ArgumentRelance"/> : elle attend que celle-ci
+        /// ait libéré le verrou d'instance unique avant de démarrer.
+        /// </summary>
+        internal static void Redemarrer()
+        {
+            try
+            {
+                string? exe = Environment.ProcessPath;
+                if (!string.IsNullOrEmpty(exe))
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, Program.ArgumentRelance)
+                    {
+                        UseShellExecute = false,
+                        WorkingDirectory = AppContext.BaseDirectory,
+                    });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Le redémarrage automatique a échoué ({ex.Message}).\nRelancez Metrologo à la main.",
+                    "Metrologo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            Current.Shutdown();
         }
 
         private static bool _nettoyageFait;

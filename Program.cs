@@ -29,6 +29,12 @@ public static class Program
     // Champ statique : garde le mutex vivant (pas collecte par le GC) jusqu'a la sortie.
     private static Mutex? _mutexInstance;
 
+    /// <summary>
+    /// Argument passe par <see cref="App.Redemarrer"/> : l'instance qui se ferme tient encore
+    /// le verrou, la nouvelle attend donc qu'il soit libere au lieu d'afficher « deja ouvert ».
+    /// </summary>
+    public const string ArgumentRelance = "--relance";
+
     [STAThread]
     public static void Main(string[] args)
     {
@@ -38,6 +44,12 @@ public static class Program
         try
         {
             _mutexInstance = new Mutex(true, NomMutex, out premiereInstance);
+            if (!premiereInstance && Array.IndexOf(args, ArgumentRelance) >= 0)
+            {
+                // Relance : on attend (60 s max) la fin de l'ancienne instance.
+                try { premiereInstance = _mutexInstance.WaitOne(TimeSpan.FromSeconds(60)); }
+                catch (AbandonedMutexException) { premiereInstance = true; }   // ancienne instance coupee net
+            }
         }
         catch (UnauthorizedAccessException)
         {

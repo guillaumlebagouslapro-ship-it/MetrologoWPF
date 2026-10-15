@@ -284,6 +284,9 @@ namespace Metrologo.ViewModels
 
             NotificationsAdminWatcher.ChangementsRecus += OnChangementsAdminRecus;
 
+            // L'Admin ne redémarre pas l'appli (changement de format des rapports) pendant une mesure.
+            _adminViewModel.MesureEnCours = () => _accueilViewModel.ActiviteMesureEnCours;
+
             // pop-up directe sur CE poste quand la valeur rubidium est mise à jour (écart hebdo
             // Besançon) ou passe sous 1e-13. Le watcher ne couvre que les AUTRES postes,
             // cet événement assure l'affichage sur le poste qui exécute la tâche
@@ -374,6 +377,7 @@ namespace Metrologo.ViewModels
             // Déjà authentifié dans cette session : raccourci direct.
             if (EtatApplication.AdminConnecte != null)
             {
+                _adminViewModel.RafraichirFormatRapports();
                 VueActuelle = _adminViewModel;
                 return;
             }
@@ -382,6 +386,7 @@ namespace Metrologo.ViewModels
             if (win.ShowDialog() == true && win.AdminAuthentifie != null)
             {
                 EtatApplication.AdminConnecte = win.AdminAuthentifie;
+                _adminViewModel.RafraichirFormatRapports();
                 VueActuelle = _adminViewModel;
             }
         }

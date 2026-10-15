@@ -69,6 +69,10 @@ namespace Metrologo.Models
             // rubidiums), on les pousse vers les fichiers réseau puis on les enlève du
             // settings local, pour ne pas se retrouver avec deux sources qui divergent.
             MigrerDonneesPartageesVersReseau();
+
+            // Format des rapports : figé ici pour toute la session (démarrage, ou actualisation
+            // explicite de la configuration).
+            RechargerFormatRapports();
         }
 
         public static void SauvegarderRubidium(Rubidium? rubi)
@@ -254,13 +258,25 @@ namespace Metrologo.Models
 
         // -------- RÉSEAU : format des rapports Excel --------
 
+        private static FormatRapport? _formatRapportsSession;
+
         /// <summary>
-        /// Format des rapports Excel en sortie de mesure (hors stabilité), commun à tous les postes.
-        /// <c>.xls</c> par défaut : le logiciel externe d'extraction ne lit encore que ce format.
-        /// Lu dans le fichier partagé, avec repli sur la dernière valeur connue du poste si le
-        /// partage est injoignable.
+        /// Format appliqué par CE poste : lu au démarrage (<see cref="Charger"/>) et figé pour la
+        /// session — un changement fait dans l'Admin d'un autre poste n'est pris qu'au prochain
+        /// démarrage (ou via « charger la dernière configuration », cf. <see cref="RechargerFormatRapports"/>).
         /// </summary>
-        public static FormatRapport FormatRapports
+        public static FormatRapport FormatRapportsActif => _formatRapportsSession ??= FormatRapportsPartage;
+
+        /// <summary>Relit le réglage partagé et l'applique à la session en cours.</summary>
+        public static void RechargerFormatRapports() => _formatRapportsSession = FormatRapportsPartage;
+
+        /// <summary>
+        /// Réglage enregistré pour tous les postes : format des rapports Excel en sortie de mesure
+        /// (hors stabilité). <c>.xls</c> par défaut : le logiciel externe d'extraction ne lit encore
+        /// que ce format. Lu dans le fichier partagé, avec repli sur la dernière valeur connue du
+        /// poste si le partage est injoignable.
+        /// </summary>
+        public static FormatRapport FormatRapportsPartage
         {
             get => LireFichierReseau<ReglagesRapports>(CheminsMetrologo.FichierReglagesRapports)?.Format
                    ?? _settings.FormatRapports

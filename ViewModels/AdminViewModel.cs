@@ -22,13 +22,16 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private bool _macroXlaTrouve;
         [ObservableProperty] private string _macroXlaStatut = "";
 
-        /// <summary>Format des rapports Excel en sortie de mesure (commun à tous les postes) :
-        /// vrai = .xls (logiciel externe actuel), faux = .xlsx.</summary>
-        [ObservableProperty] private bool _rapportsEnXls = Preferences.FormatRapports == FormatRapport.Xls;
+        // ---------- Format des rapports Excel (commun à tous les postes) ----------
 
-        public string FormatRapportsStatut => RapportsEnXls
-            ? "Les rapports sortent en .xls (Excel 97-2003), le format lu par le logiciel externe. Stabilité non concernée."
-            : "Les rapports restent en .xlsx. Un ancien rapport .xls repasse en .xlsx à la prochaine mesure sur sa FI.";
+        /// <summary>Réglage enregistré pour tous les postes (relu à chaque ouverture de l'Admin).</summary>
+        private FormatRapport _formatEnregistre = Preferences.FormatRapportsPartage;
+
+        /// <summary>Choix en cours dans l'Admin (vrai = .xls) : appliqué seulement par le bouton Appliquer.</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(RapportsEnXlsx), nameof(ChangementFormatEnAttente), nameof(FormatRapportsStatut))]
+        [NotifyCanExecuteChangedFor(nameof(AppliquerFormatRapportsCommand))]
+        private bool _rapportsEnXls = Preferences.FormatRapportsPartage == FormatRapport.Xls;
 
         /// <summary>Inverse de <see cref="RapportsEnXls"/>, pour le second bouton radio.</summary>
         public bool RapportsEnXlsx
@@ -37,16 +40,59 @@ namespace Metrologo.ViewModels
             set { if (value) RapportsEnXls = false; }
         }
 
-        partial void OnRapportsEnXlsChanged(bool value)
-        {
-            var format = value ? FormatRapport.Xls : FormatRapport.Xlsx;
-            OnPropertyChanged(nameof(FormatRapportsStatut));
-            OnPropertyChanged(nameof(RapportsEnXlsx));
-            if (Preferences.FormatRapports == format) return;
+        private FormatRapport FormatChoisi => RapportsEnXls ? FormatRapport.Xls : FormatRapport.Xlsx;
 
-            Preferences.FormatRapports = format;
+        public bool ChangementFormatEnAttente => FormatChoisi != _formatEnregistre;
+
+        public string FormatRapportsStatut => ChangementFormatEnAttente
+            ? $"Format actuel : {Extension(_formatEnregistre)}. Cliquez sur « Appliquer » pour passer en {Extension(FormatChoisi)} : "
+              + "Metrologo redémarre sur ce poste, les autres postes passent au nouveau format à leur prochain démarrage."
+            : _formatEnregistre == FormatRapport.Xls
+                ? "Les rapports sortent en .xls (Excel 97-2003), le format lu par le logiciel externe. Stabilité non concernée."
+                : "Les rapports restent en .xlsx. Un ancien rapport .xls repasse en .xlsx à la prochaine mesure sur sa FI.";
+
+        private static string Extension(FormatRapport f) => f == FormatRapport.Xls ? ".xls" : ".xlsx";
+
+        /// <summary>Fourni par la fenêtre principale : vrai pendant une mesure (pas de redémarrage alors).</summary>
+        public Func<bool>? MesureEnCours { get; set; }
+
+        /// <summary>À l'ouverture de l'Admin : repart du réglage enregistré (il a pu changer depuis un autre poste).</summary>
+        public void RafraichirFormatRapports()
+        {
+            _formatEnregistre = Preferences.FormatRapportsPartage;
+            RapportsEnXls = _formatEnregistre == FormatRapport.Xls;
+            OnPropertyChanged(nameof(ChangementFormatEnAttente));
+            OnPropertyChanged(nameof(FormatRapportsStatut));
+            AppliquerFormatRapportsCommand.NotifyCanExecuteChanged();
+        }
+
+        /// <summary>
+        /// Enregistre le format pour tous les postes puis redémarre Metrologo sur ce poste (le format
+        /// est figé au démarrage). Les autres postes le prennent à leur prochain démarrage.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(ChangementFormatEnAttente))]
+        private void AppliquerFormatRapports()
+        {
+            if (MesureEnCours?.Invoke() == true)
+            {
+                MessageBox.Show("Une mesure est en cours : appliquez le changement de format une fois la mesure terminée.",
+                    "Format des rapports", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var format = FormatChoisi;
+            var conf = MessageBox.Show(
+                $"Passer les rapports Excel en {Extension(format)} pour tous les postes ?\n\n"
+              + "• Ce poste : Metrologo va redémarrer maintenant.\n"
+              + "• Autres postes : le nouveau format sera pris à leur prochain démarrage de Metrologo.",
+                "Format des rapports", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (conf != MessageBoxResult.Yes) return;
+
+            Preferences.FormatRapportsPartage = format;
             Journal.Info(CategorieLog.Administration, "FORMAT_RAPPORTS",
-                $"Rapports Excel en sortie de mesure : {(value ? ".xls" : ".xlsx")}.");
+                $"Rapports Excel en sortie de mesure : {Extension(format)} (redémarrage du poste).");
+
+            App.Redemarrer();
         }
 
         public AdminViewModel()

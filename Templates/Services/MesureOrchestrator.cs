@@ -1188,7 +1188,7 @@ namespace Metrologo.Services
         private static async Task ConvertirRapportSiXlsAsync(Mesure mesure, string? cheminFichier, ResultatMesure result)
         {
             if (mesure.TypeMesure == TypeMesure.Stabilite) return;
-            if (Preferences.FormatRapports != FormatRapport.Xls) return;
+            if (Preferences.FormatRapportsActif != FormatRapport.Xls) return;
             if (string.IsNullOrEmpty(cheminFichier)
                 || !cheminFichier.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)
                 || !File.Exists(cheminFichier))

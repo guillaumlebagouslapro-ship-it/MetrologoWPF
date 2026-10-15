@@ -253,7 +253,18 @@
                     <RadioButton GroupName="FormatRapports" Content=".xls (logiciel externe)"
                                  IsChecked="{Binding RapportsEnXls}" Margin="0,0,16,0"/>
                     <RadioButton GroupName="FormatRapports" Content=".xlsx"
-                                 IsChecked="{Binding RapportsEnXlsx}"/>
+                                 IsChecked="{Binding RapportsEnXlsx}" Margin="0,0,16,0"/>
+                    <!-- Actif seulement si le choix diffère du réglage enregistré -->
+                    <Button Command="{Binding AppliquerFormatRapportsCommand}"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Padding="14,8" MinWidth="120">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="ArrowSync24" FontSize="14" Foreground="White"
+                                           Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Appliquer" Foreground="White" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
