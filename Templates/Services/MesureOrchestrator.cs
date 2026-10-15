@@ -30,6 +30,10 @@ namespace Metrologo.Services
         /// </summary>
         public bool? TransfertReseauOk { get; set; }
 
+        /// <summary>Faux si le rapport devait sortir en .xls (réglage Admin) et que la conversion a
+        /// échoué — le rapport est alors resté en .xlsx. Null si aucune conversion n'était demandée.</summary>
+        public bool? ConversionXlsOk { get; set; }
+
         public double Moyenne => Valeurs.Count == 0 ? 0 : Moy(Valeurs);
         public double EcartType => Valeurs.Count < 2 ? 0 : Sigma(Valeurs);
 
@@ -1079,6 +1083,11 @@ namespace Metrologo.Services
                         Gates = gates
                     });
 
+                // Format de sortie .xls (réglage Admin) : AVANT le transfert, pour que le réseau
+                // reçoive le rapport dans son format final.
+                await ConvertirRapportSiXlsAsync(mesure, cheminFichier, result);
+                Perf("ConvertirRapportSiXlsAsync");
+
                 // Transfert du dossier FI complet vers le partage réseau M:\ (snapshot en bloc).
                 // Inclut tout : Mesures_FI.xlsx + Mesures_Stab_FI.xlsx + Journal_FI.txt + profilings.
                 // Si KO (M:\ down, latence, etc.) : FI inscrite dans la liste de reprise pour
@@ -1150,6 +1159,18 @@ namespace Metrologo.Services
                 Perf("Fin de mesure");
                 _excel.FermerExcel();
 
+                // Mesure arrêtée ou en échec : le rapport sort lui aussi en .xls (pas encore fait,
+                // puisque la conversion de la fin normale n'a pas été atteinte).
+                if (!result.Succes && result.ConversionXlsOk == null)
+                {
+                    try { await ConvertirRapportSiXlsAsync(mesure, cheminFichier, result); }
+                    catch (Exception exConv)
+                    {
+                        JournalLog.Warn(CategorieLog.Excel, "RAPPORT_CONVERSION_KO",
+                            $"Conversion .xls après arrêt/échec impossible : {exConv.Message}");
+                    }
+                }
+
                 // NOTE : l'écriture du fichier Profiling_<FI>_<date>.txt dans le dossier de la FI
                 // a été DÉSACTIVÉE — il polluait les dossiers de mesure et n'est plus consulté.
                 // Le profiler reste alimenté en mémoire (appels Perf(...)) au cas où on voudrait
@@ -1158,6 +1179,24 @@ namespace Metrologo.Services
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Réglage Admin « rapports en .xls » : convertit le rapport de la mesure (hors stabilité,
+        /// encore manuelle) en .xls et supprime le .xlsx. Rien à faire en mode .xlsx.
+        /// </summary>
+        private static async Task ConvertirRapportSiXlsAsync(Mesure mesure, string? cheminFichier, ResultatMesure result)
+        {
+            if (mesure.TypeMesure == TypeMesure.Stabilite) return;
+            if (Preferences.FormatRapports != FormatRapport.Xls) return;
+            if (string.IsNullOrEmpty(cheminFichier)
+                || !cheminFichier.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)
+                || !File.Exists(cheminFichier))
+                return;
+
+            result.ConversionXlsOk = await ExcelInteropHost.Instance.ConvertirRapportEnXlsAsync(cheminFichier);
+            if (result.ConversionXlsOk == true)
+                result.CheminExcel = Path.ChangeExtension(cheminFichier, ".xls");
         }
 
         /// <summary>

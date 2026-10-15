@@ -369,6 +369,12 @@ namespace Metrologo.Services
         public static string FichierUtilisateurs =>
             Path.Combine(Utilisateurs, "utilisateurs.json");
 
+        /// <summary>Réglages des rapports Excel communs à tous les postes (format .xls / .xlsx), à la
+        /// racine des données partagées : à côté des dossiers Utilisateurs, Rubidiums, etc.</summary>
+        public static string FichierReglagesRapports =>
+            Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(Utilisateurs)) ?? Racine,
+                "reglages-rapports.json");
+
         /// <summary>Le fichier JSON du catalogue de rubidiums partagé.</summary>
         public static string FichierCatalogueRubidiums =>
             Path.Combine(Rubidiums, "catalogue.json");

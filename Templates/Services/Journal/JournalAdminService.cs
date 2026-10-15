@@ -61,7 +61,7 @@ namespace Metrologo.Services.Journal
             "UTILISATEUR_AJOUTE", "UTILISATEUR_SUPPRIME", "UTILISATEUR_RENOMME", "UTILISATEUR_ROLE",
             "MDP_REINITIALISE", "MDP_MODIFIE",
             // Configuration système
-            "MACRO_XLA_CONFIG", "CHEMINS_SAUVE",
+            "MACRO_XLA_CONFIG", "CHEMINS_SAUVE", "FORMAT_RAPPORTS",
             // Accès administrateur
             "ACCES_ADMIN_OK", "ACCES_ADMIN_KO",
         };
@@ -215,6 +215,7 @@ namespace Metrologo.Services.Journal
             "MDP_MODIFIE"             => "Mot de passe modifié",
             "MACRO_XLA_CONFIG"        => "Chemin macro Excel modifié",
             "CHEMINS_SAUVE"           => "Chemins de stockage modifiés",
+            "FORMAT_RAPPORTS"         => "Format des rapports Excel modifié",
             "ACCES_ADMIN_OK"          => "Accès administrateur accordé",
             "ACCES_ADMIN_KO"          => "Accès administrateur refusé",
             _                         => action,

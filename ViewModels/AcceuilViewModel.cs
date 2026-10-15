@@ -523,10 +523,14 @@ namespace Metrologo.ViewModels
                 var config = MesureConfig;
                 await CheminsMetrologo.ReevaluerDossierFIAsync(config.NumFI ?? string.Empty);
                 string cheminAttendu = await Task.Run(() => _excelService.CalculerCheminFichierAttendu(config));
-                if (System.IO.File.Exists(cheminAttendu) && !_rapportsConfirmes.Contains(cheminAttendu))
+                // Le rapport peut être sorti en .xls (réglage Admin) : il compte aussi.
+                string cheminXlsAttendu = System.IO.Path.ChangeExtension(cheminAttendu, ".xls");
+                string? cheminExistant = System.IO.File.Exists(cheminAttendu) ? cheminAttendu
+                    : System.IO.File.Exists(cheminXlsAttendu) ? cheminXlsAttendu : null;
+                if (cheminExistant != null && !_rapportsConfirmes.Contains(cheminAttendu))
                 {
                     var choix = MessageBox.Show(
-                        $"Un rapport existe déjà pour la FI {MesureConfig.NumFI} :\n{cheminAttendu}\n\n"
+                        $"Un rapport existe déjà pour la FI {MesureConfig.NumFI} :\n{cheminExistant}\n\n"
                       + "Voulez-vous écraser les mesures précédentes ?\n\n"
                       + "• Oui : repart d'un fichier vierge (les anciennes mesures sont perdues).\n"
                       + "• Non : conserve l'historique et ajoute la nouvelle mesure à la suite.\n"
@@ -691,23 +695,20 @@ namespace Metrologo.ViewModels
                     {
                         Log($"⚠ Réinitialisation in-place échouée : {ex.Message} — fallback fermer + delete.");
                         try { await ExcelInteropHost.Instance.FermerClasseurActifAsync(); } catch { }
-                        string cibleF = _excelService.CheminFichierGenere;
-                        if (!string.IsNullOrEmpty(cibleF) && System.IO.File.Exists(cibleF))
-                        {
-                            try { System.IO.File.Delete(cibleF); } catch { }
-                        }
+                        try { SupprimerRapportTousFormats(_excelService.CheminFichierGenere); } catch { }
                     }
                 }
                 else
                 {
                     // Aucun classeur ouvert : ancien flux (rien a contourner, pas de shell ici).
                     string cible = _excelService.CheminFichierGenere;
-                    if (!string.IsNullOrEmpty(cible) && System.IO.File.Exists(cible))
+                    if (!string.IsNullOrEmpty(cible)
+                        && (System.IO.File.Exists(cible) || System.IO.File.Exists(System.IO.Path.ChangeExtension(cible, ".xls"))))
                     {
                         try
                         {
-                            System.IO.File.Delete(cible);
-                            Log($"🗑 Fichier précédent supprimé : {System.IO.Path.GetFileName(cible)}");
+                            SupprimerRapportTousFormats(cible);
+                            Log($"🗑 Fichier précédent supprimé : {System.IO.Path.GetFileNameWithoutExtension(cible)}");
                             Journal.Info(CategorieLog.Mesure, "MESURE_RELANCE_ECRASE",
                                 $"Fichier supprimé avant relance : {cible}");
                         }
@@ -774,10 +775,20 @@ namespace Metrologo.ViewModels
         /// éventuelle instance hôte qui le tiendrait). Renvoie false si la suppression échoue
         /// (fichier verrouillé) — un message a alors été montré à l'utilisateur.
         /// </summary>
+        /// <summary>Supprime le rapport sous ses deux formats possibles (.xlsx de travail, .xls de
+        /// sortie). Lève une exception si un fichier existant ne peut pas être supprimé.</summary>
+        private static void SupprimerRapportTousFormats(string cheminXlsx)
+        {
+            if (string.IsNullOrEmpty(cheminXlsx)) return;
+            foreach (var chemin in new[] { cheminXlsx, System.IO.Path.ChangeExtension(cheminXlsx, ".xls") })
+                if (System.IO.File.Exists(chemin)) System.IO.File.Delete(chemin);
+        }
+
         private async Task<bool> EcraserRapportExistantAsync(string cheminAttendu)
         {
             bool estClasseurActif = ExcelInteropHost.Instance.AClasseurActif
-                && MemeChemin(ExcelInteropHost.Instance.CheminClasseurActif, cheminAttendu);
+                && (MemeChemin(ExcelInteropHost.Instance.CheminClasseurActif, cheminAttendu)
+                    || MemeChemin(ExcelInteropHost.Instance.CheminClasseurActif, System.IO.Path.ChangeExtension(cheminAttendu, ".xls")));
 
             if (estClasseurActif)
             {
@@ -799,8 +810,8 @@ namespace Metrologo.ViewModels
 
             try
             {
-                if (System.IO.File.Exists(cheminAttendu)) System.IO.File.Delete(cheminAttendu);
-                Log($"🗑 Ancien rapport supprimé : {System.IO.Path.GetFileName(cheminAttendu)}");
+                SupprimerRapportTousFormats(cheminAttendu);
+                Log($"🗑 Ancien rapport supprimé : {System.IO.Path.GetFileNameWithoutExtension(cheminAttendu)}");
                 Journal.Info(CategorieLog.Mesure, "RAPPORT_ECRASE",
                     $"Ancien rapport supprimé avant nouvelle mesure : {cheminAttendu}");
                 return true;
@@ -870,6 +881,25 @@ namespace Metrologo.ViewModels
                 Journal.Info(CategorieLog.Excel, "EXCELS_MESURE_FERMES_PARNOM",
                     $"{nbMesureFermes} classeur(s) de mesure freq/stab fermé(s) par leur nom avant la mesure "
                   + "(aucun process Excel tué, fichiers utilisateur préservés).");
+            }
+
+            // 3. Rapport sorti en .xls par la mesure précédente (réglage Admin) : on le repasse en
+            //    .xlsx, le seul format sur lequel le moteur des rapports sait travailler. Il
+            //    ressortira en .xls à la fin de cette mesure. Stabilité non concernée.
+            if (config.TypeMesure != TypeMesure.Stabilite)
+            {
+                string cheminRapport = await Task.Run(() => _excelService.CalculerCheminFichierAttendu(config));
+                if (!await ExcelInteropHost.Instance.ReconvertirRapportEnXlsxAsync(cheminRapport))
+                {
+                    string nomXls = System.IO.Path.ChangeExtension(System.IO.Path.GetFileName(cheminRapport), ".xls");
+                    Log($"✖ Mesure non lancée : impossible de reprendre {nomXls} (fichier ouvert ailleurs ?).");
+                    MessageBoxPremierPlan.Afficher(
+                        $"Le rapport {nomXls} de la FI {config.NumFI} n'a pas pu être repris "
+                      + "(il est probablement ouvert dans un autre logiciel).\n\n"
+                      + "Ferme-le, puis relance la mesure.",
+                        "Rapport indisponible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
             }
 
             _cts = new CancellationTokenSource();
@@ -1181,6 +1211,18 @@ namespace Metrologo.ViewModels
                                 "Enregistrement en local",
                                 MessageBoxButton.OK, MessageBoxImage.Warning);
                         }
+                    }
+
+                    // Sortie en .xls demandée (réglage Admin) mais ratée : le rapport est resté en
+                    // .xlsx, que le logiciel extérieur ne lit pas encore.
+                    if (result.ConversionXlsOk == false)
+                    {
+                        Log("⚠ Rapport resté en .xlsx : l'enregistrement en .xls a échoué (fichier .xls ouvert ailleurs ?).");
+                        MessageBoxPremierPlan.Afficher(
+                            $"La mesure est bien enregistrée, mais le rapport de la FI {config.NumFI} n'a pas pu "
+                          + "être enregistré en .xls (le fichier .xls est probablement ouvert dans un autre logiciel).\n\n"
+                          + "Il est resté en .xlsx : ferme le .xls, il sera reconverti à la prochaine mesure sur cette FI.",
+                            "Rapport resté en .xlsx", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
 
                     // Saisie post-mesure : fréquence lue + incertitudes — uniquement pour

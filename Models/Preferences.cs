@@ -252,10 +252,38 @@ namespace Metrologo.Models
 
         // -------- DTO de persistance --------
 
+        // -------- RÉSEAU : format des rapports Excel --------
+
+        /// <summary>
+        /// Format des rapports Excel en sortie de mesure (hors stabilité), commun à tous les postes.
+        /// <c>.xls</c> par défaut : le logiciel externe d'extraction ne lit encore que ce format.
+        /// Lu dans le fichier partagé, avec repli sur la dernière valeur connue du poste si le
+        /// partage est injoignable.
+        /// </summary>
+        public static FormatRapport FormatRapports
+        {
+            get => LireFichierReseau<ReglagesRapports>(CheminsMetrologo.FichierReglagesRapports)?.Format
+                   ?? _settings.FormatRapports
+                   ?? FormatRapport.Xls;
+            set
+            {
+                EcrireFichierReseau(CheminsMetrologo.FichierReglagesRapports, new ReglagesRapports { Format = value });
+                _settings.FormatRapports = value;
+                SauvegarderLocal();
+            }
+        }
+
+        private class ReglagesRapports
+        {
+            [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
+            public FormatRapport Format { get; set; } = FormatRapport.Xls;
+        }
+
         private class Settings
         {
             public Rubidium? RubidiumActif { get; set; }
             public string? CheminMacroXLA { get; set; }
+            public FormatRapport? FormatRapports { get; set; }
 
             // Champs legacy qu'on garde le temps de la migration one-shot vers le réseau.
             // Une fois migrés ils passent à null et ne sont plus sérialisés.

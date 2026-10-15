@@ -24,6 +24,15 @@ namespace Metrologo.Models
         Generateur
     }
 
+    /// <summary>Format des rapports Excel en sortie de mesure (réglage Admin, commun aux postes).</summary>
+    public enum FormatRapport
+    {
+        /// <summary>Excel 97-2003 (.xls) : seul format lu par le logiciel externe d'extraction pour l'instant.</summary>
+        Xls,
+        /// <summary>Excel actuel (.xlsx) : le fichier de travail de Metrologo, gardé tel quel.</summary>
+        Xlsx
+    }
+
     public enum ModeMetrologo
     {
         Exploitation,

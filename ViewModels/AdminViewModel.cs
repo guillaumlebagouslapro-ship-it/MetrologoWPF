@@ -22,6 +22,33 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private bool _macroXlaTrouve;
         [ObservableProperty] private string _macroXlaStatut = "";
 
+        /// <summary>Format des rapports Excel en sortie de mesure (commun à tous les postes) :
+        /// vrai = .xls (logiciel externe actuel), faux = .xlsx.</summary>
+        [ObservableProperty] private bool _rapportsEnXls = Preferences.FormatRapports == FormatRapport.Xls;
+
+        public string FormatRapportsStatut => RapportsEnXls
+            ? "Les rapports sortent en .xls (Excel 97-2003), le format lu par le logiciel externe. Stabilité non concernée."
+            : "Les rapports restent en .xlsx. Un ancien rapport .xls repasse en .xlsx à la prochaine mesure sur sa FI.";
+
+        /// <summary>Inverse de <see cref="RapportsEnXls"/>, pour le second bouton radio.</summary>
+        public bool RapportsEnXlsx
+        {
+            get => !RapportsEnXls;
+            set { if (value) RapportsEnXls = false; }
+        }
+
+        partial void OnRapportsEnXlsChanged(bool value)
+        {
+            var format = value ? FormatRapport.Xls : FormatRapport.Xlsx;
+            OnPropertyChanged(nameof(FormatRapportsStatut));
+            OnPropertyChanged(nameof(RapportsEnXlsx));
+            if (Preferences.FormatRapports == format) return;
+
+            Preferences.FormatRapports = format;
+            Journal.Info(CategorieLog.Administration, "FORMAT_RAPPORTS",
+                $"Rapports Excel en sortie de mesure : {(value ? ".xls" : ".xlsx")}.");
+        }
+
         public AdminViewModel()
         {
             EtatApplication.RubidiumActifChange += OnRubidiumChange;

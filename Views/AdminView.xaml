@@ -8,6 +8,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -208,8 +209,57 @@
             </Grid>
         </Border>
 
+        <!-- Panneau : format des rapports Excel (commun à tous les postes) -->
+        <Border Grid.Row="3"
+                CornerRadius="10"
+                Padding="18,14"
+                Margin="0,0,0,20"
+                Background="White"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Width="48" Height="48" CornerRadius="12"
+                        Background="#FFE0E7FF"
+                        Margin="0,0,16,0">
+                    <ui:SymbolIcon Symbol="DocumentTable24" FontSize="24"
+                                   Foreground="#FF4338CA"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="FORMAT DES RAPPORTS EXCEL"
+                               FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource AsertiOrangeBrush}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="Format du fichier en sortie de mesure, pour tous les postes"
+                               FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource AsertiNavyBrush}"/>
+                    <TextBlock Text="{Binding FormatRapportsStatut}"
+                               FontSize="11"
+                               Margin="0,2,0,0"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <RadioButton GroupName="FormatRapports" Content=".xls (logiciel externe)"
+                                 IsChecked="{Binding RapportsEnXls}" Margin="0,0,16,0"/>
+                    <RadioButton GroupName="FormatRapports" Content=".xlsx"
+                                 IsChecked="{Binding RapportsEnXlsx}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- Grille de fonctionnalités (cliquables) -->
-        <Grid Grid.Row="3" Margin="0,0,0,20">
+        <Grid Grid.Row="4" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="10"/>

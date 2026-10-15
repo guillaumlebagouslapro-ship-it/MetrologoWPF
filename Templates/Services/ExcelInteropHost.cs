@@ -765,6 +765,137 @@ namespace Metrologo.Services
             }
         });
 
+        // ---------- Format des rapports : .xls en sortie de mesure, .xlsx pour travailler ----------
+
+        private const int FormatExcelXls = 56;    // xlExcel8 (Excel 97-2003)
+        private const int FormatExcelXlsx = 51;   // xlOpenXMLWorkbook
+
+        /// <summary>
+        /// Sortie de mesure en mode .xls : enregistre le rapport <paramref name="cheminXlsx"/> en .xls
+        /// au même endroit (même nom), puis supprime le .xlsx — il ne reste qu'un fichier Excel
+        /// dans le dossier de la FI. Si c'est le classeur ouvert, il DEVIENT le .xls : les saisies
+        /// post-mesure et les retouches manuelles y sont enregistrées directement. Renvoie false si
+        /// la conversion a échoué (ex. .xls ouvert ailleurs) : le .xlsx est alors conservé.
+        /// </summary>
+        public Task<bool> ConvertirRapportEnXlsAsync(string cheminXlsx) => Task.Run(() =>
+        {
+            lock (_sync)
+            {
+                return ConvertirRapportInterne(cheminXlsx, Path.ChangeExtension(cheminXlsx, ".xls"), FormatExcelXls);
+            }
+        });
+
+        /// <summary>
+        /// Avant une mesure : si le rapport de la FI n'existe qu'en .xls (sortie de la mesure
+        /// précédente), le repasse en .xlsx (<paramref name="cheminXlsx"/>) et supprime le .xls —
+        /// le moteur des rapports (ClosedXML) ne travaille qu'en .xlsx. Sans .xls : ne fait rien.
+        /// </summary>
+        public Task<bool> ReconvertirRapportEnXlsxAsync(string cheminXlsx) => Task.Run(() =>
+        {
+            lock (_sync)
+            {
+                string cheminXls = Path.ChangeExtension(cheminXlsx, ".xls");
+                if (!File.Exists(cheminXls)) return true;
+                if (File.Exists(cheminXlsx))
+                {
+                    // Les deux coexistent (conversion interrompue) : on garde le plus récent.
+                    if (File.GetLastWriteTime(cheminXlsx) >= File.GetLastWriteTime(cheminXls))
+                    {
+                        if (!MemeCheminFichier(_cheminClasseurActif, cheminXls)) SupprimerFichierAvecReessais(cheminXls);
+                        return true;
+                    }
+                }
+                return ConvertirRapportInterne(cheminXls, cheminXlsx, FormatExcelXlsx);
+            }
+        });
+
+        /// <summary>Convertit <paramref name="source"/> en <paramref name="cible"/> (format Excel
+        /// <paramref name="format"/>) puis supprime la source. Classeur ouvert : SaveAs dessus (il
+        /// devient la cible). Sinon : instance Excel invisible et éphémère, pour ne rien changer à
+        /// ce que l'utilisateur voit (cas typique : Excel tué par le bouton STOP). Sous lock.</summary>
+        private bool ConvertirRapportInterne(string source, string cible, int format)
+        {
+            if (!File.Exists(source)) return false;
+            try
+            {
+                if (_classeurActif != null && MemeCheminFichier(_cheminClasseurActif, source))
+                {
+                    try { _excel.DisplayAlerts = false; } catch { }
+                    try { _classeurActif.CheckCompatibility = false; } catch { }
+                    _classeurActif.SaveAs(cible, format);
+                    _cheminClasseurActif = cible;
+                    try { _fullNameActifExcel = (string)_classeurActif.FullName; } catch { }
+                }
+                else
+                {
+                    ConvertirDansInstanceSepareeInterne(source, cible, format);
+                }
+
+                SupprimerFichierAvecReessais(source);
+                JournalLog.Info(CategorieLog.Excel, "RAPPORT_CONVERTI",
+                    $"Rapport converti : {Path.GetFileName(source)} → {Path.GetFileName(cible)} ({Path.GetDirectoryName(cible)}).");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Excel, "RAPPORT_CONVERSION_KO",
+                    $"Conversion {Path.GetFileName(source)} → {Path.GetFileName(cible)} échouée : {ex.Message}");
+                return false;
+            }
+        }
+
+        private static void ConvertirDansInstanceSepareeInterne(string source, string cible, int format)
+        {
+            dynamic? app = null;
+            dynamic? classeurs = null;
+            dynamic? wb = null;
+            try
+            {
+                app = Activator.CreateInstance(Type.GetTypeFromProgID("Excel.Application")
+                    ?? throw new InvalidOperationException("Excel n'est pas installé."))!;
+                try { app.Visible = false; } catch { }
+                try { app.DisplayAlerts = false; } catch { }
+                try { app.AskToUpdateLinks = false; } catch { }
+                try { app.EnableEvents = false; } catch { }
+                classeurs = app.Workbooks;
+                wb = classeurs.Open(source, 0);            // UpdateLinks = 0 : pas de question sur le .xla
+                try { wb.CheckCompatibility = false; } catch { }
+                wb.SaveAs(cible, format);
+                wb.Close(false);
+            }
+            finally
+            {
+                if (wb != null) { try { Marshal.ReleaseComObject(wb); } catch { } }
+                if (classeurs != null) { try { Marshal.ReleaseComObject(classeurs); } catch { } }
+                if (app != null)
+                {
+                    try { app.Quit(); } catch { }
+                    try { Marshal.ReleaseComObject(app); } catch { }
+                }
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+        }
+
+        private static void SupprimerFichierAvecReessais(string chemin)
+        {
+            for (int i = 0; i < 10 && File.Exists(chemin); i++)
+            {
+                try { File.Delete(chemin); }
+                catch { System.Threading.Thread.Sleep(200); }   // Excel relâche son handle un peu après
+            }
+            if (File.Exists(chemin))
+                JournalLog.Warn(CategorieLog.Excel, "RAPPORT_ANCIEN_FORMAT_KO",
+                    $"Ancien fichier non supprimé (verrouillé ?) : {chemin}");
+        }
+
+        private static bool MemeCheminFichier(string? a, string? b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            try { return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase); }
+            catch { return false; }
+        }
+
         /// <summary>
         /// Écrit une valeur dans une zone nommée (scope feuille) du classeur actif. Utilisé
         /// pour les saisies post-mesure (fréquence lue, incertitudes) qui complètent le rapport

@@ -298,6 +298,22 @@ namespace Metrologo.Services
                 {
                     // Le local fait foi : on écrase le réseau.
                     File.Copy(fichier, fichierCible, overwrite: true);
+
+                    // Rapport passé de .xlsx à .xls (ou l'inverse, réglage Admin) : l'ancien format
+                    // ne doit pas rester à côté sur le réseau — un seul fichier Excel par FI.
+                    string ext = Path.GetExtension(nomFichier);
+                    string? autreExt = ext.Equals(".xls", StringComparison.OrdinalIgnoreCase) ? ".xlsx"
+                                     : ext.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ? ".xls" : null;
+                    if (autreExt != null && !File.Exists(Path.ChangeExtension(fichier, autreExt)))
+                    {
+                        string jumeauCible = Path.ChangeExtension(fichierCible, autreExt);
+                        try { if (File.Exists(jumeauCible)) File.Delete(jumeauCible); }
+                        catch (Exception ex)
+                        {
+                            Journal.Journal.Warn(CategorieLog.Systeme, "TRANSFERT_ANCIEN_FORMAT_KO",
+                                $"Ancien rapport « {jumeauCible} » non supprimé sur le réseau : {ex.Message}");
+                        }
+                    }
                 }
             }
             // Récursion sur les sous-dossiers (dossier FI plat aujourd'hui, prévu pour l'avenir).
