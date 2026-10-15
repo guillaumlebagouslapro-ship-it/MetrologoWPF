@@ -75,9 +75,8 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
-                            <!-- En-têtes de colonnes. Marges alignées sur le contenu des lignes (10 padding
-                                 + 1 bordure = 11 à gauche) et réservation de la scrollbar à droite (≈17 +
-                                 11) pour que les colonnes de droite restent alignées avec les valeurs. -->
+                            <!-- En-têtes de colonnes. Marge gauche = padding (10) + bordure (1) des lignes ;
+                                 marge droite réserve la scrollbar pour garder les colonnes alignées. -->
                             <Grid Grid.Row="0" Margin="11,2,28,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="200"/>

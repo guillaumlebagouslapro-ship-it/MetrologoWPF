@@ -56,8 +56,7 @@ namespace Metrologo.ViewModels
         private readonly ModeleAppareil? _modeleExistant;
         private readonly string _utilisateurActuel;
 
-        // Copie profonde des paramètres du modèle source (bouton « Copier les réglages ») : sert de
-        // base à ConstruireParametres pour hériter aussi des champs non exposés au formulaire.
+        // Copie profonde des paramètres du modèle source (« Copier les réglages »), base de ConstruireParametres.
         private ParametresIeee? _parametresClone;
 
         public string Titre => _modeleExistant != null ? "Modifier un appareil" : "Enregistrer un appareil";
@@ -248,11 +247,9 @@ namespace Metrologo.ViewModels
         {
             if (ModeleSourceCopie == null) return;
             ChargerDepuisModele(ModeleSourceCopie, inclureIdentite: false);
-            // On mémorise une copie PROFONDE des paramètres source : elle servira de base à
-            // ConstruireParametres, pour hériter aussi des champs NON exposés au formulaire
-            // (ModeRapideActif, VerifArmingActive, CommandeBulkInit...). Sans ça, la nouvelle fiche
-            // repartait sur les défauts (ModeRapideActif=true + pas de streaming) → erreurs SCPI
-            // -113 / -230 / -420 sur un compteur moderne comme le 53220A.
+            // Copie PROFONDE des paramètres source, base de ConstruireParametres : hérite aussi des champs
+            // non exposés au formulaire (ModeRapideActif, VerifArmingActive, CommandeBulkInit...).
+            // Sinon défauts (ModeRapideActif=true) -> erreurs SCPI -113 / -230 / -420 sur un 53220A.
             _parametresClone = ModeleSourceCopie.Parametres.Cloner();
             JournalLog.Info(CategorieLog.Configuration, "CATALOGUE_COPIE_REGLAGES",
                 $"Réglages copiés depuis « {ModeleSourceCopie.Nom} » (identité conservée).");
@@ -297,8 +294,7 @@ namespace Metrologo.ViewModels
             EntreesTexte = string.Join(", ", m.Entrees);
             CouplagesTexte = string.Join(", ", m.Couplages);
 
-            // On repart à blanc sur les champs de réglages avant de recharger : sinon une 2e copie
-            // (ou une copie sur un formulaire déjà rempli) laisserait traîner d'anciennes valeurs.
+            // Remise à blanc avant rechargement : sinon d'anciennes valeurs traînent (2e copie, formulaire rempli).
             ReinitialiserChampsReglages();
             ChargerReglages(m.Reglages);
             ChargerIntervalle(m.Parametres.Intervalle);

@@ -6,11 +6,9 @@ using Wpf.Ui.Controls;
 namespace Metrologo.Views
 {
     /// <summary>
-    /// Laisse l'admin connecté (<see cref="EtatApplication.AdminConnecte"/>) changer son
-    /// propre mot de passe. Comme il vient déjà de s'authentifier (login + mdp) pour entrer
-    /// dans la zone admin, inutile de lui redemander l'ancien mot de passe — ça permet
-    /// d'ailleurs de remplacer un mdp auto-généré qu'il n'a jamais retenu. Il tape donc
-    /// directement le nouveau deux fois, et on enregistre via
+    /// Changement du mot de passe de l'admin connecté (<see cref="EtatApplication.AdminConnecte"/>).
+    /// L'ancien mot de passe n'est pas redemandé (déjà authentifié pour entrer en zone admin ;
+    /// permet aussi de remplacer un mdp auto-généré jamais retenu). Enregistrement via
     /// <see cref="ComptesLocauxService.DefinirMotDePasse"/>.
     /// </summary>
     public partial class ChangerMdpAdminWindow : FluentWindow
@@ -56,9 +54,8 @@ namespace Metrologo.Views
             }
 
             ComptesLocauxService.DefinirMotDePasse(admin.Id, nouveau);
-            // Le hash gardé en mémoire dans EtatApplication.AdminConnecte est désormais
-            // périmé : on le réaligne tout de suite pour que les vérifs suivantes, dans
-            // la même session admin, retombent bien sur le nouveau hash.
+            // Le hash en mémoire dans EtatApplication.AdminConnecte est périmé : on le réaligne
+            // pour les vérifications suivantes de la même session admin.
             admin.PasswordHash = PasswordHasher.HashPassword(nouveau);
 
             DialogResult = true;

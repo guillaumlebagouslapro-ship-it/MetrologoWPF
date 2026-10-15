@@ -13,9 +13,7 @@ namespace Metrologo.ViewModels
         [ObservableProperty] private ObservableCollection<Rubidium> _rubidiums = new();
         [ObservableProperty] private Rubidium? _rubidiumSelectionne;
 
-        // ---------- Mode Réglage manuel ----------
-
-        // l'admin saisit une fréquence directement, sans choisir de rubidium dans le catalogue
+        // Mode Réglage manuel : l'admin saisit une fréquence sans choisir de rubidium du catalogue.
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(EstModeListe))]
         private bool _modeManuel;

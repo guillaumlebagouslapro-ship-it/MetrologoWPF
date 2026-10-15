@@ -26,10 +26,9 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// Décorations du thème saisonnier (Noël, ski, été), choisi d'après la date du jour
+        /// Décorations du thème saisonnier, choisi d'après la date du jour
         /// (voir <see cref="DecorSaisonnier.Determiner"/>). Hors saison : rien n'est ajouté.
-        /// Les calques débordent de la vue (marges négatives) pour couvrir toute la zone
-        /// sous la barre de navigation.
+        /// Les calques débordent de la vue (marges négatives) pour couvrir la zone sous la barre de navigation.
         /// </summary>
         private void AppliquerThemeSaisonnier()
         {
@@ -97,10 +96,8 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// On garde toujours la dernière ligne du journal "Informations générales" visible :
-        /// à chaque nouvel ajout on descend automatiquement en bas. Comme ça, pendant une
-        /// mesure qui s'étire, l'utilisateur n'a pas à faire défiler à la main pour suivre ce
-        /// qui se passe.
+        /// Garde la dernière ligne du journal « Informations générales » visible
+        /// (défilement automatique vers le bas à chaque ajout).
         /// </summary>
         private void LogTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {

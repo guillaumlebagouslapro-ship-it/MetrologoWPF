@@ -5,11 +5,9 @@ using System.Text;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Profileur léger : accumule des marqueurs (timestamp + label) en mémoire, puis
-    /// dumpe un fichier texte après la mesure. Aucun I/O pendant la boucle GPIB (~10 ns
-    /// par Mark vs 30+ écritures journal SQL).
-    ///
-    /// Format (timing en ms depuis la création de la session) :
+    /// Profileur léger : accumule des marqueurs (timestamp + label) en mémoire, à écrire dans un
+    /// fichier texte après la mesure. Aucun I/O pendant la boucle GPIB (~10 ns par Mark).
+    /// Format (temps en ms depuis la création de la session) :
     /// <code>
     /// Profiling FI=987654 | Type=Frequence | NbMesures=30 | Date=05/05/2026 10:00:00
     /// Total : 30450 ms
@@ -38,10 +36,10 @@ namespace Metrologo.Services
         /// <summary>Durée totale (ms) depuis la création du profiler.</summary>
         public long TotalMs => _sw.ElapsedMilliseconds;
 
-        /// <summary>Nombre de marqueurs (pré-allocation du StringBuilder dans FormaterTexte).</summary>
+        /// <summary>Nombre de marqueurs.</summary>
         public int Count => _events.Count;
 
-        /// <summary>Sérialise en texte tabulé. Sans I/O — le caller choisit où écrire.</summary>
+        /// <summary>Sérialise en texte tabulé (sans I/O : l'appelant choisit où écrire).</summary>
         public string FormaterTexte(string entete)
         {
             var sb = new StringBuilder(80 * (_events.Count + 5));

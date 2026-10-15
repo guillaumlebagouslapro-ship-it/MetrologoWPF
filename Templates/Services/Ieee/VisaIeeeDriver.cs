@@ -6,9 +6,8 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Le vrai pilote IEEE, posé sur NI-VISA (NationalInstruments.Visa). On garde une session GPIB
-    /// ouverte par adresse plutôt que d'en rouvrir une à chaque commande, et on fait le ménage
-    /// (Dispose) quand l'appli se ferme.
+    /// Pilote IEEE sur NI-VISA (NationalInstruments.Visa). Une session GPIB reste ouverte par
+    /// adresse ; elles sont fermées au Dispose.
     /// </summary>
     public sealed class VisaIeeeDriver : IIeeeDriver, IDisposable
     {
@@ -39,7 +38,7 @@ namespace Metrologo.Services.Ieee
                 using var intf = (GpibInterface)_rm.Open(resource);
                 intf.SendInterfaceClear();
             }
-            catch (Exception) { /* on tente, sans plus : certains backends refusent l'IFC à chaud */ }
+            catch (Exception) { /* au mieux : certains backends refusent l'IFC à chaud */ }
             return Task.CompletedTask;
         }
 
@@ -50,25 +49,21 @@ namespace Metrologo.Services.Ieee
             var session = ObtenirSession(adresse);
             AppliquerTerminateurs(session, readTerm: null);
 
-            // Signification de WriteTerm (défini dans Metrologo.ini / le catalogue) :
-            //   0 = rien (ni LF, ni EOI)
-            //   1 = LF à la fin de la commande + EOI — c'est le cas le plus fréquent côté Delphi
-            //   2 = EOI seul, sans LF
+            // WriteTerm (Metrologo.ini / catalogue) : 0 = rien (ni LF ni EOI), 1 = LF + EOI (cas le
+            // plus fréquent côté Delphi), 2 = EOI seul.
             session.SendEndEnabled = writeTerm != 0;
             string aEcrire = writeTerm == 1 ? commande + "\n" : commande;
 
-            // Appel synchrone direct : on est déjà sur le thread d'orchestration (un thread du pool,
-            // hors UI), donc inutile de payer le coût d'un Task.Run/await (~10-20 ms à chaque coup).
-            // Ça se voit beaucoup quand on enchaîne 30 :FETCh? d'affilée en mode rapide stabilité.
+            // Appel synchrone : on est déjà sur le thread d'orchestration (hors UI), un Task.Run
+            // coûterait ~10-20 ms par appel, sensible sur 30 :FETCh? enchaînés en mode rapide.
             try
             {
                 session.RawIO.Write(aEcrire);
             }
             catch (IOTimeoutException)
             {
-                // Un timeout en écriture, ça veut généralement dire que l'appareil n'accepte pas la
-                // commande parce qu'il a encore une réponse coincée dans son buffer de sortie. On lui
-                // envoie un Device Clear pour le remettre d'aplomb, puis on relance l'exception.
+                // Timeout en écriture : en général une réponse coincée dans le buffer de sortie de
+                // l'appareil. Device Clear pour le remettre d'aplomb, puis on relance.
                 TenterDeviceClear(session, adresse, "EcrireAsync");
                 throw;
             }
@@ -82,12 +77,11 @@ namespace Metrologo.Services.Ieee
             var session = ObtenirSession(adresse);
             AppliquerTerminateurs(session, readTerm: readTerm);
 
-            // Synchrone direct, même logique que dans EcrireAsync. Le thread d'orchestration nous
-            // appartient, on peut donc le bloquer le temps de l'IO GPIB sans gêner l'UI.
-            // PIÈGE : RawIO.ReadString() sans argument lit au plus 1024 octets (NI : Read() → Read(1024)).
-            // Une mesure en lot de 100 valeurs (~2 300 car.) était tronquée : le reste restait dans le
-            // buffer de sortie du compteur et la commande suivante provoquait -410 Query INTERRUPTED.
-            // On relit donc par blocs tant que VISA signale « nombre max atteint » (ni terminateur ni EOI).
+            // Synchrone, comme EcrireAsync (thread d'orchestration, hors UI).
+            // PIÈGE : RawIO.ReadString() sans argument lit au plus 1024 octets. Une réponse plus
+            // longue (lot de 100 valeurs, ~2 300 car.) resterait en partie dans le buffer du compteur
+            // et la commande suivante donnerait -410 Query INTERRUPTED. On relit donc par blocs tant
+            // que VISA signale « nombre max atteint » (ni terminateur ni EOI).
             try
             {
                 var reponse = new System.Text.StringBuilder();
@@ -167,9 +161,8 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// Referme les sessions en cache mais laisse le ResourceManager en place ; elles seront
-        /// rouvertes au besoin. Pratique quand un appareil a été éteint puis rallumé, ou quand le
-        /// bus est resté dans un état douteux après un timeout.
+        /// Ferme les sessions en cache (rouvertes au besoin), le ResourceManager reste en place.
+        /// Utile après extinction/rallumage d'un appareil ou un bus douteux après timeout.
         /// </summary>
         public void ReinitialiserSessions()
         {
@@ -193,7 +186,7 @@ namespace Metrologo.Services.Ieee
                 {
                     try
                     {
-                        kv.Value.Clear();   // SDC : ça débloque le ReadString qui patiente côté instrument.
+                        kv.Value.Clear();   // SDC : débloque le ReadString en attente
                         JournalLog.Warn(CategorieLog.Mesure, "GPIB_ABORT_SDC",
                             $"Device Clear envoyé à GPIB0::{kv.Key} (arrêt utilisateur).");
                     }
@@ -224,9 +217,7 @@ namespace Metrologo.Services.Ieee
         }
 
         /// <summary>
-        /// ReadTerm : 10 = LF, 13 = CR, 256 = STOPEnd (c'est-à-dire EOI seul).
-        /// Pour le WriteTerm on ne fait rien de spécial : VISA s'en occupe tout seul via son mode EOI
-        /// par défaut.
+        /// ReadTerm : 10 = LF, 13 = CR, 256 = STOPEnd (EOI seul). Le WriteTerm est géré dans EcrireAsync.
         /// </summary>
         private static void AppliquerTerminateurs(GpibSession session, int? readTerm)
         {

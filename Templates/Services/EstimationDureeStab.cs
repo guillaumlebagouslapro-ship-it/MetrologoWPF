@@ -4,14 +4,12 @@ using System.Text.Json;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Estime la durée d'un balayage de stabilité, pour l'afficher avant le lancement et donner
-    /// une heure de fin pendant une série de répétitions. Purement indicatif : les répétitions
-    /// s'enchaînent sur la fin RÉELLE de la précédente (await), jamais sur cette estimation.
+    /// Estime la durée d'un balayage de stabilité (affichage avant lancement, heure de fin d'une
+    /// série). Purement indicatif : les répétitions s'enchaînent sur la fin réelle de la précédente.
     /// <para>
-    /// Le surcoût de chaque temps de porte (temps passé en plus de nbMesures × porte : dialogue
-    /// GPIB, temps mort entre deux mesures) est APPRIS sur les mesures réelles de ce poste : le
-    /// mode d'acquisition change selon la porte (lot sous 1 s, une par une à partir de 1 s) et selon
-    /// l'appareil, aucune constante ne tombait juste pour tous les temps. Appris dans
+    /// Le surcoût de chaque temps de porte (en plus de nbMesures × porte : dialogue GPIB, temps
+    /// mort) est appris sur les mesures réelles du poste, car le mode d'acquisition varie selon la
+    /// porte (lot sous 1 s, une par une dès 1 s) et l'appareil. Stocké dans
     /// <c>Configuration\durees-stab.json</c> ; valeurs par défaut tant que rien n'est mesuré.
     /// </para>
     /// </summary>
@@ -24,8 +22,7 @@ namespace Metrologo.Services
         /// <summary>Surcoût par mesure par défaut : lot gap-free (porte < 1 s) / une par une (porte ≥ 1 s).</summary>
         private const double SURCOUT_DEFAUT_LOT = 0.06;
         private const double SURCOUT_DEFAUT_UNITAIRE = 0.4;
-        /// <summary>Marge : 10 % de la durée calculée, plafonnée à 10 min (l'ancienne marge fixe de
-        /// 10 min par stab écrasait l'estimation dès qu'on retirait des temps de porte).</summary>
+        /// <summary>Marge : 10 % de la durée calculée, plafonnée à 10 min.</summary>
         private const double PART_MARGE = 0.10;
         private const double SECONDES_MARGE_MAX = 10 * 60;
         /// <summary>Poids d'une nouvelle mesure dans la moyenne glissante apprise.</summary>

@@ -5,13 +5,12 @@ using Metrologo.Services;
 namespace Metrologo.Models
 {
     /// <summary>
-    /// Préférences de l'application, réparties sur deux couches.
-    /// En LOCAL : %LocalAppData%\Metrologo\Configuration\settings.json (le rubidium actif du moment,
-    /// le chemin de la macro Excel perso). Sur le RESEAU : des fichiers dédiés sur le partage M:\ pour
-    /// tout ce qui est commun aux postes (Utilisateurs\utilisateurs.json avec les comptes + hash mdp,
-    /// Rubidiums\catalogue.json). On relit les fichiers réseau à la demande, avec un cache mémoire
-    /// qu'on invalide à chaque write, comme ça on voit les modifs faites depuis un autre poste sans
-    /// avoir à redémarrer.
+    /// Préférences de l'application, sur deux couches.
+    /// LOCAL : %LocalAppData%\Metrologo\Configuration\settings.json (rubidium actif, chemin de la
+    /// macro Excel perso). RÉSEAU : fichiers sur le partage M:\ communs aux postes
+    /// (Utilisateurs\utilisateurs.json avec comptes + hash mdp, Rubidiums\catalogue.json).
+    /// Les fichiers réseau sont relus à la demande, avec un cache mémoire invalidé à chaque
+    /// écriture : les modifs faites depuis un autre poste sont vues sans redémarrer.
     /// </summary>
     public static class Preferences
     {
@@ -20,16 +19,16 @@ namespace Metrologo.Models
         // -------- local : rubidium actif + macro --------
 
         /// <summary>
-        /// Le rubidium actif. On le lit d'abord dans le fichier partagé pour que tous les postes
-        /// repartent du même rubidium de référence ; si le partage est injoignable, on retombe sur le réglage local.
+        /// Le rubidium actif, lu d'abord dans le fichier partagé (même référence pour tous les
+        /// postes) ; repli sur le réglage local si le partage est injoignable.
         /// </summary>
         public static Rubidium? RubidiumActif =>
             LireFichierReseau<Rubidium>(CheminsMetrologo.FichierRubidiumActif) ?? _settings.RubidiumActif;
 
-        /// <summary>Chemin par défaut du Metrologo.xla, dans le nouvel emplacement FCT_VBA2016.</summary>
+        /// <summary>Chemin par défaut du Metrologo.xla (FCT_VBA2016).</summary>
         private const string CheminMacroParDefaut = @"C:\EXE_SPE\FCT_VBA2016\Metrologo.xla";
 
-        /// <summary>L'ancien chemin par défaut, qu'on remplace automatiquement par le nouveau.</summary>
+        /// <summary>Ancien chemin par défaut, remplacé automatiquement par le nouveau.</summary>
         private const string CheminMacroLegacy = @"C:\Exe_Spe\Fct_VBA\Metrologo.xla";
 
         public static string CheminMacroXLA
@@ -37,8 +36,7 @@ namespace Metrologo.Models
             get
             {
                 var c = _settings.CheminMacroXLA;
-                // Rien de réglé, ou bien l'ancien chemin par défaut : on bascule sur le nouveau.
-                // Si l'utilisateur a mis un chemin perso (autre chose), on le garde tel quel.
+                // Rien de réglé ou ancien chemin par défaut : nouveau défaut. Chemin perso : conservé.
                 if (string.IsNullOrWhiteSpace(c)
                     || string.Equals(c, CheminMacroLegacy, System.StringComparison.OrdinalIgnoreCase))
                     return CheminMacroParDefaut;
@@ -62,26 +60,21 @@ namespace Metrologo.Models
                 _settings = new Settings();
             }
 
-            // Migration one-shot : si le settings.json local traîne encore des données
-            // qui ont depuis été déplacées vers le réseau (utilisateurs, catalogue
-            // rubidiums), on les pousse vers les fichiers réseau puis on les enlève du
-            // settings local, pour ne pas se retrouver avec deux sources qui divergent.
+            // Migration one-shot des données désormais stockées sur le réseau (utilisateurs,
+            // catalogue rubidiums) : évite deux sources qui divergent.
             MigrerDonneesPartageesVersReseau();
 
-            // Format des rapports : figé ici pour toute la session (démarrage, ou actualisation
-            // explicite de la configuration).
+            // Format des rapports : figé pour la session (démarrage ou actualisation de la config).
             RechargerFormatRapports();
         }
 
         public static void SauvegarderRubidium(Rubidium? rubi)
         {
-            // CÔTÉ PARTAGÉ : tous les postes reprendront ce rubidium de référence à leur
-            // prochain démarrage (c'est le getter ci-dessus qui le relit). Sans ça, le
-            // changement serait resté cantonné au poste qui l'a fait.
+            // Partagé : tous les postes reprendront ce rubidium à leur prochain démarrage.
             if (rubi != null)
                 EcrireFichierReseau(CheminsMetrologo.FichierRubidiumActif, rubi);
 
-            // CÔTÉ LOCAL : sert de repli quand le partage est injoignable (poste hors réseau).
+            // Local : repli quand le partage est injoignable.
             _settings.RubidiumActif = rubi;
             SauvegarderLocal();
         }
@@ -99,7 +92,7 @@ namespace Metrologo.Models
             }
             catch
             {
-                // on reste silencieux : perdre une préférence locale n'a rien de bloquant
+                // Silencieux : perdre une préférence locale n'est pas bloquant.
             }
         }
 
@@ -124,8 +117,7 @@ namespace Metrologo.Models
             _cacheUtilisateurs = nouvelleListe;
         }
 
-        /// <summary>Vide le cache : la prochaine lecture de Utilisateurs ira relire le fichier JSON
-        /// (pour récupérer les comptes modifiés depuis un autre poste, sans redémarrer).</summary>
+        /// <summary>Vide le cache : la prochaine lecture relit le fichier (comptes modifiés depuis un autre poste).</summary>
         public static void InvaliderCacheUtilisateurs() => _cacheUtilisateurs = null;
 
         // -------- RÉSEAU : catalogue rubidiums --------
@@ -133,9 +125,8 @@ namespace Metrologo.Models
         private static List<Rubidium>? _cacheCatalogueRubidiums;
 
         /// <summary>
-        /// Le catalogue des rubidiums prédéfinis, partagé entre les postes. Si le fichier
-        /// réseau est vide ou absent, on renvoie un seed par défaut (Syref + Redondances)
-        /// histoire d'amorcer l'UI avec quelque chose.
+        /// Catalogue des rubidiums, partagé entre les postes. Fichier réseau vide ou absent :
+        /// renvoie un jeu par défaut (Syref + Redondances).
         /// </summary>
         public static List<Rubidium> CatalogueRubidiums
         {
@@ -163,7 +154,7 @@ namespace Metrologo.Models
             _cacheCatalogueRubidiums = nouvelleListe;
         }
 
-        /// <summary>Vide le cache : la prochaine lecture de CatalogueRubidiums ira relire le fichier réseau.</summary>
+        /// <summary>Vide le cache : la prochaine lecture relit le fichier réseau.</summary>
         public static void InvaliderCacheCatalogueRubidiums() => _cacheCatalogueRubidiums = null;
 
         // -------- I/O réseau --------
@@ -183,7 +174,7 @@ namespace Metrologo.Models
             }
         }
 
-        /// <summary>Écriture atomique (on passe par un .tmp puis Replace) pour ne pas risquer de corrompre le fichier.</summary>
+        /// <summary>Écriture atomique (.tmp puis Replace) pour ne pas corrompre le fichier.</summary>
         private static void EcrireFichierReseau<T>(string chemin, T donnees)
         {
             try
@@ -212,14 +203,14 @@ namespace Metrologo.Models
             }
             catch
             {
-                // Si l'écriture réseau échoue (partage HS), la modification est perdue côté fichier.
-                // Le cache mémoire, lui, garde l'état le temps de la session en cours.
+                // Partage HS : la modification est perdue côté fichier ; le cache mémoire
+                // garde l'état le temps de la session.
             }
         }
 
         // -------- Migration vers le réseau --------
 
-        /// <summary>One-shot : pousse vers le réseau les données qui traînent encore dans le settings.json local
+        /// <summary>Pousse vers le réseau les données restées dans le settings.json local
         /// (utilisateurs, catalogue rubidiums), puis vide les champs locaux. Idempotent.</summary>
         private static void MigrerDonneesPartageesVersReseau()
         {
@@ -251,8 +242,6 @@ namespace Metrologo.Models
 
             if (localModifie) SauvegarderLocal();
         }
-
-        // -------- DTO de persistance --------
 
         // -------- RÉSEAU : format des rapports Excel --------
 
@@ -299,8 +288,7 @@ namespace Metrologo.Models
             public string? CheminMacroXLA { get; set; }
             public FormatRapport? FormatRapports { get; set; }
 
-            // Champs legacy qu'on garde le temps de la migration one-shot vers le réseau.
-            // Une fois migrés ils passent à null et ne sont plus sérialisés.
+            // Champs legacy conservés pour la migration vers le réseau (mis à null une fois migrés).
             public List<Rubidium>? CatalogueRubidiums { get; set; }
             public List<Utilisateur>? Utilisateurs { get; set; }
         }

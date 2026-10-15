@@ -152,8 +152,7 @@
                 </StackPanel>
                 </ScrollViewer>
 
-                <!-- Utilisateur connecté (en gros) + bouton Quitter, à droite — à l'opposé de la
-                     navigation (Accueil / Administration…). -->
+                <!-- Utilisateur connecté + bouton Quitter, à droite. -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Indicateur persistant : changements admin reçus d'un autre poste.
                          Reste affiché jusqu'au clic (qui montre le détail et l'efface). -->
@@ -213,8 +212,6 @@
                 <TextBlock Text="{Binding TexteMode}" FontWeight="SemiBold" VerticalAlignment="Center"
                            Foreground="{StaticResource AsertiNavyBrush}"/>
                 <Rectangle Width="1" Fill="{DynamicResource ControlStrokeColorDefaultBrush}" Margin="16,2"/>
-                <!-- Le nom d'utilisateur connecté est désormais affiché en gros dans le bandeau
-                     bleu de navigation (à droite, près de « Quitter »). -->
                 <ui:SymbolIcon Symbol="Timer24" Margin="0,0,8,0" FontSize="14"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                 <TextBlock Text="{Binding RubidiumActifTexte}" VerticalAlignment="Center"/>

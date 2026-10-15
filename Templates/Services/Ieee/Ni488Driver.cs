@@ -6,10 +6,9 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Pilote IEEE qui attaque directement le NI-488.2 natif (P/Invoke sur ni4882.dll). C'est
-    /// l'alternative à VisaIeeeDriver : nettement plus rapide sur les cycles write+read courts
-    /// (~30-80 ms au lieu de ~190 ms en VISA), en échange d'un peu de tuyauterie à la main pour
-    /// gérer le statut et les erreurs. On retrouve l'approche du Delphi d'origine (dpib32).
+    /// Pilote IEEE direct sur le NI-488.2 natif (P/Invoke sur ni4882.dll), comme le Delphi d'origine
+    /// (dpib32). Alternative à VisaIeeeDriver, bien plus rapide sur les cycles write+read courts
+    /// (~30-80 ms au lieu de ~190 ms en VISA), mais statut et erreurs sont à gérer à la main.
     /// </summary>
     public sealed class Ni488Driver : IIeeeDriver, IDisposable
     {
@@ -18,7 +17,7 @@ namespace Metrologo.Services.Ieee
         private readonly object _lock = new();
         private bool _disposed;
 
-        // On réutilise le même tampon de lecture d'un cycle à l'autre, histoire de ne pas allouer à chaque fetch.
+        // Tampon de lecture réutilisé d'un cycle à l'autre (pas d'allocation à chaque fetch).
         private readonly byte[] _bufLecture = new byte[4096];
 
         public Ni488Driver(int boardId = 0) { _boardId = boardId; }
@@ -30,7 +29,7 @@ namespace Metrologo.Services.Ieee
             ct.ThrowIfCancellationRequested();
             EnsureNotDisposed();
             try { Ni488Native.SendIFC(_boardId); }
-            catch { /* on tente, tant pis si ça échoue */ }
+            catch { /* au mieux : un échec d'IFC n'est pas bloquant */ }
             return Task.CompletedTask;
         }
 
@@ -68,8 +67,7 @@ namespace Metrologo.Services.Ieee
             EnsureNotDisposed();
             int ud = ObtenirHandle(adresse);
 
-            // Règle le caractère EOS (le terminateur) attendu côté instrument
-            //   readTerm 10 = LF, 13 = CR, 256 = EOI seul
+            // Terminateur de lecture : readTerm 10 = LF, 13 = CR, 256 = EOI seul
             if (readTerm > 0 && readTerm < 256)
             {
                 Ni488Native.ibeos(ud, Ni488Native.REOS | readTerm);
@@ -84,7 +82,7 @@ namespace Metrologo.Services.Ieee
             {
                 if ((sta & Ni488Native.TIMO_BIT) != 0)
                 {
-                    // Timeout en lecture : on envoie un Device Clear pour remettre la session d'aplomb.
+                    // Timeout : Device Clear pour remettre la session d'aplomb.
                     TenterDeviceClear(ud, adresse, "LireAsync");
                     return Task.FromResult(string.Empty);
                 }
@@ -111,8 +109,7 @@ namespace Metrologo.Services.Ieee
 
         public Task DefinirRemoteLocalAsync(int adresse, bool remote, CancellationToken ct = default)
         {
-            // Pas encore implémenté : la mesure actuelle n'en a pas besoin.
-            // Si un jour il le faut : ibloc pour repasser en local, ou LLO en mode commande.
+            // Non implémenté (inutile pour l'instant) ; à prévoir : ibloc pour repasser en local.
             return Task.CompletedTask;
         }
 
@@ -123,7 +120,7 @@ namespace Metrologo.Services.Ieee
             {
                 foreach (var ud in _handles.Values)
                 {
-                    try { Ni488Native.ibonl(ud, 0); } catch { /* on ferme au mieux, sans s'inquiéter d'un échec */ }
+                    try { Ni488Native.ibonl(ud, 0); } catch { /* fermeture au mieux */ }
                 }
                 _handles.Clear();
             }
@@ -176,7 +173,7 @@ namespace Metrologo.Services.Ieee
 
                 // ibdev (board, pad, sad=0, tmo=T10s, eot=1, eos=0)
                 int ud = Ni488Native.ibdev(_boardId, adresse, 0,
-                    tmo: 13,        // T10s pour commencer
+                    tmo: 13,        // T10s par défaut
                     eot: 1,         // EOI affirmé sur le dernier octet
                     eos: 0);        // aucun char EOS au départ
 

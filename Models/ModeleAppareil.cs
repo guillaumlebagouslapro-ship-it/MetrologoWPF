@@ -53,12 +53,9 @@ namespace Metrologo.Models
             // Fabricant : vide = critère ignoré ; sinon « contient » (tolérant aux variantes).
             bool fabOk = string.IsNullOrEmpty(fabP) || fab.Contains(fabP);
 
-            // Modèle : correspondance EXACTE, et JAMAIS sur un motif vide.
-            // Avant, un « contains » faisait correspondre un 53220A à une fiche 53230A, et une
-            // fiche au modèle vide matchait TOUT appareil — d'où des appareils « reconnus » alors
-            // qu'ils n'avaient jamais été enregistrés, et l'impossibilité de les enregistrer à part.
-            // Avec l'égalité exacte, chaque modèle est indépendant (53220A ≠ 53230A) : un appareil
-            // n'est reconnu que si SON modèle précis figure au catalogue.
+            // Modèle : correspondance EXACTE, et JAMAIS sur un motif vide. Un « contains »
+            // confondait 53220A et 53230A, et une fiche au modèle vide reconnaissait tout
+            // appareil (impossible alors de l'enregistrer à part).
             bool modOk = !string.IsNullOrEmpty(modP) && mod == modP;
             return fabOk && modOk;
         }
@@ -85,9 +82,8 @@ namespace Metrologo.Models
         /// <summary>
         /// Commande bulk N mesures côté hardware, renvoyées en CSV. {N} = nombre de mesures
         /// (ex 53131A : ":SAMP:COUN {N};:READ:ARR? {N}"). Si renseignée, l'orchestrator passe
-        /// en bulk au lieu de boucler sur :FETCh? (10 ms x 30 : ~0,5 s contre ~6 s).
-        /// Vide = fallback :INIT:CONT ON + :FETCh?, puis :READ?. Stratégie entièrement pilotée
-        /// par le catalogue, rien de codé en dur.
+        /// en bulk au lieu de boucler sur :FETCh? (bien plus rapide).
+        /// Vide = fallback :INIT:CONT ON + :FETCh?, puis :READ?.
         /// </summary>
         public string CommandeMesureMultiple { get; set; } = string.Empty;
 
@@ -96,10 +92,10 @@ namespace Metrologo.Models
         /// Vide = fallback :FETCh? + Task.Delay (gate × 0,5) + détection doublons.</summary>
         public string CommandeFetchFresh { get; set; } = string.Empty;
 
-        /// <summary>WriteTerm : 0=none, 1=NL (LF), 2=EOI. Cf. Metrologo.ini.</summary>
+        /// <summary>Terminaison d'écriture : 0=none, 1=NL (LF), 2=EOI.</summary>
         public int TermWrite { get; set; } = 1;
 
-        /// <summary>ReadTerm : 10=LF (ASCII), 13=CR, 256=EOI only.</summary>
+        /// <summary>Terminaison de lecture : 10=LF (ASCII), 13=CR, 256=EOI seul.</summary>
         public int TermRead { get; set; } = 10;
 
         /// <summary>Nombre de caractères d'entête à sauter avant le nombre (1 = pas de saut).</summary>

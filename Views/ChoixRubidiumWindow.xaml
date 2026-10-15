@@ -78,9 +78,8 @@
                             </Button>
                         </Grid>
 
-                        <!-- Sélecteur Mode : choisir un rubidium du catalogue OU saisir
-                             une fréquence à la main (cas où aucun rubidium n'est raccordé
-                             ou tests avec une fréquence de référence custom). -->
+                        <!-- Mode : rubidium du catalogue OU fréquence saisie à la main
+                             (aucun rubidium raccordé, ou référence custom pour des tests). -->
                         <Grid Margin="0,0,0,14">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

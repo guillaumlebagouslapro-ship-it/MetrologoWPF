@@ -3,9 +3,8 @@ using System.Runtime.InteropServices;
 namespace Metrologo.Services.Ieee
 {
     /// <summary>
-    /// Couche P/Invoke vers les fonctions NI-488.2 natives (ni4882.dll). On reprend la recette du
-    /// Delphi d'origine (dpib32) : en court-circuitant la couche NI-VISA managée, un cycle write+read
-    /// GPIB tombe de ~190 ms à ~30-80 ms.
+    /// P/Invoke vers le NI-488.2 natif (ni4882.dll), comme le Delphi d'origine (dpib32) : sans
+    /// NI-VISA, un cycle write+read GPIB tombe de ~190 ms à ~30-80 ms.
     /// </summary>
     internal static class Ni488Native
     {

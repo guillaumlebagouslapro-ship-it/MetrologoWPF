@@ -26,9 +26,8 @@ namespace Metrologo.ViewModels
 
         public bool ListeVide => Utilisateurs.Count == 0;
 
-        /// <summary>Date du jour mise en forme à la française (ex. « mardi 22 mai 2026 »).
-        /// Le timer la rafraîchit en permanence : l'écran d'accueil peut rester ouvert des
-        /// heures, et la date comme l'heure doivent rester justes.</summary>
+        /// <summary>Date du jour à la française (ex. « mardi 22 mai 2026 »), rafraîchie par le timer
+        /// car l'écran peut rester ouvert des heures.</summary>
         public string DateActuelle =>
             CultureInfo.GetCultureInfo("fr-FR").TextInfo.ToTitleCase(
                 DateTime.Now.ToString("dddd d MMMM yyyy", CultureInfo.GetCultureInfo("fr-FR")));
@@ -36,9 +35,8 @@ namespace Metrologo.ViewModels
         /// <summary>Heure courante au format HH:mm, elle aussi rafraîchie en continu.</summary>
         public string HeureActuelle => DateTime.Now.ToString("HH:mm");
 
-        // Timer UI qui renotifie DateActuelle/HeureActuelle à chaque seconde. À l'écran
-        // rien ne bouge avant le changement de minute, mais ce tick rapproché évite le
-        // petit décalage qu'on percevrait juste après l'ouverture de l'écran.
+        // Timer UI : renotifie DateActuelle/HeureActuelle chaque seconde (évite un décalage
+        // visible à l'ouverture de l'écran, bien que l'affichage ne change qu'à la minute).
         private readonly System.Windows.Threading.DispatcherTimer _horloge;
 
         public string NombreComptesTexte => Utilisateurs.Count switch

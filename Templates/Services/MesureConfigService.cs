@@ -4,11 +4,10 @@ using Metrologo.Models;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Lit Mesures_Config.txt (dans LocalAppData\Metrologo) : pour chaque type de mesure, le
-    /// n° de module et la fonction, qu'on recopie dans les colonnes A et B de la feuille de
-    /// mesure (la colonne C, le temps de gate, vient elle du choix de l'utilisateur). C'est un
-    /// simple format INI que l'admin peut éditer ; s'il n'existe pas encore, on le crée au
-    /// premier démarrage avec les valeurs livrées d'origine.
+    /// Lit Mesures_Config.txt (format INI éditable par l'admin) : pour chaque type de mesure, le
+    /// n° de module et la fonction recopiés en colonnes A et B de la feuille de mesure (la
+    /// colonne C, le temps de gate, vient du choix de l'utilisateur). Créé avec les valeurs
+    /// d'origine s'il n'existe pas.
     /// </summary>
     public static class MesureConfigService
     {
@@ -16,9 +15,8 @@ namespace Metrologo.Services
         private static Dictionary<string, (string Module, string Fonction)>? _cache;
 
         /// <summary>
-        /// Renvoie le couple (Module, Fonction) pour un type de mesure donné ; chaque section du
-        /// fichier porte le nom du TypeMesure correspondant. Quand la section n'existe pas, on
-        /// renvoie ("", ""), ce qui laissera les cellules vides côté Excel.
+        /// Couple (Module, Fonction) d'un type de mesure (une section du fichier par TypeMesure) ;
+        /// ("", "") si la section n'existe pas (cellules Excel vides).
         /// </summary>
         public static (string Module, string Fonction) ObtenirPourType(TypeMesure type)
         {
@@ -26,14 +24,12 @@ namespace Metrologo.Services
             return _cache!.TryGetValue(type.ToString(), out var v) ? v : ("", "");
         }
 
-        /// <summary>Vide le cache pour qu'on relise le fichier au prochain appel — utile si l'admin l'a modifié en cours de session.</summary>
+        /// <summary>Vide le cache : le fichier est relu au prochain appel (modification en cours de session).</summary>
         public static void Recharger() => _cache = null;
 
         public static string CheminFichier =>
             CheminsMetrologo.ResoudreCheminAvecFallback(
                 CheminsMetrologo.FichierMesuresConfig, NomFichier);
-
-        // -------------------------------------------------------------------------
 
         private static void EnsureCache()
         {
@@ -73,7 +69,7 @@ namespace Metrologo.Services
             }
             catch (Exception)
             {
-                // Fichier mal formé : on laisse le cache vide, ce qui se traduira par des cellules vides côté Excel.
+                // Fichier mal formé : cache vide (cellules Excel vides).
             }
         }
 

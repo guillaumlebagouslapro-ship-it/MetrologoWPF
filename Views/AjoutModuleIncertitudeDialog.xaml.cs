@@ -14,9 +14,8 @@ namespace Metrologo.Views
         public AjoutModuleIncertitudeDialog() : this(null) { }
 
         /// <summary>
-        /// <paramref name="categorie"/> = le type de mesure en cours. Pour Tachy/Strobo on
-        /// coche d'office « Sans temps de mesure » (c'est le cas courant) ; sinon on laisse
-        /// la case vide.
+        /// <paramref name="categorie"/> = type de mesure en cours ; pour Tachy/Strobo,
+        /// « Sans temps de mesure » est coché d'office (cas courant).
         /// </summary>
         public AjoutModuleIncertitudeDialog(TypeMesure? categorie)
         {

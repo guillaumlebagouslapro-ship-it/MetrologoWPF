@@ -112,8 +112,7 @@
                     </StackPanel>
 
                     <!-- Bouton crayon : ouvre la configuration sans relancer une mesure
-                         (pour modifier un paramètre entre deux exécutions). Remplace
-                         l'ancien bouton « Configuration » de la grille de cartes. -->
+                         (pour modifier un paramètre entre deux exécutions). -->
                     <Button Command="{Binding OuvrirConfigurationCommand}"
                             ToolTip="Modifier la configuration"
                             Cursor="Hand"
@@ -234,10 +233,9 @@
                 </StackPanel>
             </Button>
 
-            <!-- Stop : style amplifié quand une mesure tourne (fond rouge vif, bordure
-                 épaisse, texte plus gros). Bascule en "Arrêt en cours…" dès le clic
-                 pour donner un feedback visuel instantané, le temps que le Device Clear
-                 + token soient honorés par le compteur (qq centaines de ms max). -->
+            <!-- Stop : style amplifié quand une mesure tourne. Bascule en "Arrêt en cours…"
+                 dès le clic (feedback immédiat) le temps que le Device Clear + token
+                 soient honorés par le compteur. -->
             <Button Grid.Column="4"
                     Command="{Binding StopperMesureCommand}">
                 <Button.Style>
@@ -475,10 +473,9 @@
                     </Grid>
                 </Border>
 
-                <!-- Filigrane logo ASERTI en fond de ce panneau (derrière le texte, transparent).
-                     Taille RELATIVE : le logo occupe ~70 % de la largeur du panneau via les colonnes
-                     en '*'. Même taille proportionnelle sur tout écran, et Stretch=Uniform garantit
-                     qu'il ne déborde jamais. Non cliquable (sélection/scroll du texte préservés). -->
+                <!-- Filigrane logo ASERTI derrière le texte. Taille relative (~70 % de la largeur
+                     via les colonnes en '*'), Stretch=Uniform pour ne jamais déborder.
+                     Non cliquable : sélection et défilement du texte préservés. -->
                 <Grid Grid.Row="1" IsHitTestVisible="False">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="15*"/>
@@ -510,9 +507,8 @@
                          BorderThickness="0"
                          Background="Transparent"
                          TextChanged="LogTextBox_TextChanged">
-                    <!-- Le style WPF-UI du TextBox rend son fond OPAQUE au survol/focus, ce qui
-                         masquait/assombrissait le filigrane derrière. On force le fond à rester
-                         transparent dans tous les états (et la bordure du soulignement de focus). -->
+                    <!-- Le style WPF-UI rend le fond OPAQUE au survol/focus, ce qui masquait le
+                         filigrane : on force le fond transparent dans tous les états. -->
                     <TextBox.Resources>
                         <SolidColorBrush x:Key="TextControlBackground" Color="Transparent"/>
                         <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent"/>

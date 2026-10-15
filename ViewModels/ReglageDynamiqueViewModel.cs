@@ -53,10 +53,8 @@ namespace Metrologo.ViewModels
             }
             else if (source.Type == TypeReglage.Numerique)
             {
-                // Quand aucune valeur n'est prévue, on laisse le champ vide : une TextBox vide dit
-                // bien à l'utilisateur "rien ne sera appliqué" (et CommandeSelectionnee renverra
-                // alors null). Préremplir avec "0" prêterait à confusion — "0 V" est une valeur tout
-                // à fait valable, et on ne veut pas l'envoyer par mégarde si l'utilisateur n'a rien tapé.
+                // Sans valeur par défaut, le champ reste vide (pas de "0" prérempli, qui serait une
+                // valeur valable ambiguë). Voir CommandeSelectionnee pour le traitement d'une saisie vide.
                 Valeur = source.ValeurDefaut ?? string.Empty;
             }
         }
@@ -96,10 +94,8 @@ namespace Metrologo.ViewModels
                     string? template = _source.Options.Count > 0 ? _source.Options[0].CommandeScpi : null;
                     if (string.IsNullOrWhiteSpace(template)) return null;
 
-                    // Si l'utilisateur n'a rien saisi, on envoie quand même un 0 explicite plutôt
-                    // que de zapper le réglage : sur certains compteurs (le 53131A), un trigger
-                    // laissé non configuré bascule en mode AUTO, ce qu'on ne veut surtout pas en
-                    // métrologie. La convention est donc : pas de saisie = on force la valeur 0.
+                    // Pas de saisie = on force 0 plutôt que d'omettre le réglage : sur certains compteurs
+                    // (53131A), un trigger non configuré bascule en mode AUTO, à éviter en métrologie.
                     string valeurNum = string.IsNullOrWhiteSpace(Valeur) ? "0" : Valeur.Replace(',', '.');
                     if (!double.TryParse(valeurNum, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) return null;
 
@@ -111,12 +107,9 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Restaure la sélection de ce réglage depuis les commandes SCPI mémorisées
-        /// (<c>MesureConfig.CommandesScpiReglages</c>), pour que la fenêtre Configuration
-        /// retrouve les choix de l'utilisateur à sa réouverture. Les deux types sont gérés :
-        ///  - <b>Choix</b> : on re-coche l'option dont la commande est présente dans la liste.
-        ///  - <b>Numérique</b> (le Trigger, par ex.) : on repère la commande qui colle au template
-        ///    <c>"préfixe{0}suffixe"</c>, puis on en réextrait la valeur pour réalimenter le champ.
+        /// Restaure la sélection depuis les commandes SCPI mémorisées (<c>MesureConfig.CommandesScpiReglages</c>) :
+        /// Choix = re-coche l'option dont la commande est présente ; Numérique = retrouve la commande
+        /// correspondant au motif <c>"préfixe{0}suffixe"</c> et en réextrait la valeur.
         /// </summary>
         public void RestaurerDepuis(System.Collections.Generic.IEnumerable<string>? commandesPersistees)
         {
@@ -131,16 +124,13 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // Cas numérique : on reconstitue le motif "préfixe{0}suffixe" afin d'extraire la
-            // valeur de la commande mémorisée correspondante.
+            // Cas numérique : motif "préfixe{0}suffixe" pour extraire la valeur mémorisée.
             string? template = _source.Options.Count > 0 ? _source.Options[0].CommandeScpi : null;
             if (string.IsNullOrWhiteSpace(template)) return;
 
-            // Attention : un template peut être CHAÎNÉ (ex. 53230A : ":INP1:LEV:AUTO OFF;:INP1:LEV {0}").
-            // Au moment d'enregistrer, ConfigurationViewModel.SplitCommandesScpi l'a éclaté en
-            // entrées séparées (":INP1:LEV:AUTO OFF", ":INP1:LEV 1"). Pour retomber sur la bonne
-            // entrée, le préfixe/suffixe doit être dérivé du SEUL sous-template qui porte le {0}
-            // (":INP1:LEV {0}"), et non du template chaîné complet — sinon aucun match et la valeur est perdue.
+            // Un template peut être CHAÎNÉ (53230A : ":INP1:LEV:AUTO OFF;:INP1:LEV {0}") et a été éclaté en
+            // entrées séparées par ConfigurationViewModel.SplitCommandesScpi : préfixe/suffixe doivent
+            // venir du seul sous-template portant {0}, sinon aucun match et la valeur est perdue.
             string sousTemplate = SousCommandeAvecValeur(template);
             int pos = sousTemplate.IndexOf("{0}", System.StringComparison.Ordinal);
             if (pos < 0) return;
@@ -160,11 +150,9 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Dans un template SCPI possiblement chaîné ("a;:b{0};:c"), extrait le seul sous-template
-        /// qui contient le marqueur <c>{0}</c>. On reproduit ici exactement le découpage de
-        /// <c>ConfigurationViewModel.SplitCommandesScpi</c> (séparateur ";:", et le ":" initial
-        /// remis sur les parties suivantes), pour que le préfixe/suffixe obtenu colle au caractère
-        /// près à la commande mémorisée après split. Si le template n'est pas chaîné, on le renvoie tel quel.
+        /// Extrait d'un template SCPI possiblement chaîné ("a;:b{0};:c") le seul sous-template contenant
+        /// <c>{0}</c>. Reproduit exactement le découpage de <c>ConfigurationViewModel.SplitCommandesScpi</c>
+        /// (séparateur ";:", ":" initial remis sur les parties suivantes). Template non chaîné : renvoyé tel quel.
         /// </summary>
         private static string SousCommandeAvecValeur(string template)
         {

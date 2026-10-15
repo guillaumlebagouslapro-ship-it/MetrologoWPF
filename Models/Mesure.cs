@@ -23,11 +23,10 @@
         public SourceMesure SourceMesure { get; set; } = SourceMesure.Frequencemetre;
         public int NbMesures { get; set; } = 30;
 
-        // Paramètres issus des fichiers Delphi et .ini
         public bool InitManu { get; set; }
 
-        // --- Intervalle de temps piloté logiciel (53230A) ---
-        // Paramètres SCPI envoyés quand l'init manuelle est décochée. Cf. CONF:TINT.
+        // Intervalle de temps piloté logiciel (53230A) : paramètres SCPI (CONF:TINT)
+        // envoyés quand l'init manuelle est décochée.
 
         /// <summary>false = mesure d'intervalle sur 1 voie (start ET stop sur la voie 1) ;
         /// true = 2 voies (start voie 1, stop voie 2).</summary>
@@ -55,7 +54,7 @@
 
         /// <summary>
         /// Temps de porte. Mono-élément pour Fréquence/Intervalle/Tachy ; N gates pour
-        /// Stabilité (une feuille Excel par gate, remplace les anciennes procédures auto).
+        /// Stabilité (une feuille Excel par gate).
         /// Défaut index 6 (1 s), compat flux Fréquence.
         /// </summary>
         public List<int> GateIndices { get; set; } = new() { 6 };

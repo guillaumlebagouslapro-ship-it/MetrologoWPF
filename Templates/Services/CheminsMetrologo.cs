@@ -4,17 +4,12 @@ using System.Text.Json;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Le point d'entrée unique pour tous les chemins de fichiers que l'application
-    /// manipule en local (<c>%LocalAppData%\Metrologo\</c>). Dès qu'un service a besoin
-    /// de lire ou écrire un fichier utilisateur, il passe par ici. Comme ça, on ne se
-    /// retrouve pas avec des chemins en dur éparpillés partout, et on peut réorganiser
-    /// les sous-dossiers proprement et au même endroit.
+    /// Point d'entrée unique pour tous les chemins de fichiers de l'application
+    /// (local : <c>%LocalAppData%\Metrologo\</c>, partagé : racine serveur <see cref="BaseServeur"/>).
+    /// Aucun service ne doit coder un chemin en dur.
     /// <para/>
-    /// Au démarrage de l'app (voir <c>App.OnStartup</c>), on appelle
-    /// <see cref="MigrerAnciensFichiers"/> : elle déplace en douce les fichiers qui
-    /// traînaient à plat dans <c>%LocalAppData%\Metrologo\</c> vers leurs nouveaux
-    /// sous-dossiers (<c>Configuration\</c>, <c>Presets\</c>, etc.). Elle est idempotente,
-    /// donc aucun souci à la rappeler à chaque lancement.
+    /// <see cref="MigrerAnciensFichiers"/> (appelée par <c>App.OnStartup</c>) range dans leurs
+    /// sous-dossiers les fichiers historiquement à plat ; elle est idempotente.
     /// </summary>
     public static class CheminsMetrologo
     {
@@ -23,33 +18,25 @@ namespace Metrologo.Services
         private static Dictionary<string, string> _overrides = new();
 
         /// <summary>
-        /// Clé un peu particulière dans paths.config.json (présente côté local comme côté
-        /// master) : elle pointe vers le fichier MAÎTRE sur le partage serveur. Si elle est
-        /// renseignée, l'app va lire ce fichier distant au démarrage et ses valeurs prennent
-        /// le pas sur le local. L'intérêt : l'admin ne modifie les chemins qu'une seule fois,
-        /// sur le serveur, et le changement se propage tout seul à TOUS les postes, sans avoir
-        /// à passer sur chaque PC à la main.
+        /// Clé particulière de paths.config.json : elle pointe vers le fichier MAÎTRE sur le
+        /// partage serveur. Si elle est renseignée, ses valeurs prennent le pas sur le local
+        /// au démarrage : l'admin modifie les chemins une seule fois et tous les postes suivent.
         /// </summary>
         public const string CleMasterPathsUrl = "_MasterPathsUrl";
 
         /// <summary>
-        /// La racine du partage serveur, là où on centralise tout ce que les postes
-        /// partagent (Incertitudes, Presets, Catalogues, ArchivesLogs, etc.). Tous les
-        /// dossiers réseau partent de cette racine.
+        /// Racine du partage serveur (Incertitudes, Presets, Catalogues, ArchivesLogs, etc.).
         /// </summary>
         public const string BaseServeur = @"M:\exe_spe\Data_Metrologo";
 
         /// <summary>
-        /// L'emplacement par défaut du fichier maître sur le serveur. Sur un poste qui n'a
-        /// jamais été configuré, l'app va tester ce chemin au démarrage et, s'il répond,
-        /// l'adopter comme source des chemins partagés.
+        /// Emplacement par défaut du fichier maître. Un poste jamais configuré l'adopte au
+        /// démarrage s'il répond.
         /// </summary>
         public static readonly string MasterPathsUrlDefaut =
             Path.Combine(BaseServeur, "paths.config.json");
 
-        // Chemins serveur par défaut. Ils servent à amorcer le fichier master la première
-        // fois, quand il n'existe pas encore. Une fois écrits dans paths.config.json, ce
-        // sont les propriétés Incertitudes/Presets/etc. qui les exposent aux services.
+        // Chemins serveur par défaut : ils servent à amorcer le fichier master (voir AssurerStructureServeur).
         public static readonly string IncertitudesServeurDefaut  = Path.Combine(BaseServeur, "Incertitudes");
         public static readonly string PresetsServeurDefaut       = Path.Combine(BaseServeur, "Presets");
         public static readonly string CataloguesServeurDefaut    = Path.Combine(BaseServeur, "Catalogues");
@@ -67,24 +54,16 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Charge les overrides de chemins. Voici comment ça se déroule :
-        ///   1. On lit le cache local <c>Configuration\paths.config.json</c>.
-        ///   2. S'il n'y a pas de MasterPathsUrl dedans, on tente le défaut serveur
-        ///      (<see cref="MasterPathsUrlDefaut"/>). Si le fichier répond, on l'adopte
-        ///      directement : un poste tout neuf se configure ainsi tout seul, sans que
-        ///      l'admin ait à intervenir.
-        ///   3. Si un MasterPathsUrl est défini et qu'on arrive à l'atteindre, ses valeurs
-        ///      remplacent les locales et on en profite pour rafraîchir le cache local
-        ///      (utile pour le mode hors-ligne).
-        ///   4. Si le maître est injoignable, on s'en tient au cache local, c'est-à-dire à
-        ///      la dernière config valide connue, et l'app continue en mode dégradé.
-        /// La méthode est idempotente : aucun problème à l'appeler à chaque démarrage.
+        /// Charge les overrides de chemins : cache local <c>Configuration\paths.config.json</c>,
+        /// puis fichier maître (adopté automatiquement via <see cref="MasterPathsUrlDefaut"/> sur
+        /// un poste vierge) dont les valeurs remplacent les locales et rafraîchissent le cache.
+        /// Maître injoignable : on garde le cache local (mode dégradé). Idempotente.
         /// </summary>
         public static void ChargerConfigChemins()
         {
             try
             {
-                // 1. On commence par charger le cache local
+                // 1. Cache local
                 string fichier = FichierPathsConfig;
                 if (File.Exists(fichier))
                 {
@@ -97,15 +76,14 @@ namespace Metrologo.Services
                     _overrides.Clear();
                 }
 
-                // 2. Choix automatique : pas de MasterPathsUrl configuré mais le défaut
-                // serveur répond ? On l'adopte direct (cas du poste vierge qui s'amorce).
+                // 2. Pas de MasterPathsUrl mais le défaut serveur répond : on l'adopte (poste vierge).
                 if (string.IsNullOrWhiteSpace(MasterPathsUrl) && File.Exists(MasterPathsUrlDefaut))
                 {
                     _overrides[CleMasterPathsUrl] = MasterPathsUrlDefaut;
                     try { SauverCacheLocal(); } catch { /* best-effort */ }
                 }
 
-                // 3. On va chercher le maître sur le serveur si une URL est renseignée
+                // 3. Fichier maître sur le serveur
                 string masterUrl = MasterPathsUrl;
                 if (!string.IsNullOrWhiteSpace(masterUrl) && File.Exists(masterUrl))
                 {
@@ -115,57 +93,43 @@ namespace Metrologo.Services
                         var dictMaster = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonMaster);
                         if (dictMaster != null)
                         {
-                            // Le master a le dernier mot, mais on garde quand même la
-                            // _MasterPathsUrl locale : sans elle, un master qui ne la
-                            // contient pas casserait tout le mécanisme au prochain run.
+                            // Le master a le dernier mot, sauf pour _MasterPathsUrl : on garde
+                            // la locale, sinon un master qui ne la contient pas casserait le mécanisme.
                             foreach (var kv in dictMaster)
                             {
                                 if (!string.Equals(kv.Key, CleMasterPathsUrl, StringComparison.OrdinalIgnoreCase))
                                     _overrides[kv.Key] = kv.Value;
                             }
-                            // On rafraîchit le cache local, ça servira au prochain démarrage hors-ligne.
+                            // Cache local rafraîchi pour un prochain démarrage hors-ligne.
                             try { SauverCacheLocal(); } catch { /* best-effort */ }
                         }
                     }
                     catch
                     {
-                        // Master injoignable ou corrompu : on laisse le cache local tel
-                        // quel. Pas de log fatal, le mode dégradé est voulu.
+                        // Master injoignable ou corrompu : on garde le cache local (mode dégradé voulu).
                     }
                 }
             }
             catch
             {
-                // JSON corrompu ou illisible : on retombe sur les chemins par défaut.
+                // JSON corrompu ou illisible : chemins par défaut.
                 _overrides = new Dictionary<string, string>();
             }
         }
 
         /// <summary>
-        /// Met en place la structure de dossiers sur le partage serveur, à condition que le
-        /// partage soit accessible et que la structure n'existe pas déjà :
-        ///   • <c>M:\exe_spe\Data_Metrologo\</c> et ses sous-dossiers (Incertitudes, Presets,
-        ///     Catalogues, ArchivesLogs, Mesures)
-        ///   • <c>M:\exe_spe\Data_Metrologo\paths.config.json</c>, rempli avec les chemins
-        ///     serveur comme valeurs par défaut
-        ///
-        /// Idempotente : si tout est déjà en place, elle ne touche à rien. On l'appelle au
-        /// démarrage sur tous les postes ; le premier qui a un partage accessible crée la
-        /// structure, et les autres la trouveront déjà prête.
-        ///
-        /// Renvoie <c>true</c> dès que le partage est accessible (qu'il ait fallu créer
-        /// quelque chose ou non), et <c>false</c> si M:\ ne répond pas.
+        /// Crée sur le partage serveur les sous-dossiers de données partagées et, s'il manque,
+        /// le <c>paths.config.json</c> maître (rempli avec les chemins serveur par défaut).
+        /// Appelée au démarrage par tous les postes ; idempotente. Renvoie <c>true</c> si le
+        /// partage est accessible, <c>false</c> si M:\ ne répond pas.
         /// </summary>
         public static bool AssurerStructureServeur()
         {
             try
             {
-                // Pour tester si le partage répond, on tente simplement de créer la racine.
-                // Ça échoue sans bruit si M:\ n'est pas monté (portable en déplacement,
-                // serveur en maintenance, etc.).
+                // Test d'accessibilité du partage : la création de la racine échoue si M:\ n'est pas monté.
                 Directory.CreateDirectory(BaseServeur);
 
-                // Les sous-dossiers de données partagées
                 Directory.CreateDirectory(IncertitudesServeurDefaut);
                 Directory.CreateDirectory(PresetsServeurDefaut);
                 Directory.CreateDirectory(CataloguesServeurDefaut);
@@ -176,8 +140,7 @@ namespace Metrologo.Services
                 Directory.CreateDirectory(LogsServeurDefaut);
                 Directory.CreateDirectory(BesanconServeurDefaut);
 
-                // Le fichier maître paths.config.json : on ne le crée que s'il n'existe
-                // pas, sinon on écraserait les réglages d'un autre admin.
+                // Maître créé seulement s'il n'existe pas (ne pas écraser les réglages d'un admin).
                 if (!File.Exists(MasterPathsUrlDefaut))
                 {
                     var config = new Dictionary<string, string>
@@ -198,10 +161,8 @@ namespace Metrologo.Services
                 }
                 else
                 {
-                    // Le master est déjà là : on se contente d'ajouter les clés qui
-                    // manquent. C'est une migration en douceur vers les nouveaux chemins
-                    // partagés (Utilisateurs/Rubidiums/Logs), sans toucher à ce que l'admin
-                    // a déjà configuré.
+                    // Master existant : on n'ajoute que les clés manquantes (Utilisateurs, Rubidiums,
+                    // Logs, Besancon), sans toucher à ce que l'admin a configuré.
                     try
                     {
                         string existant = File.ReadAllText(MasterPathsUrlDefaut);
@@ -233,24 +194,19 @@ namespace Metrologo.Services
             }
             catch
             {
-                // Partage serveur indisponible : on bascule proprement sur les chemins
-                // locaux par défaut, l'app reste tout à fait utilisable en local seul.
+                // Partage indisponible : l'app reste utilisable avec les chemins locaux.
                 return false;
             }
         }
 
         /// <summary>
-        /// Enregistre les overrides. Le cache local est toujours mis à jour. En plus, si
-        /// <paramref name="appliquerATousLesPostes"/> est vrai et qu'un MasterPathsUrl figure
-        /// dans les overrides, on écrit aussi le fichier maître sur le serveur : du coup, tous
-        /// les autres postes récupéreront ces valeurs à leur prochain démarrage.
-        /// Un champ laissé vide veut dire qu'on supprime l'override, et donc qu'on revient au
-        /// défaut local.
+        /// Enregistre les overrides dans le cache local ; si <paramref name="appliquerATousLesPostes"/>
+        /// et qu'un MasterPathsUrl figure dans les overrides, écrit aussi le fichier maître (les autres
+        /// postes le reprennent au démarrage). Un champ vide supprime l'override (retour au défaut).
         /// </summary>
         public static void EnregistrerConfigChemins(Dictionary<string, string> overrides,
                                                     bool appliquerATousLesPostes = false)
         {
-            // On écarte les champs vides : un chemin vide signifie pas d'override, donc défaut local.
             var aGarder = new Dictionary<string, string>();
             foreach (var kv in overrides)
             {
@@ -261,7 +217,6 @@ namespace Metrologo.Services
 
             SauverCacheLocal();
 
-            // On propage vers le maître si on nous l'a demandé
             if (appliquerATousLesPostes && _overrides.TryGetValue(CleMasterPathsUrl, out var masterUrl)
                 && !string.IsNullOrWhiteSpace(masterUrl))
             {
@@ -271,7 +226,7 @@ namespace Metrologo.Services
                     if (!string.IsNullOrEmpty(dossierMaster))
                         Directory.CreateDirectory(dossierMaster);
 
-                    // Le master ne porte pas la clé _MasterPathsUrl : chaque poste a la sienne
+                    // Le master ne porte pas _MasterPathsUrl : chaque poste a la sienne.
                     var aEcrireMaster = new Dictionary<string, string>(_overrides);
                     aEcrireMaster.Remove(CleMasterPathsUrl);
                     string jsonMaster = JsonSerializer.Serialize(aEcrireMaster,
@@ -287,7 +242,7 @@ namespace Metrologo.Services
             }
         }
 
-        /// <summary>Sauvegarde uniquement le cache local (interne).</summary>
+        /// <summary>Sauvegarde uniquement le cache local.</summary>
         private static void SauverCacheLocal()
         {
             Directory.CreateDirectory(Configuration);
@@ -308,108 +263,93 @@ namespace Metrologo.Services
 
         // ---------- Dossiers ----------
 
-        /// <summary>La racine locale. On ne la surcharge jamais : c'est toujours <c>%LocalAppData%\Metrologo\</c>.</summary>
+        /// <summary>Racine locale, jamais surchargée : <c>%LocalAppData%\Metrologo\</c>.</summary>
         public static string Racine => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Metrologo");
 
-        /// <summary>Réglages de l'UI, configuration globale, identifiants de la BDD. Toujours
-        /// en local, propre à chaque poste : on y stocke des secrets DPAPI liés au profil Windows.</summary>
+        /// <summary>Réglages UI et configuration globale. Toujours local : contient des secrets DPAPI liés au profil Windows.</summary>
         public static string Configuration => Path.Combine(Racine, "Configuration");
 
-        /// <summary>Les sauvegardes d'imports. Surchargeable côté réseau via la clé <c>Catalogues</c>.</summary>
+        /// <summary>Catalogue d'appareils et sauvegardes d'imports. Surchargeable via la clé <c>Catalogues</c>.</summary>
         public static string Catalogues =>
             AvecOverride(nameof(Catalogues), Path.Combine(Racine, "Catalogues"));
 
         /// <summary>
-        /// Le dossier des profils d'appareils legacy (EIP / Racal / Stanford), dont les
-        /// commandes GPIB peuvent s'éditer à la main. Par défaut il vit sur le réseau
-        /// (<c>M:\exe_spe\Data_Metrologo\Appareils_Legacy</c>) et reste surchargeable via la
-        /// clé <c>AppareilsLegacy</c>.
+        /// Profils d'appareils legacy (EIP / Racal / Stanford), aux commandes GPIB éditables à la
+        /// main. Par défaut sur le réseau (<c>Appareils_Legacy</c>), surchargeable via <c>AppareilsLegacy</c>.
         /// </summary>
         public static string AppareilsLegacy =>
             AvecOverride(nameof(AppareilsLegacy), Path.Combine(BaseServeur, "Appareils_Legacy"));
 
-        /// <summary>Les presets de stabilité. Surchargeable côté réseau via la clé <c>Presets</c>.</summary>
+        /// <summary>Presets de stabilité. Surchargeable via la clé <c>Presets</c>.</summary>
         public static string Presets =>
             AvecOverride(nameof(Presets), Path.Combine(Racine, "Presets"));
 
-        /// <summary>Les caches locaux. Toujours en local : un cache n'a aucun intérêt sur le réseau.</summary>
+        /// <summary>Caches locaux (jamais sur le réseau).</summary>
         public static string Cache => Path.Combine(Racine, "Cache");
 
-        /// <summary>Les modules d'incertitude. Surchargeable côté réseau via la clé <c>Incertitudes</c>.</summary>
+        /// <summary>Modules d'incertitude. Surchargeable via la clé <c>Incertitudes</c>.</summary>
         public static string Incertitudes =>
             AvecOverride(nameof(Incertitudes), Path.Combine(Racine, "Incertitudes"));
 
-        /// <summary>Les archives de logs. Surchargeable côté réseau via la clé <c>ArchivesLogs</c>.</summary>
+        /// <summary>Archives de logs. Surchargeable via la clé <c>ArchivesLogs</c>.</summary>
         public static string ArchivesLogs =>
             AvecOverride(nameof(ArchivesLogs), Path.Combine(Racine, "ArchivesLogs"));
 
-        /// <summary>Les utilisateurs partagés entre postes. Surchargeable côté réseau via la clé <c>Utilisateurs</c>.</summary>
+        /// <summary>Utilisateurs partagés entre postes. Surchargeable via la clé <c>Utilisateurs</c>.</summary>
         public static string Utilisateurs =>
             AvecOverride(nameof(Utilisateurs), Path.Combine(Racine, "Utilisateurs"));
 
-        /// <summary>Le catalogue de rubidiums partagé. Surchargeable côté réseau via la clé <c>Rubidiums</c>.</summary>
+        /// <summary>Catalogue de rubidiums partagé. Surchargeable via la clé <c>Rubidiums</c>.</summary>
         public static string Rubidiums =>
             AvecOverride(nameof(Rubidiums), Path.Combine(Racine, "Rubidiums"));
 
-        /// <summary>Les logs courants partagés entre postes. Surchargeable côté réseau via la clé <c>Logs</c>.</summary>
+        /// <summary>Logs courants partagés entre postes. Surchargeable via la clé <c>Logs</c>.</summary>
         public static string Logs =>
             AvecOverride(nameof(Logs), Path.Combine(Racine, "Logs"));
 
-        /// <summary>Les données de Besançon (valeurs journalières et moyennes hebdo), partagées
-        /// entre postes. Surchargeable côté réseau via la clé <c>Besancon</c>, qui pointe par
-        /// défaut sur M:\exe_spe\Data_Metrologo\Besancon.</summary>
+        /// <summary>Données de Besançon (valeurs journalières, moyennes hebdo), partagées entre postes.
+        /// Surchargeable via la clé <c>Besancon</c> (le master serveur la fixe à <see cref="BesanconServeurDefaut"/>).</summary>
         public static string Besancon =>
             AvecOverride(nameof(Besancon), Path.Combine(Racine, "Besancon"));
 
-        /// <summary>Le fichier JSON des utilisateurs, avec le hash de leur mot de passe.</summary>
+        /// <summary>JSON des utilisateurs (hash des mots de passe inclus).</summary>
         public static string FichierUtilisateurs =>
             Path.Combine(Utilisateurs, "utilisateurs.json");
 
-        /// <summary>Réglages des rapports Excel communs à tous les postes (format .xls / .xlsx), à la
-        /// racine des données partagées : à côté des dossiers Utilisateurs, Rubidiums, etc.</summary>
+        /// <summary>Réglages des rapports Excel communs à tous les postes (format .xls / .xlsx), à la racine des données partagées.</summary>
         public static string FichierReglagesRapports =>
             Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(Utilisateurs)) ?? Racine,
                 "reglages-rapports.json");
 
-        /// <summary>Le fichier JSON du catalogue de rubidiums partagé.</summary>
+        /// <summary>JSON du catalogue de rubidiums.</summary>
         public static string FichierCatalogueRubidiums =>
             Path.Combine(Rubidiums, "catalogue.json");
 
-        /// <summary>Le fichier JSON du rubidium actif, partagé entre tous les postes comme
-        /// référence commune. On le lit au démarrage pour que chaque poste reprenne le
-        /// rubidium qui a été sélectionné.</summary>
+        /// <summary>JSON du rubidium actif, référence commune lue au démarrage par chaque poste.</summary>
         public static string FichierRubidiumActif =>
             Path.Combine(Rubidiums, "rubidium-actif.json");
 
         /// <summary>
-        /// L'emplacement par défaut (le même sur tous les postes) où l'on duplique les
-        /// rapports Excel des mesures. Il pointe sur le dossier Documents public de Windows
-        /// (<c>C:\Users\Public\Documents\Metrologo_Backup</c>), que tous les utilisateurs du
-        /// poste peuvent écrire sans droits admin, à la différence de la racine <c>C:\</c>.
-        /// L'app le crée toute seule au démarrage s'il manque (voir App.OnStartup
-        /// → AssurerDossierMesuresLocal).
+        /// Emplacement par défaut des rapports Excel des mesures : Documents public de Windows
+        /// (<c>C:\Users\Public\Documents\Metrologo_Backup</c>), inscriptible sans droits admin
+        /// (contrairement à la racine <c>C:\</c>). Créé au démarrage (<see cref="AssurerDossierMesuresLocal"/>).
         /// </summary>
         public static string MesuresLocalDefaut => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments),
             "Metrologo_Backup");
 
         /// <summary>
-        /// L'emplacement local où l'on recopie les fichiers Excel produits par chaque mesure.
-        /// Par défaut c'est <see cref="MesuresLocalDefaut"/>, identique sur tous les postes,
-        /// mais un admin peut le rediriger ailleurs pour un poste donné via paths.config.json
-        /// (clé <c>MesuresLocal</c>). Chaque rapport part vers
-        /// <c>&lt;MesuresLocal&gt;\&lt;FI&gt;\Mesures_*.xlsx</c> juste après la sauvegarde
-        /// principale. Comme ça, même si le réseau lâche avec le serveur principal, on garde
-        /// une copie locale et on ne perd pas le rapport.
+        /// Dossier des rapports Excel des mesures (<c>&lt;MesuresLocal&gt;\&lt;FI&gt;\Mesures_*.xlsx</c>).
+        /// Par défaut <see cref="MesuresLocalDefaut"/>, redirigeable via la clé <c>MesuresLocal</c>
+        /// (en pratique le dossier réseau, voir <see cref="DossierFI"/>).
         /// </summary>
         public static string MesuresLocal =>
             AvecOverride(nameof(MesuresLocal), MesuresLocalDefaut);
 
         /// <summary>
-        /// Vrai dès qu'un chemin local non vide est défini. Avec le défaut générique, ce sera
-        /// toujours le cas, sauf si un admin a délibérément vidé le champ.
+        /// Vrai si un chemin non vide est défini (toujours, sauf champ délibérément vidé par un admin).
         /// </summary>
         public static bool MesuresLocalConfigure =>
             !string.IsNullOrWhiteSpace(MesuresLocal);
@@ -435,16 +375,15 @@ namespace Metrologo.Services
             Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Metrologo", NomDossierFI(numFI));
 
         /// <summary>
-        /// Dossier où vivent le rapport Excel et le journal d'une FI. Choisi une fois par FI et par
-        /// session (une série de mesures reste au même endroit) :
+        /// Dossier du rapport Excel et du journal d'une FI, choisi une fois par FI et par session :
         /// <list type="bullet">
-        ///   <item>réseau (<see cref="MesuresLocal"/>\&lt;FI&gt;) s'il est joignable — AUCUNE copie locale,
-        ///         le logiciel extérieur lit directement le fichier à jour. Un dossier local laissé par
-        ///         une session hors réseau est d'abord rapatrié puis supprimé ;</item>
-        ///   <item>sinon Bureau\Metrologo\&lt;FI&gt;, recopié sur le réseau dès qu'il revient
+        ///   <item>réseau (<see cref="MesuresLocal"/>\&lt;FI&gt;) s'il est joignable, sans copie locale
+        ///         (le logiciel extérieur lit directement le fichier à jour) ; un dossier local laissé
+        ///         par une session hors réseau est d'abord rapatrié puis supprimé ;</item>
+        ///   <item>sinon Bureau\Metrologo\&lt;FI&gt;, recopié sur le réseau dès son retour
         ///         (<see cref="TransfertReseauService"/>).</item>
         /// </list>
-        /// Appel potentiellement lent (test réseau, rapatriement) : hors thread UI de préférence.
+        /// Potentiellement lent (test réseau, rapatriement) : à appeler hors thread UI.
         /// </summary>
         public static string DossierFI(string numFI)
         {
@@ -473,9 +412,8 @@ namespace Metrologo.Services
         private static string _dossierMesuresMemorise = string.Empty;
 
         /// <summary>
-        /// Le dossier « Mesures » se règle dans Admin › Chemins d'accès (rien n'est figé). S'il a
-        /// changé depuis le dernier choix, on oublie les dossiers de FI mémorisés et le dernier test
-        /// réseau : la prochaine mesure part dans le nouveau dossier. À appeler sous _verrouDossiersFI.
+        /// Si le dossier « Mesures » (Admin › Chemins d'accès) a changé, oublie les dossiers de FI
+        /// mémorisés et le dernier test réseau. À appeler sous _verrouDossiersFI.
         /// </summary>
         private static void OublierSiDossierMesuresChange()
         {
@@ -507,9 +445,8 @@ namespace Metrologo.Services
 
         /// <summary>
         /// Le dossier réseau des mesures répond-il ? Un lecteur M: « endormi » met souvent plusieurs
-        /// secondes à se réveiller au premier accès : délai généreux, et résultat mémorisé (60 s si
-        /// joignable, 15 s sinon) pour ne pas re-tester à chaque appel. Voir aussi
-        /// <see cref="ReveillerReseauMesures"/>, lancé en arrière-plan au démarrage.
+        /// secondes à répondre : délai généreux, résultat mémorisé (60 s si joignable, 15 s sinon).
+        /// Voir <see cref="ReveillerReseauMesures"/>.
         /// </summary>
         public static bool ReseauMesuresJoignable(int delaiMs = 8000)
         {
@@ -541,15 +478,12 @@ namespace Metrologo.Services
             }
         }
 
-        /// <summary>À lancer au démarrage, en arrière-plan : réveille le lecteur réseau pour que le
-        /// premier test (au lancement d'une mesure) réponde tout de suite.</summary>
+        /// <summary>Au démarrage, en arrière-plan : réveille le lecteur réseau avant le premier test.</summary>
         public static void ReveillerReseauMesures() => Task.Run(() => ReseauMesuresJoignable());
 
         /// <summary>
-        /// Au lancement de chaque mesure (hors thread UI) : une FI passée en local (réseau absent ou
-        /// trop lent au départ) revient sur le réseau dès qu'il répond. Le classeur local est refermé
-        /// (la mesure le ferme et le rouvre de toute façon), le dossier est rapatrié puis supprimé,
-        /// et la suite de la série se fait directement sur le réseau.
+        /// Au lancement de chaque mesure (hors thread UI) : une FI passée en local revient sur le
+        /// réseau dès qu'il répond (classeur local refermé, dossier rapatrié puis supprimé).
         /// </summary>
         public static async Task ReevaluerDossierFIAsync(string numFI)
         {
@@ -566,7 +500,7 @@ namespace Metrologo.Services
 
             if (!await Task.Run(() => ReseauMesuresJoignable())) return;
 
-            // Le classeur local encore ouvert empêcherait de le déplacer : on le referme d'abord.
+            // Un classeur local encore ouvert empêcherait le déplacement.
             var excel = ExcelInteropHost.Instance;
             if (excel.AClasseurActif && !string.IsNullOrEmpty(excel.CheminClasseurActif)
                 && Path.GetFullPath(excel.CheminClasseurActif).StartsWith(Path.GetFullPath(local), StringComparison.OrdinalIgnoreCase))
@@ -581,10 +515,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Vérifie que le dossier <see cref="MesuresLocal"/> existe sur le poste et le crée
-        /// au besoin. Idempotente, et en best-effort : si ça coince (permissions, disque
-        /// inaccessible), on logge mais on ne lève pas d'exception ; la duplication des mesures
-        /// se contentera d'échouer en silence lors d'une écriture ultérieure.
+        /// Crée <see cref="MesuresLocal"/> si besoin. Idempotente, best-effort : renvoie <c>false</c>
+        /// sans lever d'exception si la création échoue.
         /// </summary>
         public static bool AssurerDossierMesuresLocal()
         {
@@ -602,9 +534,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Le témoin qui dit que le premier démarrage de l'app sur ce poste est déjà passé
-        /// (message d'accueil affiché, raccourci bureau créé). On le range dans Configuration\
-        /// pour qu'il reste propre au poste et ne soit pas synchronisé sur le réseau.
+        /// Témoin du premier démarrage déjà effectué sur ce poste (message d'accueil, raccourci
+        /// bureau). Dans Configuration\ : propre au poste, non partagé.
         /// </summary>
         public static string FichierFirstRunFlag =>
             Path.Combine(Configuration, "first_run_done.flag");
@@ -625,10 +556,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Crée un raccourci .lnk sur le Bureau de l'utilisateur courant pointant vers le
-        /// dossier local de sauvegarde des mesures. Distinct du raccourci serveur par le
-        /// suffixe « (local) » dans son nom. Idempotent : si le raccourci existe déjà,
-        /// ne le recrée pas. Retourne le chemin du raccourci créé, ou null si échec.
+        /// Crée sur le Bureau un raccourci .lnk « (local) » vers <see cref="MesuresLocal"/> (distinct
+        /// du raccourci serveur). Idempotent. Retourne son chemin, ou null en cas d'échec.
         /// </summary>
         public static string? CreerRaccourciBureauMesuresLocal()
         {
@@ -639,8 +568,7 @@ namespace Metrologo.Services
 
                 if (File.Exists(cheminRaccourci)) return cheminRaccourci;
 
-                // Création via COM Wscript.Shell — pas de dépendance externe nécessaire,
-                // dispo nativement sur Windows.
+                // Via COM WScript.Shell (natif Windows, aucune dépendance).
                 var t = Type.GetTypeFromProgID("WScript.Shell");
                 if (t == null) return null;
                 dynamic shell = Activator.CreateInstance(t)!;
@@ -675,17 +603,15 @@ namespace Metrologo.Services
             Path.Combine(Catalogues, "AppareilsCatalogue.json");
 
         /// <summary>
-        /// Fichier JSON du catalogue d'appareils partagé entre postes — vit dans le
-        /// dossier <see cref="Catalogues"/> (surchargeable réseau par défaut sur M:\).
-        /// Remplace l'ancien stockage SQL Server.
+        /// JSON du catalogue d'appareils partagé entre postes, dans <see cref="Catalogues"/>
+        /// (remplace l'ancien stockage SQL Server).
         /// </summary>
         public static string FichierCatalogueAppareils =>
             Path.Combine(Catalogues, "appareils.json");
 
         /// <summary>
-        /// Fichier JSON des profils d'appareils legacy (EIP / Racal / Stanford). Créé au 1er
-        /// lancement avec les valeurs par défaut, puis relu à chaque démarrage : permet de
-        /// corriger les commandes GPIB sur le réseau sans recompiler l'application.
+        /// JSON des profils d'appareils legacy (EIP / Racal / Stanford), créé au 1er lancement puis
+        /// relu à chaque démarrage : les commandes GPIB se corrigent sans recompiler.
         /// </summary>
         public static string FichierAppareilsLegacy =>
             Path.Combine(AppareilsLegacy, "appareils-legacy.json");
@@ -693,17 +619,13 @@ namespace Metrologo.Services
         // ---------- Migration ----------
 
         /// <summary>
-        /// Crée les sous-dossiers + déplace les fichiers historiquement à plat dans
-        /// <c>%LocalAppData%\Metrologo\</c> vers leur nouveau sous-dossier dédié.
-        /// Idempotent : ne fait rien si les fichiers sont déjà à leur place finale.
-        /// Erreurs swallowed (best-effort) : un fichier qui ne se déplace pas n'empêche
-        /// pas le démarrage.
+        /// Crée les sous-dossiers locaux et y déplace les fichiers historiquement à plat dans
+        /// <c>%LocalAppData%\Metrologo\</c>. Idempotent, best-effort (n'empêche pas le démarrage).
         /// </summary>
         public static void MigrerAnciensFichiers()
         {
             try
             {
-                // Crée tous les sous-dossiers (Directory.CreateDirectory est idempotent).
                 Directory.CreateDirectory(Racine);
                 Directory.CreateDirectory(Configuration);
                 Directory.CreateDirectory(Catalogues);
@@ -711,8 +633,8 @@ namespace Metrologo.Services
                 Directory.CreateDirectory(Cache);
                 Directory.CreateDirectory(Incertitudes);
 
-                // Fichiers individuels à déplacer (ancien nom à plat → nouveau chemin).
-                DeplacerSiPresent("settings.json",          FichierSettings);
+                // Ancien nom à plat → nouveau chemin.
+                DeplacerSiPresent("settings.json",         FichierSettings);
                 DeplacerSiPresent("Mesures_Config.txt",     FichierMesuresConfig);
                 DeplacerSiPresent("db.credentials",         FichierDbCredentials);
                 DeplacerSiPresent("PresetsStabilite.json",  FichierPresetsStabilite);
@@ -720,8 +642,7 @@ namespace Metrologo.Services
                 DeplacerSiPresent("journal.db-shm",         FichierJournalDbLegacy + "-shm");
                 DeplacerSiPresent("journal.db-wal",         FichierJournalDbLegacy + "-wal");
 
-                // Backups d'import du catalogue (motif "AppareilsCatalogue.json.imported.*"
-                // créés par l'ancienne migration JSON → SQL Server) → Catalogues\.
+                // Backups d'import du catalogue ("AppareilsCatalogue.json.imported.*") → Catalogues\.
                 foreach (var f in Directory.GetFiles(Racine, "AppareilsCatalogue.json*"))
                 {
                     string nom = Path.GetFileName(f);
@@ -731,17 +652,14 @@ namespace Metrologo.Services
             }
             catch
             {
-                // Best-effort : un échec de migration ne doit pas empêcher le démarrage
-                // (les services retomberont sur les anciens chemins via fallback ci-dessous).
+                // Best-effort : les services retombent sur les anciens chemins (voir ResoudreCheminAvecFallback).
             }
         }
 
         /// <summary>
-        /// Cherche un fichier d'abord à son nouveau chemin, sinon à l'ancien chemin (à plat
-        /// dans Racine). Utilisé par les services pour rester rétro-compatible avec une
-        /// installation où la migration n'aurait pas encore tourné (ex: appel à un service
-        /// avant <see cref="MigrerAnciensFichiers"/>). Retourne le 1er chemin existant, ou
-        /// <paramref name="nouveauChemin"/> si aucun n'existe (= chemin de création).
+        /// Cherche un fichier à son nouveau chemin, sinon à l'ancien (à plat dans Racine), pour le
+        /// cas où <see cref="MigrerAnciensFichiers"/> n'a pas encore tourné. Retourne le 1er chemin
+        /// existant, sinon <paramref name="nouveauChemin"/> (chemin de création).
         /// </summary>
         public static string ResoudreCheminAvecFallback(string nouveauChemin, string ancienNomRelatif)
         {
@@ -770,7 +688,7 @@ namespace Metrologo.Services
             }
             catch
             {
-                /* best-effort silencieux — fallback gérera */
+                /* best-effort silencieux (voir ResoudreCheminAvecFallback) */
             }
         }
     }

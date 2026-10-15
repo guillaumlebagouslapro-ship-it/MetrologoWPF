@@ -4,10 +4,9 @@ using Metrologo.Views;
 namespace Metrologo.Services.Journal
 {
     /// <summary>
-    /// Garde un œil sur le journal d'audit administrateur partagé et fait apparaître un toast
-    /// (sans bloquer) sur CE poste dès qu'un AUTRE poste a modifié la configuration : rubidium,
-    /// chemins, modules d'incertitude, catalogue, utilisateurs… On relit le fichier de façon
-    /// incrémentale toutes les 12 s. Démarré au lancement de l'app, sur le thread UI.
+    /// Surveille le journal d'audit administrateur partagé et affiche un toast (non bloquant) sur
+    /// CE poste dès qu'un AUTRE poste a modifié la configuration. Relecture incrémentale toutes les
+    /// 12 s ; démarré au lancement de l'app, sur le thread UI.
     /// </summary>
     public static class NotificationsAdminWatcher
     {
@@ -25,8 +24,7 @@ namespace Metrologo.Services.Journal
         {
             if (_timer != null) return;
 
-            // Point de départ : on se cale sur la fin du fichier, pour ne pas notifier ce qui
-            // s'est passé AVANT le lancement de ce poste, mais seulement ce qui arrivera ensuite.
+            // On part de la fin du fichier : seuls les changements postérieurs au lancement sont notifiés.
             _position = JournalAdminService.Position();
 
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
@@ -41,8 +39,7 @@ namespace Metrologo.Services.Journal
             catch { return; }
             if (nouvelles.Count == 0) return;
 
-            // On ne notifie que les CHANGEMENTS d'un AUTRE poste (pas les nôtres), et on laisse
-            // de côté les simples accès admin (login) qui ne touchent pas à la configuration.
+            // Seulement les changements d'un AUTRE poste, hors simples accès admin (login).
             var autres = nouvelles
                 .Where(e => !string.Equals(e.Machine, _machine, StringComparison.OrdinalIgnoreCase))
                 .Where(e => !e.Action.StartsWith("ACCES_ADMIN", StringComparison.OrdinalIgnoreCase))

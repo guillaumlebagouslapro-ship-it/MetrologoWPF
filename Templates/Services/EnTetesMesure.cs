@@ -107,22 +107,20 @@ namespace Metrologo.Services
             _ => t.ToString()
         };
 
-        /// <summary>Famille tachymétrique : contact, optique et stroboscope. Ces trois types
-        /// partagent METROLOGO_Tachy.xlsx (Hz→tr/min, ZNCoeffC/D, module en G10) et requièrent
-        /// un module Fréquence auxiliaire en plus du module principal.</summary>
+        /// <summary>Famille tachymétrique (contact, optique, stroboscope) : template commun
+        /// METROLOGO_Tachy.xlsx (Hz→tr/min, ZNCoeffC/D, module en G10) et module Fréquence auxiliaire requis.</summary>
         public static bool EstTachymetre(TypeMesure t) =>
             t == TypeMesure.TachyContact || t == TypeMesure.TachyOptique
             || t == TypeMesure.Stroboscope;
 
-        /// <summary>Types dont l'unité est le tr/min (tachys contact/optique + stroboscope).
-        /// Les bornes BorneBasse/BorneHaute des CSV sont en tr/min : multiplier la
-        /// fréquence moyenne (Hz) par 60 avant le lookup.</summary>
+        /// <summary>Types dont l'unité est le tr/min. Les bornes BorneBasse/BorneHaute des CSV
+        /// sont en tr/min : multiplier la fréquence moyenne (Hz) par 60 avant le lookup.</summary>
         public static bool EstUniteRpm(TypeMesure t) =>
             t == TypeMesure.TachyContact
             || t == TypeMesure.TachyOptique
             || t == TypeMesure.Stroboscope;
 
-        // Gates (index → libellé et secondes). Échelle synchronisée avec GateTimes
+        // Gates (index → libellé et secondes), à garder synchronisé avec GateTimes
         // (ConfigurationViewModel, SelectionGateViewModel, CatalogueAdapter).
         private static readonly string[] _libellesGate =
         {

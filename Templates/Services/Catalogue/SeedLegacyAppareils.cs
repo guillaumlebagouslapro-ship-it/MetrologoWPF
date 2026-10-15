@@ -7,15 +7,11 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 namespace Metrologo.Services.Catalogue
 {
     /// <summary>
-    /// Sème les 3 fréquencemètres legacy (EIP 545, Racal-Dana 1996, Stanford SR620). Comme ils ne
-    /// répondent pas à <c>*IDN?</c>, le scan GPIB ne les voit pas : on les injecte donc en mémoire
-    /// dans le catalogue au démarrage (opération idempotente, Ids stables) pour pouvoir les choisir
-    /// en mode « adresses fixes ».
-    ///
-    /// Les valeurs viennent de <c>docs/Commandes-GPIB-Appareils.md</c> et de
-    /// <c>docs/legacy-delphi/Metrologo.ini</c>. Tout se passe en mémoire
-    /// (cf. <see cref="CatalogueAppareilsService.AjouterEnMemoireSiAbsent"/>) : rien n'est écrit sur
-    /// le partage réseau, donc ça marche aussi hors-ligne ou en simulation.
+    /// Sème les 3 fréquencemètres legacy (EIP 545, Racal-Dana 1996, Stanford SR620). Ils ne répondent
+    /// pas à <c>*IDN?</c> (le scan GPIB ne les voit pas) : ils sont injectés en mémoire dans le
+    /// catalogue à chaque démarrage (idempotent, Ids stables) pour le mode « adresses fixes ».
+    /// Valeurs issues de <c>docs/Commandes-GPIB-Appareils.md</c> et <c>docs/legacy-delphi/Metrologo.ini</c>.
+    /// Rien n'est écrit dans le catalogue partagé (fonctionne hors-ligne et en simulation).
     /// </summary>
     public static class SeedLegacyAppareils
     {
@@ -23,7 +19,7 @@ namespace Metrologo.Services.Catalogue
         public const string IdRacal     = "legacy-racal-dana-1996";
         public const string IdEip       = "legacy-eip-545";
 
-        // Les libellés de gate de référence (calés sur CatalogueAdapter._secondesSlotsUi, slots 0..12).
+        // Gates de référence (13 premiers slots de CatalogueAdapter._secondesSlotsUi).
         private static readonly List<string> GatesCompletes = new()
         {
             "10 ms", "20 ms", "50 ms", "100 ms", "200 ms", "500 ms",
@@ -33,29 +29,23 @@ namespace Metrologo.Services.Catalogue
         private static readonly JsonSerializerOptions _jsonOpts = new()
         {
             WriteIndented = true,
-            PropertyNamingPolicy = null   // on garde la casse C#, le JSON reste facile à éditer à la main
+            PropertyNamingPolicy = null   // casse C# conservée (JSON édité à la main)
         };
 
         /// <summary>
-        /// Charge les profils legacy depuis le fichier réseau
-        /// (<see cref="CheminsMetrologo.FichierAppareilsLegacy"/>) et les verse dans le catalogue
-        /// (de façon idempotente). Au tout premier lancement le fichier n'existe pas encore : on
-        /// l'écrit avec les valeurs par défaut ci-dessous, et on le relit aux lancements suivants —
-        /// du coup l'utilisateur peut corriger les commandes GPIB directement dans le JSON, sans
-        /// recompiler. Si le réseau est injoignable, on se rabat sur les profils par défaut en mémoire.
+        /// Charge les profils legacy depuis <see cref="CheminsMetrologo.FichierAppareilsLegacy"/> et
+        /// les verse (idempotent) dans le catalogue. Le fichier est créé avec les valeurs par défaut
+        /// ci-dessous au 1er lancement puis relu : les commandes GPIB se corrigent dans le JSON sans
+        /// recompiler. Réseau injoignable : profils par défaut en mémoire.
         /// </summary>
         public static void EnsureSeeded()
         {
             var defauts = new List<ModeleAppareil> { Stanford(), Racal(), Eip() };
             var profils = ChargerOuCreerFichier(defauts);
 
-            // Garde-fou : appareils-legacy.json s'édite à la main, donc il peut très bien être
-            // périmé ou incomplet (écrit par une vieille version, ou sauvegardé pendant qu'un profil
-            // était cassé). Or un legacy qui a perdu un champ critique (ExeMesure, gates, init, ou
-            // l'attente SRQ pour ceux qui en ont besoin) envoie bien sa config mais NE LIT RIEN à la
-            // mesure. Du coup on valide chaque profil chargé et, s'il est invalide, on revient au
-            // profil de référence codé en dur — comme ça le fichier ne peut plus saboter la mesure
-            // dans notre dos.
+            // Garde-fou : appareils-legacy.json est édité à la main et peut être périmé ou incomplet.
+            // Un legacy sans champ critique (ExeMesure, gates, init, SRQ) envoie sa config mais ne lit
+            // rien à la mesure : tout profil invalide est remplacé par le profil de référence codé en dur.
             var parId = new Dictionary<string, ModeleAppareil>();
             foreach (var d in defauts) parId[d.Id] = d;
 
@@ -72,24 +62,22 @@ namespace Metrologo.Services.Catalogue
                     profils[i] = def;
                 }
             }
-            // On réinjecte tout profil de référence qui manquerait au fichier (cas d'un fichier partiel).
+            // Profils de référence absents du fichier (fichier partiel) réinjectés.
             foreach (var d in defauts)
                 if (!profils.Exists(p => p != null && p.Id == d.Id)) profils.Add(d);
 
-            // On remplace (plutôt que « ajouter si absent ») : si une copie corrompue d'un legacy
-            // a fini par fuiter dans le catalogue principal (appareils.json), on l'écrase ici par
-            // le profil de référence — une petite auto-réparation à chaque démarrage.
+            // Remplacement (et non « ajouter si absent ») : écrase une copie corrompue d'un legacy
+            // qui aurait fuité dans appareils.json (auto-réparation à chaque démarrage).
             var svc = CatalogueAppareilsService.Instance;
             foreach (var m in profils)
                 svc.RemplacerOuAjouterEnMemoire(m);
         }
 
         /// <summary>
-        /// Renvoie vrai si un profil legacy lu depuis le fichier est réellement utilisable pour
-        /// mesurer, c'est-à-dire si ses champs de communication critiques sont bien là. Quand on
-        /// passe une <paramref name="reference"/> (le profil codé en dur de même Id) et qu'elle
-        /// gère le SRQ, on exige en plus que le profil chargé le gère aussi — sans ça la lecture
-        /// démarre avant le MAV et ne ramène rien (le grand classique de l'EIP / Racal).
+        /// Le profil legacy lu est-il utilisable pour mesurer (champs de communication critiques
+        /// présents) ? Si la <paramref name="reference"/> (profil codé en dur de même Id) gère le SRQ,
+        /// le profil chargé doit le gérer aussi : sinon la lecture démarre avant le MAV et ne ramène
+        /// rien (cas classique de l'EIP / Racal).
         /// </summary>
         private static bool EstProfilLegacyValide(ModeleAppareil m, ModeleAppareil? reference)
         {
@@ -100,9 +88,6 @@ namespace Metrologo.Services.Catalogue
             if (string.IsNullOrWhiteSpace(p.ChaineInit)) return false;
             if (p.CommandesGateParSlot == null || p.CommandesGateParSlot.Count == 0) return false;
 
-            // Cohérence SRQ : un appareil qui DOIT attendre le MAV (référence GereSrq=true) mais
-            // dont le profil chargé aurait perdu GereSrq / SrqOn / SrqOff lirait trop tôt → on
-            // récupérerait une valeur vide.
             if (reference?.Parametres?.GereSrq == true)
             {
                 if (!p.GereSrq) return false;
@@ -112,10 +97,9 @@ namespace Metrologo.Services.Catalogue
         }
 
         /// <summary>
-        /// Réécrit le fichier réseau des profils legacy à partir des modèles legacy actuellement
-        /// dans le catalogue (avec, entre autres, leur <c>AdresseFixeParDefaut</c> modifiée en
-        /// Administration). Réservé à l'admin. Renvoie le chemin écrit, ou lève si le réseau est
-        /// injoignable.
+        /// Réécrit le fichier réseau des profils legacy à partir du catalogue (dont
+        /// <c>AdresseFixeParDefaut</c> modifiée en Administration). Réservé à l'admin. Renvoie le
+        /// chemin écrit ; lève si le réseau est injoignable.
         /// </summary>
         public static string Sauvegarder()
         {
@@ -152,7 +136,7 @@ namespace Metrologo.Services.Catalogue
                     return defauts;
                 }
 
-                // Premier lancement : on dépose les profils par défaut pour que l'utilisateur puisse les éditer.
+                // Premier lancement : dépôt des profils par défaut, éditables.
                 Directory.CreateDirectory(Path.GetDirectoryName(fichier)!);
                 File.WriteAllText(fichier, JsonSerializer.Serialize(defauts, _jsonOpts));
                 JournalLog.Info(CategorieLog.Configuration, "APPAREILS_LEGACY_CREATE",
@@ -166,8 +150,6 @@ namespace Metrologo.Services.Catalogue
                 return defauts;
             }
         }
-
-        // ---------------- Helpers ----------------
 
         private static ReglageAppareil Choix(string nom, params (string lib, string cmd)[] options)
         {
@@ -212,15 +194,13 @@ namespace Metrologo.Services.Catalogue
             },
             Reglages = new List<ReglageAppareil>
             {
-                // Le SR620 n'a pas de Voie C physique : comme dans le Delphi
-                // (F_ConfigStanford.pas, AS_INPUT = term1,0 / term1,1 / term1,2), l'entrée n'est
-                // qu'un sélecteur unique 50 Ω / 1 MΩ / UHF — on bascule en UHF avec « term1,2 »,
-                // pas via une voie à part. Dans le legacy, le couplage est masqué dès que l'entrée
-                // passe en UHF (le SR620 n'en tient pas compte dans ce mode).
+                // Le SR620 n'a pas de Voie C physique : comme dans le Delphi (F_ConfigStanford.pas,
+                // AS_INPUT = term1,0 / term1,1 / term1,2), l'entrée est un sélecteur unique
+                // 50 Ω / 1 MΩ / UHF (« term1,2 »). Le legacy masque le couplage en UHF (ignoré par le SR620).
                 Choix("Entrée Voie A", ("50 Ω", "term1,0"), ("1 MΩ", "term1,1"), ("UHF", "term1,2")),
                 Choix("Couplage Voie A", ("AC", "tcpl1,1"), ("DC", "tcpl1,0")),
-                // Voie B (canal 2) : memes parametres, seul l'indice de canal change dans la
-                // commande (term1/tcpl1 -> term2/tcpl2), UHF compris. A confirmer dans le manuel SR620.
+                // Voie B (canal 2) : seul l'indice de canal change (term1/tcpl1 -> term2/tcpl2),
+                // UHF compris. TODO : à confirmer dans le manuel SR620.
                 Choix("Entrée Voie B", ("50 Ω", "term2,0"), ("1 MΩ", "term2,1"), ("UHF", "term2,2")),
                 Choix("Couplage Voie B", ("AC", "tcpl2,1"), ("DC", "tcpl2,0")),
             }
@@ -263,8 +243,7 @@ namespace Metrologo.Services.Catalogue
             {
                 Choix("Impédance Voie A", ("A 50 Ω", "FN2 AZ1"), ("A 1 MΩ", "FN2 AZ0")),
                 Choix("Couplage Voie A", ("AC", "AA1"), ("DC", "AA0")),
-                // Voie B = l'entree HF (FN1) : pas de couplage (le Delphi masquait deja le
-                // couplage sur cette entree).
+                // Voie B = entrée HF (FN1), sans couplage (déjà masqué dans le Delphi).
                 Choix("Entrée Voie B", ("Entrée HF", "FN1")),
             }
         };
@@ -298,14 +277,12 @@ namespace Metrologo.Services.Catalogue
                     [0] = "R2", [3] = "R1", [6] = "R0"
                 }
             },
-            // EIP 545 : ni couplage, ni impédance, ni filtre, ni trigger — il n'y a que la bande
-            // à régler. Le sélecteur est calqué sur le Delphi (F_ConfigEIP.pas, AS_INPUT = B1/B2/B3,
-            // rgpGammesF « Gammes de fréquence »). Les plages proviennent de la doc constructeur
-            // EIP 545A (on n'a pas gardé les libellés du .dfm Delphi) :
+            // EIP 545 : seule la bande se règle (ni couplage, impédance, filtre, trigger). Sélecteur
+            // calqué sur le Delphi (F_ConfigEIP.pas, AS_INPUT = B1/B2/B3) ; plages issues de la doc
+            // constructeur EIP 545A :
             //   Bande 1 : 10 Hz – 100 MHz (1 MΩ, BNC)
             //   Bande 2 : 10 MHz – 1 GHz  (50 Ω, BNC)
             //   Bande 3 : 1 – 18 GHz      (50 Ω, type N)
-            // L'opérateur prend la bande qui correspond à la fréquence qu'il veut mesurer ;
             // ConfEntree reste « B1 » à l'init, comme dans le legacy.
             Reglages = new List<ReglageAppareil>
             {

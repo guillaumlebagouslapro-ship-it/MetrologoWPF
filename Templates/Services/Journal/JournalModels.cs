@@ -49,10 +49,8 @@
         };
 
         /// <summary>
-        /// Version lisible des Details JSON : on décode les échappements Unicode les plus
-        /// courants (<c>"</c> → <c>"</c>, <c>+</c> → <c>+</c>, <c>></c> → <c>&gt;</c>…)
-        /// pour que les valeurs SCPI s'affichent proprement dans l'UI, au lieu d'être noyées
-        /// sous les échappements du JsonSerializer.
+        /// Version lisible des Details JSON : décode les échappements Unicode du JsonSerializer
+        /// (guillemets, +, &gt;...) pour que les valeurs SCPI s'affichent proprement.
         /// </summary>
         public string? DetailsLisibles
         {
@@ -127,10 +125,9 @@
         public string? Recherche { get; set; }
 
         /// <summary>
-        /// Si renseigné, on ne charge que les entrées dont l'<see cref="LogEntry.Action"/> figure
-        /// dans cette liste, ou dont la sévérité est Avertissement/Erreur (qui restent toujours
-        /// visibles). Ça permet de pré-filtrer en amont et d'éviter de remonter des milliers
-        /// d'entrées techniques en mode normal. Null = aucune restriction (mode debug).
+        /// Si renseigné, ne charge que les entrées dont l'<see cref="LogEntry.Action"/> figure dans
+        /// cette liste, ou de sévérité Avertissement/Erreur (toujours visibles) : évite de remonter
+        /// des milliers d'entrées techniques en mode normal. Null = aucune restriction (mode debug).
         /// </summary>
         public IReadOnlyCollection<string>? ActionsMetier { get; set; }
     }

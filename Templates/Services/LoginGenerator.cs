@@ -4,11 +4,9 @@ using System.Text;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Génère un login canonique au format <c>prenom.nom</c> à partir des saisies admin.
-    /// Normalise : retire les accents, met en minuscules, ne garde que [a-z0-9.-],
-    /// remplace les espaces par des tirets pour les noms composés (« De Pas » → « de-pas »).
-    /// La détection de collision est gérée par <see cref="UtilisateursService"/> qui
-    /// ajoute un suffixe numérique si nécessaire.
+    /// Génère un login <c>prenom.nom</c> : sans accents, en minuscules, restreint à [a-z0-9.-],
+    /// espaces en tirets (« De Pas » → « de-pas »). Les collisions sont gérées par
+    /// <see cref="ComptesLocauxService"/> (suffixe numérique).
     /// </summary>
     public static class LoginGenerator
     {
@@ -26,7 +24,7 @@ namespace Metrologo.Services
         {
             if (string.IsNullOrWhiteSpace(s)) return string.Empty;
 
-            // Décomposition Unicode pour supprimer les diacritiques (é → e, ç → c…)
+            // Décomposition Unicode pour retirer les diacritiques (é → e, ç → c…)
             string decompose = s.Normalize(NormalizationForm.FormD);
             var sb = new StringBuilder(decompose.Length);
             foreach (char c in decompose)

@@ -7,10 +7,9 @@ namespace Metrologo.Views
 {
     public partial class SaisiePostMesureFreqWindow : FluentWindow
     {
-        // On veut repasser au premier plan même quand Excel (un autre process) garde le focus.
-        // En pratique Topmost ne suffit pas toujours : juste après qu'Excel a pris la main via
-        // Interop, Windows verrouille le foreground. La parade classique : attacher notre thread
-        // d'input au sien le temps d'appeler SetForegroundWindow, ce qui lève ce verrou.
+        // Repasser devant Excel : Topmost ne suffit pas, Windows verrouille le foreground juste
+        // après qu'Excel (Interop) a pris la main. Parade : attacher notre thread d'input au sien
+        // le temps d'appeler SetForegroundWindow.
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 

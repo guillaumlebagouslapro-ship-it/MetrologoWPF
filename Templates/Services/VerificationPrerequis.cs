@@ -3,19 +3,16 @@ using System.Runtime.InteropServices;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Au démarrage, on s'assure que les dépendances système dont les mesures ont besoin sont
-    /// bien là :
-    ///   • Excel (COM via ProgID) — pour générer les rapports
-    ///   • NI-VISA — le runtime qui pilote le bus GPIB via l'assembly managée
-    ///   • NI-488.2 (ni4882.dll) — le fast-path P/Invoke pour les commandes GPIB
-    ///
-    /// Il manque l'une d'elles ? Ce n'est pas bloquant : on peut très bien vouloir faire de
-    /// l'administration sans Excel ni GPIB. On se contente d'avertir via un dialog qui détaille
-    /// l'impact.
+    /// Contrôle au démarrage des dépendances système des mesures :
+    ///   • Excel (COM via ProgID) — rapports
+    ///   • NI-VISA — pilotage du bus GPIB via l'assembly managée
+    ///   • NI-488.2 (ni4882.dll) — fast-path P/Invoke pour les commandes GPIB
+    /// Un prérequis manquant n'est pas bloquant (l'administration reste possible sans Excel ni
+    /// GPIB) : un dialogue en détaille simplement l'impact.
     /// </summary>
     public static class VerificationPrerequis
     {
-        /// <summary>Décrit un prérequis manquant, tel qu'on l'affiche à l'utilisateur.</summary>
+        /// <summary>Prérequis manquant, tel qu'affiché à l'utilisateur.</summary>
         public sealed class Prerequis
         {
             public string Nom { get; init; } = string.Empty;
@@ -26,8 +23,7 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Passe tous les contrôles en revue et renvoie la liste de ce qui manque. Une liste
-        /// vide veut donc dire que l'environnement est bon.
+        /// Renvoie la liste des prérequis manquants (vide : environnement correct).
         /// </summary>
         public static List<Prerequis> VerifierTout()
         {
@@ -77,9 +73,7 @@ namespace Metrologo.Services
             return manquants;
         }
 
-        // -------- Les tests pris un par un --------
-
-        /// <summary>Renvoie vrai si Excel est installé, repéré via la clé COM <c>Excel.Application</c>.</summary>
+        /// <summary>Excel est-il installé (ProgID COM <c>Excel.Application</c>) ?</summary>
         public static bool ExcelInstalle()
         {
             try
@@ -93,9 +87,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Renvoie vrai si le runtime NI-VISA est exploitable. L'astuce : on essaie d'instancier
-        /// un <c>NationalInstruments.Visa.ResourceManager</c>, ce qui force le chargement des
-        /// assemblies et des DLLs natives. Si VISA n'est pas installé, le constructeur lève.
+        /// Le runtime NI-VISA est-il exploitable ? Instancier un <c>NationalInstruments.Visa.ResourceManager</c>
+        /// force le chargement des assemblies et DLLs natives ; le constructeur lève si VISA est absent.
         /// </summary>
         public static bool NiVisaInstalle()
         {
@@ -111,8 +104,7 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Renvoie vrai si le loader Windows arrive à trouver et charger <c>ni4882.dll</c>.
-        /// Sans effet de bord : on fait un <c>LoadLibrary</c> et on relâche aussitôt.
+        /// <c>ni4882.dll</c> est-elle chargeable ? (<c>LoadLibrary</c> aussitôt relâché.)
         /// </summary>
         public static bool Ni488DllAccessible()
         {

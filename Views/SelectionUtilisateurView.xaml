@@ -53,9 +53,8 @@
 
                             <!-- Header : logo + version -->
                             <StackPanel Grid.Row="0">
-                                <!-- Logo couleur sur cartouche blanc (comme la barre de navigation) :
-                                     il ressort nettement sur le fond navy, SANS artefact de détourage
-                                     (le détourage d'un logo raster laisse des bords colorés sur fond sombre). -->
+                                <!-- Logo couleur sur cartouche blanc (comme la barre de navigation) : évite
+                                     les bords colorés qu'un détourage de logo raster laisse sur fond sombre. -->
                                 <Border Background="White"
                                         CornerRadius="8"
                                         Padding="14,10"

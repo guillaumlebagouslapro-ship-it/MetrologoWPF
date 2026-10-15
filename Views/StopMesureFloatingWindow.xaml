@@ -12,8 +12,7 @@
         Cursor="Arrow"
         Focusable="True">
 
-    <!-- Tout clic n'importe où sur la fenêtre déclenche l'arrêt — peu importe
-         que tu vises le bouton ou pas. -->
+    <!-- Tout clic sur la fenêtre déclenche l'arrêt (géré dans le code-behind). -->
     <Grid x:Name="GridRoot" Background="#FFDC2626" Cursor="Hand">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -38,7 +37,7 @@
                        FontWeight="Bold"
                        HorizontalAlignment="Center"
                        Margin="14,8,14,8"/>
-            <!-- Stabilité seulement : heure de fin estimée, rafraîchie par la fenêtre (SuiviFinStab) -->
+            <!-- Stabilité seulement : heure de fin estimée (SuiviFinStab) -->
             <TextBlock x:Name="TxtFinEstimee"
                        Foreground="White"
                        FontSize="13"

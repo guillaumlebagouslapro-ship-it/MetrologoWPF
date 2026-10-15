@@ -3,13 +3,9 @@ using System.Security.Cryptography;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Hash PBKDF2-HMAC-SHA256 avec sel aléatoire par compte.
-    ///
-    /// Format auto-décrit : <c>PBKDF2$&lt;iterations&gt;$&lt;sel-base64&gt;$&lt;hash-base64&gt;</c>
-    /// Permet d'augmenter les itérations sans casser les anciens comptes, et de coexister
-    /// avec Argon2/scrypt si migration future (préfixe distinct).
-    ///
-    /// 100 000 itérations = recommandation OWASP 2023 (~50 ms/hash, prohibitif en brute-force).
+    /// Hash PBKDF2-HMAC-SHA256 avec sel aléatoire par compte, au format auto-décrit
+    /// <c>PBKDF2$&lt;iterations&gt;$&lt;sel-base64&gt;$&lt;hash-base64&gt;</c> : on peut augmenter les
+    /// itérations sans casser les anciens comptes. 100 000 itérations (recommandation OWASP 2023).
     /// </summary>
     public static class PasswordHasher
     {
@@ -19,7 +15,7 @@ namespace Metrologo.Services
         private const string Algorithme = "PBKDF2";
 
         /// <summary>
-        /// Génère un hash auto-décrit prêt à stocker dans <c>T_UTILISATEURS.PasswordHash</c>.
+        /// Génère un hash auto-décrit, à stocker dans <c>Utilisateur.PasswordHash</c>.
         /// </summary>
         public static string HashPassword(string password)
         {
@@ -39,7 +35,6 @@ namespace Metrologo.Services
         {
             if (string.IsNullOrEmpty(password) || string.IsNullOrEmpty(hashStocke)) return false;
 
-            // Format : PBKDF2$iter$sel$hash
             string[] parties = hashStocke.Split('$');
             if (parties.Length != 4 || parties[0] != Algorithme) return false;
             if (!int.TryParse(parties[1], out int iterations) || iterations < 1) return false;
@@ -54,7 +49,7 @@ namespace Metrologo.Services
 
             byte[] hashCalcule = DeriverHash(password, sel, iterations);
 
-            // Comparaison à temps constant — empêche les attaques par timing.
+            // Temps constant (anti-timing).
             return CryptographicOperations.FixedTimeEquals(hashCalcule, hashAttendu);
         }
 

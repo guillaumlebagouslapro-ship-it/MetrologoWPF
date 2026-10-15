@@ -58,7 +58,7 @@
         /// </summary>
         public string CommandeBulkInit { get; set; } = string.Empty;
 
-        // remplace les 3 TStringList de Delphi : clé = index de gate, valeur = GateConfig
+        // clé = index de gate, valeur = sa configuration
         public Dictionary<int, GateConfig> Gates { get; set; } = new Dictionary<int, GateConfig>();
     }
 }

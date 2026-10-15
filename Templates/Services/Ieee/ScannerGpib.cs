@@ -131,14 +131,11 @@ namespace Metrologo.Services.Ieee
                 }
             }
 
-            // ---- Bus LAN (LXI) : on récupère les ressources TCPIP via Find("?*") (toutes
-            //      interfaces) puis on filtre sur "TCPIP". Find("?*") est celui de « Lister les
-            //      ressources VISA » : il remonte aussi bien le canal VXI-11 (inst0::INSTR) que le
-            //      socket SCPI brut (port 5025, ::SOCKET), là où Find("TCPIP?*INSTR") seul oublie
-            //      les sockets. C'est essentiel en liaison directe (link-local 169.254.x.x) : le
-            //      VXI-11 y est souvent injoignable et le nom mDNS « xxx.local » ne se résout pas
-            //      pour une socket brute — seule la ressource SOCKET (IP numérique) répond alors.
-            //      Pas de balayage d'IP : VISA ne remonte que ce qu'il découvre ou ce qui est dans NI-MAX.
+            // ---- Bus LAN (LXI) : Find("?*") (toutes interfaces) filtré sur "TCPIP". Contrairement à
+            //      Find("TCPIP?*INSTR"), il remonte aussi les sockets SCPI bruts (port 5025, ::SOCKET),
+            //      seuls à répondre en liaison directe (link-local 169.254.x.x) où le VXI-11 est souvent
+            //      injoignable. Pas de balayage d'IP : VISA ne remonte que ce qu'il découvre ou ce
+            //      qui est dans NI-MAX.
             List<string> toutesRessources;
             try { toutesRessources = new List<string>(rm.Find("?*")); }
             catch (NativeVisaException) { toutesRessources = new List<string>(); }
@@ -152,10 +149,9 @@ namespace Metrologo.Services.Ieee
                 lan.Add(await Task.Run(() => InterrogerRessource(rm, res, timeoutMs), ct));
             }
 
-            // Un même appareil expose souvent VXI-11 ET socket. On garde les canaux qui répondent,
-            // dédupliqués par identité IDN (un appareil physique = une seule ligne ; VXI-11 préféré
-            // en cas de double réponse). Si RIEN ne répond, on affiche quand même les ressources
-            // découvertes (avec leur erreur) pour rester diagnosticable au lieu de masquer le LAN.
+            // Un appareil expose souvent VXI-11 ET socket : on garde les canaux qui répondent,
+            // dédupliqués par identité IDN (VXI-11 préféré). Si rien ne répond, on affiche quand
+            // même les ressources découvertes avec leur erreur, pour rester diagnosticable.
             var aGarder = lan.Where(x => x.Repond)
                          .GroupBy(x => $"{x.Fabricant}|{x.Modele}|{x.NumeroSerie}", StringComparer.OrdinalIgnoreCase)
                          .Select(g => g.OrderBy(x => EstSocket(x.Ressource) ? 1 : 0).First())
@@ -184,7 +180,6 @@ namespace Metrologo.Services.Ieee
         private static ResultatScanGpib InterrogerRessource(
             ResourceManager rm, string resource, int timeoutMs)
         {
-            // extrait board + adresse de la chaîne VISA (ex "GPIB9::15::INSTR")
             int board = 0, addr = 0;
             var m = _regexGpib.Match(resource);
             if (m.Success)
@@ -205,17 +200,14 @@ namespace Metrologo.Services.Ieee
             var ml = _regexTcpip.Match(resource);
             if (ml.Success) hote = ml.Groups[1].Value;
 
-            // Ressource socket déjà découverte (port 5025) : interrogation directe en mode socket
-            // (terminateur LF, pas d'EOI). Pas la peine de tenter le VXI-11, ce n'est pas ce canal.
+            // Ressource socket (port 5025) : interrogation directe, terminateur LF, pas d'EOI.
             if (EstSocket(resource))
                 return TenterIdn(rm, resource, timeoutMs, terminateurLf: true, board, addr, typeBus, hote);
 
-            // On tente d'abord le canal découvert (VXI-11, inst0::INSTR), qui supporte tout
-            // l'IEEE-488 (Device Clear, status byte). S'il ne répond pas — fréquent quand le
-            // VXI-11 est bloqué par un pare-feu ou capricieux en link-local — on bascule sur le
-            // socket SCPI brut (port standard 5025), une simple connexion TCP. On mémorise la
-            // ressource qui a effectivement répondu : la mesure ouvrira le même canal. Ainsi un
-            // appareil dont le VXI-11 marche garde le VXI-11, sans rien coder en dur par modèle.
+            // D'abord le canal VXI-11 découvert (inst0::INSTR), qui supporte tout l'IEEE-488 (Device
+            // Clear, status byte). Sans réponse (pare-feu, link-local capricieux), repli sur le socket
+            // SCPI brut (port 5025). La ressource qui a répondu est mémorisée : la mesure ouvrira le
+            // même canal, sans rien coder en dur par modèle.
             var viaVxi = TenterIdn(rm, resource, System.Math.Min(timeoutMs, 1500),
                 terminateurLf: false, board, addr, typeBus, hote);
             if (viaVxi.Repond) return viaVxi;

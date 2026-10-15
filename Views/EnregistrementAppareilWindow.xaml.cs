@@ -20,8 +20,7 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// Affiche la fenêtre d'aide, celle qui détaille chacun des champs à remplir.
-        /// Purement visuel : ni le ViewModel ni l'enregistrement en cours ne sont touchés.
+        /// Affiche la fenêtre d'aide sur les champs à remplir (purement visuel).
         /// </summary>
         private void OnOuvrirAide(object sender, RoutedEventArgs e)
         {

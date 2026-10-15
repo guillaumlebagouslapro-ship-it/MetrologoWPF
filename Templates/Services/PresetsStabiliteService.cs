@@ -6,13 +6,10 @@ using Metrologo.Models;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Le catalogue local des presets de balayage utilisés pour les mesures de stabilité.
-    /// Tout est sauvegardé en JSON dans <c>%LocalAppData%\Metrologo\PresetsStabilite.json</c>.
-    ///
-    /// Depuis la fenêtre de mesure de stabilité, l'utilisateur peut se créer ses propres presets
-    /// (« balayage rapide », « balayage perso »…) sans qu'on ait à recompiler. Au tout premier
-    /// démarrage, on en sème quelques-uns déjà prêts (les équivalents des deux procédures Auto
-    /// historiques) histoire que la fonction soit utilisable d'emblée.
+    /// Catalogue des presets de balayage des mesures de stabilité, en JSON
+    /// (<see cref="CheminsMetrologo.FichierPresetsStabilite"/>). L'utilisateur crée ses propres
+    /// presets depuis la fenêtre de stabilité ; au premier démarrage, quelques presets par défaut
+    /// (dont les deux procédures Auto historiques) sont semés.
     /// </summary>
     public class PresetsStabiliteService
     {
@@ -55,7 +52,7 @@ namespace Metrologo.Services
             }
             catch
             {
-                // Si le fichier est corrompu, on préfère repartir des presets par défaut que planter.
+                // Fichier corrompu : presets par défaut plutôt qu'un plantage.
                 Presets.Clear();
                 foreach (var p in PresetsParDefaut()) Presets.Add(p);
                 NotifierChange();
@@ -101,14 +98,11 @@ namespace Metrologo.Services
             NotifierChange();
         }
 
-        // ---------------- Plomberie interne ----------------
-
         private void NotifierChange() => PresetsChange?.Invoke(this, EventArgs.Empty);
 
         /// <summary>
-        /// Les presets de départ, semés au premier démarrage. Ils reprennent les deux procédures
-        /// auto historiques (10 ms → 100 s et 10 ms → 10 s) et on y ajoute un balayage court pour
-        /// les contrôles rapides. L'utilisateur reste libre de les modifier ou de les supprimer.
+        /// Presets semés au premier démarrage : les deux procédures auto historiques
+        /// (10 ms → 100 s et 10 ms → 10 s) et un balayage court. Modifiables et supprimables.
         /// </summary>
         private static IEnumerable<PresetStabilite> PresetsParDefaut() => new[]
         {

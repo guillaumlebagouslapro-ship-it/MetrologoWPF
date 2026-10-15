@@ -3,24 +3,20 @@ using System.Globalization;
 namespace Metrologo.Services
 {
     /// <summary>
-    /// Regroupe au même endroit le parsing des champs numériques saisis par l'utilisateur.
-    /// Plutôt que de recopier un <c>TryParse</c> dans chaque ViewModel, on gère ici une
-    /// bonne fois pour toutes la virgule, le point et la culture invariante.
+    /// Parsing centralisé des champs numériques saisis (virgule ou point, culture invariante).
     /// </summary>
     public static class SaisieHelper
     {
         /// <summary>
-        /// Met en forme une fréquence (Hz) pour l'affichage : on groupe la partie entière par
-        /// milliers (« 10 000 000 ») sans rien perdre de la valeur exacte. On garde toute la
-        /// précision du double, sans bruit flottant ni troncature, pour rester à la fois
-        /// lisible et fidèle.
+        /// Met en forme une fréquence (Hz) pour l'affichage : groupement par milliers
+        /// (« 10 000 000 ») sans perdre de précision ni ajouter de bruit flottant.
         /// </summary>
         public static string FormaterFrequence(double hz)
         {
-            // On prend la représentation exacte la plus courte (sans bruit), en culture neutre.
+            // Représentation exacte la plus courte, culture neutre.
             string brut = hz.ToString(CultureInfo.InvariantCulture);
 
-            // Si on tombe sur de la notation scientifique (valeurs extrêmes), repli simple groupé.
+            // Notation scientifique (valeurs extrêmes) : repli simple.
             if (brut.IndexOf('E') >= 0 || brut.IndexOf('e') >= 0)
                 return hz.ToString("#,##0.######", CultureInfo.GetCultureInfo("fr-FR"));
 
@@ -37,13 +33,13 @@ namespace Metrologo.Services
             }
 
             var frFr = CultureInfo.GetCultureInfo("fr-FR");
-            string sep = frFr.NumberFormat.NumberGroupSeparator;   // séparateur de milliers fr-FR
+            string sep = frFr.NumberFormat.NumberGroupSeparator;
 
-            // Partie entière : on groupe par paquets de 3 en partant de la virgule vers la gauche.
+            // Partie entière groupée par 3 depuis la virgule vers la gauche.
             if (long.TryParse(partieEntiere, NumberStyles.None, CultureInfo.InvariantCulture, out long ent))
                 partieEntiere = ent.ToString("#,##0", frFr);
 
-            // Et on groupe pareil la partie décimale, mais en allant de la virgule vers la droite.
+            // Partie décimale groupée par 3 depuis la virgule vers la droite.
             if (partieFrac.Length > 3)
             {
                 var sb = new System.Text.StringBuilder(partieFrac.Length + partieFrac.Length / 3);
@@ -61,10 +57,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Convertit un texte saisi en <see cref="double"/>. On accepte aussi bien la virgule
-        /// que le point comme séparateur décimal, on rogne les espaces de bord, et on s'appuie
-        /// sur <see cref="CultureInfo.InvariantCulture"/> pour que le résultat ne dépende pas
-        /// de la locale de la machine.
+        /// Convertit un texte saisi en <see cref="double"/> : virgule ou point accepté, espaces de
+        /// bord ignorés, indépendant de la locale (<see cref="CultureInfo.InvariantCulture"/>).
         /// </summary>
         public static bool TryParseDouble(string? s, out double value)
         {
@@ -76,8 +70,7 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Même chose que <see cref="TryParseDouble"/>, mais on refuse tout ce qui n'est pas
-        /// strictement positif (&gt; 0). Pratique pour les fréquences, les durées, etc.
+        /// Comme <see cref="TryParseDouble"/>, mais strictement positif (&gt; 0) : fréquences, durées…
         /// </summary>
         public static bool TryParsePositiveDouble(string? s, out double value)
         {
@@ -85,9 +78,7 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Même chose que <see cref="TryParseDouble"/>, mais ici on tolère le zéro et on
-        /// rejette seulement le négatif (&gt;= 0). Pratique pour les résolutions, les
-        /// incertitudes, etc.
+        /// Comme <see cref="TryParseDouble"/>, mais &gt;= 0 : résolutions, incertitudes…
         /// </summary>
         public static bool TryParseNonNegativeDouble(string? s, out double value)
         {
@@ -95,10 +86,9 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Dit si <paramref name="text"/> ressemble à un début de nombre <em>plausible</em>
-        /// pendant la frappe (chaîne vide, "-", "1.", "1,2", "1e-", "3E+04"...). C'est ce que
-        /// le behavior de filtrage clavier utilise pour laisser passer les états intermédiaires
-        /// tout en bloquant les lettres parasites.
+        /// Le texte est-il un début de nombre plausible pendant la frappe (vide, "-", "1.", "1,2",
+        /// "1e-", "3E+04"...) ? Utilisé par le behavior de filtrage clavier pour laisser passer les
+        /// états intermédiaires et bloquer les lettres parasites.
         /// </summary>
         public static bool IsPlausibleNumericInput(string? text, bool allowNegative, bool allowDecimal)
         {
@@ -142,7 +132,7 @@ namespace Metrologo.Services
                     continue;
                 }
 
-                return false; // n'importe quel autre caractère disqualifie la saisie
+                return false;
             }
 
             return true;

@@ -16,9 +16,8 @@ namespace Metrologo.Services.Journal
 
         /// <summary>
         /// Active les traces verbeuses (<see cref="Trace"/>) : log par mesure (envoi/réception
-        /// GPIB, attente SRQ...). Désactivé par défaut — ces entrées, à raison de plusieurs par
-        /// mesure × 30 mesures × N gates, gonflent vite le journal et ralentissent son ouverture,
-        /// sans intérêt en routine. À mettre à true seulement pour diagnostiquer un appareil muet.
+        /// GPIB, attente SRQ...). Désactivé par défaut car ces entrées gonflent vite le journal ;
+        /// à activer seulement pour diagnostiquer un appareil muet.
         /// </summary>
         public static bool Verbeux { get; set; }
 
@@ -43,19 +42,16 @@ namespace Metrologo.Services.Journal
         public static void Erreur(CategorieLog cat, string action, string message, object? details = null)
             => Router(cat, action, message, details, SeveriteLog.Erreur);
 
-        /// <summary>Trace de diagnostic fine : n'écrit QUE si <see cref="Verbeux"/> est actif.
-        /// Pour les logs par-mesure du chemin chaud (GPIB), qui ne doivent pas grossir le journal
-        /// en fonctionnement normal.</summary>
+        /// <summary>Trace de diagnostic fine (chemin chaud GPIB) : n'écrit que si <see cref="Verbeux"/> est actif.</summary>
         public static void Trace(CategorieLog cat, string action, string message, object? details = null)
         {
             if (Verbeux) Router(cat, action, message, details, SeveriteLog.Info);
         }
 
         /// <summary>
-        /// Écrit dans le journal via le service, et au passage recopie dans le journal d'AUDIT
-        /// administrateur les actions de configuration (catégories Administration/Rubidium dont le
-        /// code est retenu — voir <see cref="JournalAdminService"/>). Les simples consultations
-        /// (OUVERTURE_*) ne sont pas dans la liste blanche, donc on les laisse de côté.
+        /// Écrit dans le journal via le service, et recopie dans le journal d'AUDIT administrateur
+        /// les actions de configuration retenues (catégories Administration/Rubidium, cf.
+        /// <see cref="JournalAdminService"/>).
         /// </summary>
         private static void Router(CategorieLog cat, string action, string message, object? details, SeveriteLog sev)
         {
@@ -64,8 +60,7 @@ namespace Metrologo.Services.Journal
             if ((cat == CategorieLog.Administration || cat == CategorieLog.Rubidium)
                 && JournalAdminService.EstActionAudit(action))
             {
-                // On note l'ADMIN authentifié (et non l'opérateur connecté sur le poste) ; les tâches
-                // automatiques (Besançon) sont marquées comme telles.
+                // Auteur = l'ADMIN authentifié (pas l'opérateur du poste) ; tâches automatiques (Besançon) marquées comme telles.
                 string? qui = JournalAdminService.EstActionAutomatique(action)
                     ? JournalAdminService.UtilisateurAutomatique
                     : Metrologo.Models.EtatApplication.AdminConnecte?.Login ?? Utilisateur;

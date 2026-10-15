@@ -26,10 +26,9 @@
             <SolidColorBrush x:Key="AsertiNavyDarkBrush" Color="{StaticResource AsertiNavyDarkColor}"/>
             <SolidColorBrush x:Key="AsertiNavyLightBrush" Color="{StaticResource AsertiNavyLightColor}"/>
 
-            <!-- Ombres portées partagées — teintées navy plutôt que noir pur pour rester
-                 dans la palette ASERTI. Posées sur un calque DERRIÈRE le contenu dans les
-                 templates (jamais sur un élément contenant du texte : l'effet dégraderait
-                 le rendu ClearType de tout le sous-arbre). -->
+            <!-- Ombres portées partagées (teintées navy). Toujours sur un calque DERRIÈRE le
+                 contenu, jamais sur un élément contenant du texte : l'effet dégraderait
+                 le rendu ClearType du sous-arbre. -->
             <DropShadowEffect x:Key="CardShadow" BlurRadius="14" ShadowDepth="2" Direction="270"
                               Color="{StaticResource AsertiNavyColor}" Opacity="0.10"/>
             <DropShadowEffect x:Key="CardShadowHover" BlurRadius="22" ShadowDepth="5" Direction="270"
@@ -125,9 +124,8 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <!-- Calque d'ombre séparé derrière le contenu : l'effet ne touche
-                                 pas le texte (préserve le rendu ClearType) et permet une
-                                 élévation au survol sans re-layouter le contenu. -->
+                            <!-- Calque d'ombre séparé derrière le contenu (ClearType préservé,
+                                 élévation au survol sans re-layout). -->
                             <Grid x:Name="root" RenderTransformOrigin="0.5,0.5">
                                 <Border x:Name="shadow"
                                         CornerRadius="10"

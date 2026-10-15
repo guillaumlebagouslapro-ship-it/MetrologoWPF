@@ -7,9 +7,7 @@ namespace Metrologo.Views
     public partial class ConfigurationWindow : FluentWindow
     {
         /// <summary>
-        /// Garde-fou : quand le handler TextChanged retouche lui-même le contenu du
-        /// TextBox, ça relance un TextChanged. Ce drapeau coupe la boucle pour ne pas
-        /// tourner en rond.
+        /// Garde-fou : le handler TextChanged retouche le TextBox, ce qui le relance ; ce drapeau coupe la boucle.
         /// </summary>
         private bool _miseAJourNumFI;
 
@@ -31,7 +29,6 @@ namespace Metrologo.Views
 
         private void TypeMesure_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            // On laisse le ViewModel faire son travail
             (DataContext as ConfigurationViewModel)?.OnTypeMesureChanged();
         }
 
@@ -48,9 +45,8 @@ namespace Metrologo.Views
             if (_miseAJourNumFI) return;
             if (sender is not System.Windows.Controls.TextBox tb) return;
 
-            // Est-ce que l'utilisateur vient d'effacer (backspace, delete) ? Si oui,
-            // on s'abstient de remettre le _, faute de quoi le champ deviendrait
-            // impossible à éditer une fois les 2 premiers caractères tapés.
+            // Suppression (backspace, delete) : on ne remet pas le _, sinon le champ
+            // deviendrait impossible à éditer une fois les 2 premiers caractères tapés.
             bool suppression = false;
             foreach (var ch in e.Changes)
             {
@@ -60,16 +56,14 @@ namespace Metrologo.Views
             string texte = tb.Text ?? string.Empty;
             string nouveau = texte;
 
-            // Première lettre en majuscule (D, E, F, G…) ; on ne touche à rien si elle l'est déjà
+            // Première lettre en majuscule (D, E, F, G…)
             if (nouveau.Length >= 1 && char.IsLetter(nouveau[0]) && !char.IsUpper(nouveau[0]))
             {
                 nouveau = char.ToUpper(nouveau[0]) + (nouveau.Length > 1 ? nouveau.Substring(1) : string.Empty);
             }
 
-            // Le séparateur _ va en 3e position :
-            //   - si on vient de taper le 3e caractère, on l'accroche au bout
-            //   - si l'utilisateur a effacé le _ mais qu'il reste du texte derrière, on le remet
-            //     (sans ça, le format XX_NNNNN se casserait sans prévenir)
+            // Le _ va en 3e position : ajouté après 2 caractères tapés, ou remis s'il a été
+            // effacé alors que du texte le suit (sinon le format XX_NNNNN se casserait).
             if (!nouveau.Contains('_'))
             {
                 if (nouveau.Length == 2 && !suppression)
@@ -86,12 +80,11 @@ namespace Metrologo.Views
             {
                 _miseAJourNumFI = true;
                 tb.Text = nouveau;
-                tb.CaretIndex = nouveau.Length;   // on remet le curseur à la fin
+                tb.CaretIndex = nouveau.Length;
                 _miseAJourNumFI = false;
             }
 
-            // On redemande l'évaluation de l'étape 1 (FI valide), c'est elle qui décide
-            // de l'affichage des sections suivantes.
+            // Réévalue l'étape 1 (FI valide), qui commande l'affichage des sections suivantes.
             (DataContext as ConfigurationViewModel)?.NotifierEtapes();
         }
     }

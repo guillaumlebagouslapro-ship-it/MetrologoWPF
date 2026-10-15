@@ -106,8 +106,8 @@ namespace Metrologo.Services.Journal
                     _nbMesuresEffectuees = 0;
                     _nbMesuresEchouees = 0;
 
-                    // Bandeau de session (format historique). Si le fichier existe déjà (FI ouverte par
-                    // le passé), deux lignes vides le séparent de la session précédente, qu'on garde.
+                    // Bandeau de session (format historique). Si le fichier existe déjà, deux lignes
+                    // vides le séparent de la session précédente (conservée).
                     var sb = new StringBuilder();
                     if (File.Exists(_cheminFichier))
                     {
@@ -126,8 +126,7 @@ namespace Metrologo.Services.Journal
                 }
                 catch (Exception ex)
                 {
-                    // Au mieux : si l'écriture échoue (disque plein, droits manquants...), on
-                    // le signale dans le journal central et on désactive cette session FI.
+                    // Au mieux : en cas d'échec (disque plein, droits...), signalé au journal central ; session FI désactivée.
                     Journal.Warn(CategorieLog.Systeme, "JOURNAL_FI_DEMARRAGE_KO",
                         $"Impossible de créer le journal FI pour {numFI} : {ex.Message}");
                     _cheminFichier = string.Empty;
@@ -177,8 +176,7 @@ namespace Metrologo.Services.Journal
                 while (i < p.Length && !char.IsLetterOrDigit(p[i])) i++;
                 string libelle = p[i..].Trim();
 
-                // La mesure précédente s'est terminée sans résultat noté (chemin d'abandon) : on la
-                // note maintenant pour ne pas perdre la trace.
+                // Mesure précédente sans résultat noté (abandon) : on la note pour garder la trace.
                 if (_mesureEnAttente) NoterResultatInterne(false, "interrompue");
 
                 _libelleMesure = libelle.Length == 0 || libelle == "Lancement" ? "Mesure" : libelle;
@@ -282,8 +280,7 @@ namespace Metrologo.Services.Journal
             }
             catch (Exception ex)
             {
-                // En silence : pas question de faire planter une mesure parce que le journal
-                // a échoué. On garde une trace dans le journal central, c'est tout.
+                // Une panne du journal ne doit jamais faire échouer une mesure : trace au journal central seulement.
                 Journal.Warn(CategorieLog.Systeme, "JOURNAL_FI_ECRITURE_KO",
                     $"Écriture journal FI {_numFICourant} échouée : {ex.Message}");
             }

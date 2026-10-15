@@ -21,9 +21,9 @@
         public string FrequenceAffichee => Services.SaisieHelper.FormaterFrequence(FrequenceMoyenne);
 
         /// <summary>
-        /// Le libellé écrit dans la feuille de mesure (zone ZNRubidium) : on reprend la Designation du
-        /// catalogue telle quelle, sans rien ajouter automatiquement (le nom est libre, à toi d'y mettre
-        /// "GPS" etc. si besoin). Pour un réglage manuel, ce sera "Réglage manuel (xxx Hz)".
+        /// Libellé écrit dans la feuille de mesure (zone ZNRubidium) : la Designation du catalogue
+        /// telle quelle (rien n'est ajouté, "GPS" etc. se saisit dans le nom). Réglage manuel :
+        /// "Réglage manuel (xxx Hz)".
         /// </summary>
         public string DesignationAvecRaccord => EstReglageManuel
             ? $"Réglage manuel ({FrequenceMoyenne} Hz)"

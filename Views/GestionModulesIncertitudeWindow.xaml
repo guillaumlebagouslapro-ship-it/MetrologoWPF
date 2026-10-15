@@ -19,9 +19,8 @@
             <Setter Property="Foreground" Value="#FF111827"/>
         </Style>
 
-        <!-- Style TextBox utilisé en mode édition : fond blanc + texte sombre quelle que
-             soit la couleur de fond de la cellule (évite l'invisibilité sur la sélection
-             crème quand on tape une valeur). -->
+        <!-- TextBox d'édition : fond blanc + texte sombre quelle que soit la couleur de la
+             cellule (sinon illisible sur la sélection crème). -->
         <Style x:Key="MonoEditCell" TargetType="TextBox">
             <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
             <Setter Property="Foreground" Value="#FF111827"/>
@@ -336,9 +335,8 @@
                                     </Setter.Value>
                                 </Setter>
                                 <Style.Triggers>
-                                    <!-- Sélection : surligne en crème mais force le texte
-                                         en sombre, sinon WPF applique son foreground
-                                         système (~blanc) et le texte devient illisible. -->
+                                    <!-- Sélection crème : texte forcé en sombre, sinon WPF applique
+                                         son foreground système (~blanc) et le texte est illisible. -->
                                     <Trigger Property="IsSelected" Value="True">
                                         <Setter Property="Background" Value="#FFFEF3C7"/>
                                         <Setter Property="Foreground" Value="#FF111827"/>

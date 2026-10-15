@@ -17,9 +17,8 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// Handler du RadioButton « Catalogue ». Quand l'utilisateur revient sur le catalogue,
-        /// on coupe le mode manuel. L'activation, elle, est gérée par le binding TwoWay sur
-        /// ModeManuel côté radio « Réglage manuel » ; ici on s'occupe juste du retour en arrière.
+        /// RadioButton « Catalogue » : coupe le mode manuel. L'activation est gérée par le
+        /// binding TwoWay sur ModeManuel du radio « Réglage manuel ».
         /// </summary>
         private void OnModeListeChecked(object sender, RoutedEventArgs e)
         {

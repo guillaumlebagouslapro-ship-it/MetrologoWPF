@@ -56,9 +56,7 @@ namespace Metrologo.Views
                 ForcerForegroundEtFocus();
             };
 
-            // Tout clic gauche sur la fenêtre = arrêt, peu importe où.
-            // PreviewMouseLeftButtonDown = on intercepte avant que d'autres handlers
-            // (drag, focus, etc.) consomment l'event.
+            // Tout clic gauche = arrêt. Preview : on intercepte avant les autres handlers.
             PreviewMouseLeftButtonDown += (_, e) =>
             {
                 DeclencherStop();
@@ -99,7 +97,7 @@ namespace Metrologo.Views
             _source = HwndSource.FromHwnd(hWnd);
             _source?.AddHook(WndProc);
 
-            // Ctrl+Shift+S global, fonctionne même quand Excel a le focus.
+            // Ctrl+Shift+S global (actif même si Excel a le focus).
             _hotkeyEnregistre = RegisterHotKey(hWnd, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_S);
         }
 
@@ -113,8 +111,7 @@ namespace Metrologo.Views
                     return IntPtr.Zero;
 
                 case WM_SETCURSOR:
-                    // curseur main partout sur la fenêtre : on voit qu'on peut cliquer
-                    // n'importe où, peu importe ce qu'Excel a mis comme curseur
+                    // Curseur main partout, quel que soit celui imposé par Excel.
                     SetCursor(LoadCursor(IntPtr.Zero, IDC_HAND));
                     handled = true;
                     return new IntPtr(1);

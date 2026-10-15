@@ -16,9 +16,8 @@ namespace Metrologo.Views
         }
 
         /// <summary>
-        /// Thème saisonnier en fond de l'écran de connexion, derrière la carte : bande en
-        /// haut (guirlande, télécabines...), grand paysage en bas, neige ou pétales sur tout
-        /// l'écran. Occupe le vide autour de la carte sans rien masquer. Hors saison : rien.
+        /// Thème saisonnier derrière la carte de connexion : bande en haut, paysage en bas,
+        /// neige ou pétales sur tout l'écran. Hors saison : rien.
         /// </summary>
         private void AppliquerThemeSaisonnier()
         {

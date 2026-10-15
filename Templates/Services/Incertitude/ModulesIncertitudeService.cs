@@ -7,28 +7,6 @@ using JournalLog = Metrologo.Services.Journal.Journal;
 
 namespace Metrologo.Services.Incertitude
 {
-    /// <summary>
-    /// Gère la collection des modules d'incertitude — un par fichier CSV dans
-    /// <c>%LocalAppData%\Metrologo\Incertitudes\</c>.
-    ///
-    /// Format CSV (séparateur <c>;</c>, décimales <c>.</c>) :
-    /// <code>
-    /// Fonction;TempsDeMesure;BorneBasse;BorneHaute;IncertRelative;IncertAbsolue
-    /// Freq;100;0.00999;10000.01;0.0;0.0000022
-    /// Freq;100;10000.01;1000001.0;1.10E-11;0.0000022
-    /// ...
-    /// </code>
-    /// Première ligne = en-têtes (ignorée). Lignes vides ou commençant par <c>#</c> ignorées.
-    /// Notation scientifique <c>1.10E-11</c> acceptée.
-    ///
-    /// Les noms de fonctions doivent matcher la convention de l'app (cf. <c>TypeMesure</c>) :
-    /// <c>Freq</c>, <c>FreqAv</c>, <c>FreqFin</c>, <c>Stab</c>, <c>Interv</c>, <c>TachyC</c>, <c>Strobo</c>.
-    ///
-    /// Service entièrement isolé : pour désactiver complètement la fonctionnalité, il
-    /// suffit de supprimer le dossier <c>Templates/Services/Incertitude/</c> du projet.
-    /// L'ancien comportement (CoeffA/B hardcodés dans <see cref="ExcelService"/>) reste
-    /// inchangé tant que ce service n'est pas appelé.
-    /// </summary>
     /// <summary>Résultat d'une vérification de couverture d'une valeur par un module.</summary>
     public enum CouvertureModule
     {
@@ -40,11 +18,22 @@ namespace Metrologo.Services.Incertitude
         ModuleIntrouvable
     }
 
+    /// <summary>
+    /// Gère les modules d'incertitude : un CSV par module, dans un sous-dossier par type de mesure
+    /// de <see cref="CheminsMetrologo.Incertitudes"/>.
+    /// Format (séparateur <c>;</c>, décimales <c>.</c>, notation scientifique acceptée) :
+    /// <code>
+    /// Fonction;TempsDeMesure;BorneBasse;BorneHaute;IncertRelative;IncertAbsolue
+    /// Freq;100;0.00999;10000.01;0.0;0.0000022
+    /// Freq;100;10000.01;1000001.0;1.10E-11;0.0000022
+    /// </code>
+    /// 1re ligne non-commentaire = en-têtes (ignorée) ; lignes vides ou en <c>#</c> ignorées
+    /// (hors métadonnées, voir <see cref="Charger"/>). Les noms de fonction suivent
+    /// <see cref="IncertitudeFonctionHelper.NomFonction"/>.
+    /// </summary>
     public static class ModulesIncertitudeService
     {
         public static string DossierModules => CheminsMetrologo.Incertitudes;
-
-        // -------------------------------------------------------------------------
 
         /// <summary>Sous-dossier du type de mesure (sans accent ni espace, portable et lisible).</summary>
         public static string DossierPourType(TypeMesure type) => type switch
@@ -61,8 +50,7 @@ namespace Metrologo.Services.Incertitude
         };
 
         /// <summary>
-        /// Migration des anciens noms de dossier (ex: "TachyContact" → "TachymetreContact").
-        /// Idempotent — appelé une seule fois au démarrage.
+        /// Renomme les anciens dossiers ("TachyContact" → "TachymetreContact"). Idempotent, appelé au démarrage.
         /// </summary>
         public static void MigrerAnciensNomsDossiers()
         {
@@ -99,11 +87,9 @@ namespace Metrologo.Services.Incertitude
         public static string DossierComplet(TypeMesure type) =>
             Path.Combine(DossierModules, DossierPourType(type));
 
-        // -------------------------------------------------------------------------
-
         /// <summary>
-        /// Liste les modules d'un type de mesure (un sous-dossier par type). Crée le dossier
-        /// si absent. Pour Frequence, dépose un CSV exemple au 1er démarrage.
+        /// Liste les modules d'un type de mesure. Crée le dossier si absent ; pour Frequence,
+        /// dépose un CSV exemple au 1er démarrage.
         /// </summary>
         public static List<ModuleIncertitude> Lister(TypeMesure type)
         {
@@ -111,7 +97,7 @@ namespace Metrologo.Services.Incertitude
             if (string.IsNullOrEmpty(dossier)) return new List<ModuleIncertitude>();
             Directory.CreateDirectory(dossier);
 
-            // Exemple uniquement dans Frequence (1ère catégorie) pour ne pas en déposer dans les 7.
+            // Exemple uniquement dans Frequence, pas dans les autres catégories.
             if (type == TypeMesure.Frequence
                 && Directory.GetFiles(dossier, "*.csv").Length == 0)
             {
@@ -142,8 +128,8 @@ namespace Metrologo.Services.Incertitude
         }
 
         /// <summary>
-        /// Charge un module depuis son CSV. NumModule = nom de fichier sans extension.
-        /// NomAffichage optionnel via <c># Nom: ...</c> en tête du fichier.
+        /// Charge un module depuis son CSV (NumModule = nom de fichier sans extension). Métadonnées
+        /// optionnelles en tête : <c># Nom:</c>, <c># SansTemps:</c>, <c># Degrade:</c>.
         /// </summary>
         public static ModuleIncertitude? Charger(string cheminCsv)
         {
@@ -163,7 +149,6 @@ namespace Metrologo.Services.Incertitude
                 if (string.IsNullOrEmpty(l)) continue;
                 if (l.StartsWith("#"))
                 {
-                    // Métadonnées : "# Nom: xxx", "# SansTemps: true" et "# Degrade: true"
                     var mNom = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*Nom\s*:\s*(.+)$",
                         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (mNom.Success) module.NomAffichage = mNom.Groups[1].Value.Trim();
@@ -178,7 +163,7 @@ namespace Metrologo.Services.Incertitude
                     continue;
                 }
 
-                // 1ère ligne non-commentaire = header (skipped)
+                // 1re ligne non-commentaire = en-têtes (ignorée)
                 if (!headerVu)
                 {
                     headerVu = true;
@@ -186,7 +171,7 @@ namespace Metrologo.Services.Incertitude
                 }
 
                 var champs = l.Split(';');
-                // 6 col = ancien format. 9 col = nouveau format (Condition2 + Domaine2 : BB2, BH2).
+                // 6 colonnes = ancien format ; 9 = nouveau (Condition2 + domaine 2 : BB2, BH2).
                 if (champs.Length < 6)
                 {
                     JournalLog.Warn(CategorieLog.Configuration, "INCERT_LIGNE_KO",
@@ -367,11 +352,9 @@ namespace Metrologo.Services.Incertitude
                 : CouvertureModule.HorsPlage;
         }
 
-        // -------------------------------------------------------------------------
-
         private static double ParseDouble(string s)
         {
-            // Accepte "." ou "," comme séparateur décimal.
+            // "." ou "," accepté comme séparateur décimal.
             string normalise = s.Trim().Replace(',', '.');
             return double.Parse(normalise, NumberStyles.Float, CultureInfo.InvariantCulture);
         }
@@ -386,7 +369,7 @@ namespace Metrologo.Services.Incertitude
 
         private static string ConstruireCsvExemple()
         {
-            // Basé sur les 12 premières lignes du module MF51901A — point de départ pour l'admin.
+            // Extrait du module MF51901A, point de départ pour l'admin.
             var sb = new StringBuilder();
             sb.AppendLine("# Nom: Compteur de fréquence MF51901A");
             sb.AppendLine("# Format : Fonction;TempsDeMesure (s);BorneBasse (Hz);BorneHaute (Hz);IncertRelative;IncertAbsolue (Hz)");

@@ -32,7 +32,7 @@ namespace Metrologo.Services.Besancon
 
     /// <summary>
     /// Évalue l'état du suivi Besançon (voyant vert/orange/rouge) et produit le rapport texte,
-    /// à partir du fichier txt cumulatif (plus de SQL).
+    /// à partir du fichier txt cumulatif.
     /// Voyant : age <= 2 j = vert, 3-6 j = orange, >= 7 j = rouge.
     /// Référence hebdo : moyenne de la dernière semaine mardi->lundi complète (7 valeurs) ;
     /// valeur provisoire avec les dernières disponibles si aucune semaine complète.
@@ -64,7 +64,6 @@ namespace Metrologo.Services.Besancon
             {
                 int todayMjd = JourJulien.VersMjd(aujourdhui);
 
-                // Source unique : le fichier txt cumulatif (plus de SQL).
                 var valeurs = await BesanconTxtStore.LireAsync();
 
                 if (valeurs.Count == 0)
@@ -138,7 +137,6 @@ namespace Metrologo.Services.Besancon
         {
             var sb = new StringBuilder();
 
-            // Moyenne de référence (ligne principale du rapport).
             if (reference == null)
                 sb.AppendLine("Référence hebdo : indisponible (aucune valeur)");
             else if (reference.Provisoire)
@@ -147,7 +145,6 @@ namespace Metrologo.Services.Besancon
                 sb.AppendLine($"Référence hebdo : {FormaterValeur(reference.Moyenne)}   "
                             + $"(semaine {JourJulien.DepuisMjd(reference.MardiMjd - 7):dd/MM} → {JourJulien.DepuisMjd(reference.MardiMjd - 1):dd/MM})");
 
-            // Fraîcheur de la dernière valeur.
             if (valeurs.Count > 0)
             {
                 int maxMjd = valeurs.Keys.Max();
@@ -156,7 +153,6 @@ namespace Metrologo.Services.Besancon
             }
             sb.AppendLine();
 
-            // Dernières moyennes hebdo (tendance).
             var moys = CalculerMoyennesHebdo(valeurs, aujourdhui, NbSemainesListe);
             sb.AppendLine("Moyennes hebdomadaires (mardi→lundi)");
             if (moys.Count == 0)

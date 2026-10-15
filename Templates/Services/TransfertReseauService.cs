@@ -10,16 +10,14 @@ namespace Metrologo.Services
     /// <summary>
     /// Synchronisation du dossier d'une FI avec le partage réseau
     /// (<c>CheminsMetrologo.MesuresLocal</c>, typiquement <c>M:\…\Mesures\&lt;FI&gt;\</c>).
-    ///
     /// Stratégie (voir <see cref="CheminsMetrologo.DossierFI"/>) :
     /// <list type="bullet">
-    ///   <item>Réseau joignable : la FI travaille DIRECTEMENT sur le réseau, aucune copie locale,
-    ///         rien à transférer (le logiciel extérieur lit le fichier à jour).</item>
-    ///   <item>Réseau injoignable : la FI travaille dans Bureau\Metrologo\&lt;FI&gt;. À la fin de
-    ///         chaque mesure on tente d'en pousser une copie sur le réseau, et la FI reste inscrite
-    ///         dans <c>transferts_en_attente.json</c>.</item>
-    ///   <item>Dès que le réseau revient (démarrage suivant, ou reprise de la FI) : le dossier local
-    ///         est rapatrié sur le réseau, vérifié, puis SUPPRIMÉ — plus de double version.</item>
+    ///   <item>Réseau joignable : la FI travaille directement sur le réseau, rien à transférer.</item>
+    ///   <item>Réseau injoignable : la FI travaille dans Bureau\Metrologo\&lt;FI&gt;, une copie est
+    ///         poussée à la fin de chaque mesure et la FI reste inscrite dans
+    ///         <c>transferts_en_attente.json</c>.</item>
+    ///   <item>Réseau revenu (démarrage suivant, reprise de la FI) : dossier local rapatrié,
+    ///         vérifié, puis supprimé (jamais de double version).</item>
     /// </list>
     /// </summary>
     public static class TransfertReseauService
@@ -31,10 +29,9 @@ namespace Metrologo.Services
             Path.Combine(CheminsMetrologo.Configuration, "transferts_en_attente.json");
 
         /// <summary>
-        /// Fin de mesure. FI sur le réseau : rien à faire (true). FI en local (réseau absent au
-        /// départ ou perdu en cours de série) : pousse une copie sur le réseau si possible, et garde
-        /// la FI en attente pour que le dossier local soit rapatrié puis supprimé dès qu'il n'est
-        /// plus utilisé. Retourne <c>false</c> si le réseau n'a pas pu être mis à jour.
+        /// Fin de mesure. FI sur le réseau : rien à faire (true). FI en local : pousse une copie sur
+        /// le réseau si possible et garde la FI en attente de rapatriement. Retourne <c>false</c> si
+        /// le réseau n'a pas pu être mis à jour.
         /// </summary>
         public static async Task<bool> TransfererDossierFIAsync(string numFI)
         {
@@ -87,12 +84,10 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Rapatrie sur le réseau le dossier local de repli d'une FI, vérifie chaque fichier, puis
-        /// supprime le dossier local. Ne remplace un fichier réseau que si la version locale est
-        /// plus récente (un autre poste a pu travailler sur la FI entre-temps) ; les journaux sont
-        /// fusionnés. Retourne <c>true</c> si la FI peut travailler sur le réseau (rien à rapatrier,
-        /// ou rapatriement réussi), <c>false</c> en cas d'échec (le local est alors conservé).
-        /// À n'appeler que si le dossier local n'est pas ouvert dans Excel (démarrage, reprise de FI).
+        /// Rapatrie sur le réseau le dossier local de repli d'une FI, vérifie chaque fichier, puis le
+        /// supprime. Un fichier réseau plus récent est conservé (autre poste entre-temps) ; les
+        /// journaux sont fusionnés. Retourne <c>true</c> si la FI peut travailler sur le réseau,
+        /// <c>false</c> en cas d'échec (local conservé). Dossier local non ouvert dans Excel exigé.
         /// </summary>
         public static bool RapatrierDossierLocal(string numFI)
         {
@@ -274,9 +269,8 @@ namespace Metrologo.Services
                 string nomFichier = Path.GetFileName(fichier);
                 string fichierCible = Path.Combine(cible, nomFichier);
 
-                // Journal_<FI>.txt : FUSION obligatoire (pas d'écrasement). Plusieurs opérateurs
-                // se relaient depuis des postes différents ; chaque poste n'a que ses propres blocs.
-                // Un overwrite ferait perdre les sessions des autres opérateurs côté réseau.
+                // Journal_<FI>.txt : fusion obligatoire. Chaque poste n'a que ses propres blocs ;
+                // un écrasement ferait perdre les sessions des autres opérateurs.
                 if (nomFichier.StartsWith("Journal_", StringComparison.OrdinalIgnoreCase)
                     && nomFichier.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
                 {
@@ -294,8 +288,8 @@ namespace Metrologo.Services
                     // Le local fait foi : on écrase le réseau.
                     File.Copy(fichier, fichierCible, overwrite: true);
 
-                    // Rapport passé de .xlsx à .xls (ou l'inverse, réglage Admin) : l'ancien format
-                    // ne doit pas rester à côté sur le réseau — un seul fichier Excel par FI.
+                    // Format de rapport changé (.xls/.xlsx, réglage Admin) : supprime l'ancien
+                    // sur le réseau (un seul fichier Excel par FI).
                     string ext = Path.GetExtension(nomFichier);
                     string? autreExt = ext.Equals(".xls", StringComparison.OrdinalIgnoreCase) ? ".xlsx"
                                      : ext.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ? ".xls" : null;
@@ -311,7 +305,7 @@ namespace Metrologo.Services
                     }
                 }
             }
-            // Récursion sur les sous-dossiers (dossier FI plat aujourd'hui, prévu pour l'avenir).
+            // Sous-dossiers (le dossier FI est plat aujourd'hui).
             foreach (var sousDossier in Directory.EnumerateDirectories(source))
             {
                 string nomSousDossier = Path.GetFileName(sousDossier);
@@ -327,7 +321,6 @@ namespace Metrologo.Services
         /// </summary>
         private static void FusionnerOuCopierJournal(string fichierSource, string fichierCible)
         {
-            // Pas encore de journal réseau → simple copie.
             if (!File.Exists(fichierCible))
             {
                 File.Copy(fichierSource, fichierCible, overwrite: true);
@@ -340,7 +333,7 @@ namespace Metrologo.Services
             var blocsReseau = DecouperBlocsSession(contenuReseau);
             var blocsLocaux = DecouperBlocsSession(contenuLocal);
 
-            // Format inattendu (aucun bloc reconnu) → on n'écrase pas pour ne pas perdre l'historique réseau.
+            // Aucun bloc reconnu : on n'écrase pas, pour ne pas perdre l'historique réseau.
             if (blocsReseau.Count == 0 && blocsLocaux.Count == 0)
             {
                 Journal.Journal.Warn(CategorieLog.Systeme, "JOURNAL_FUSION_FORMAT",
@@ -364,7 +357,7 @@ namespace Metrologo.Services
             foreach (var b in blocsReseau) Upsert(b, remplacer: false);
             foreach (var b in blocsLocaux) Upsert(b, remplacer: true);
 
-            // Tri par date de début ; blocs sans date parseable repoussés en fin.
+            // Tri par date de début ; sans date : en fin.
             var blocsTries = fusion.Values
                 .OrderBy(b => b.Debut ?? DateTime.MaxValue)
                 .ToList();
@@ -377,7 +370,7 @@ namespace Metrologo.Services
             }
             sb.Append("\r\n");
 
-            // Écriture atomique (temp + Move) : évite un journal réseau tronqué en cas d'interruption.
+            // Écriture atomique (temp + Move) : pas de journal réseau tronqué en cas d'interruption.
             string temp = fichierCible + ".tmp";
             File.WriteAllText(temp, sb.ToString(), Encoding.UTF8);
             File.Move(temp, fichierCible, overwrite: true);
@@ -392,7 +385,7 @@ namespace Metrologo.Services
             var blocs = new List<BlocSession>();
             if (string.IsNullOrWhiteSpace(contenu)) return blocs;
 
-            // Lookahead : découpe juste avant chaque en-tête, le séparateur reste avec son bloc.
+            // Lookahead : coupe avant chaque en-tête, qui reste avec son bloc.
             var separateur = new Regex(@"(?=^=+\r?\nJournal utilisateur — FI )",
                 RegexOptions.Multiline);
             foreach (var morceau in separateur.Split(contenu))

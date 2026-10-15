@@ -194,9 +194,8 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Déclenche à la main la récupération Besançon (téléchargement FTP du fichier corrigé,
-        /// extraction des valeurs, ajout au fichier texte cumulatif), sans attendre l'heure
-        /// quotidienne. Rien n'est écrit en base SQL ; le détail part dans le Journal (Système).
+        /// Lance à la main la récupération Besançon (FTP, extraction, ajout au fichier texte
+        /// cumulatif) sans attendre l'heure quotidienne. Rien en base SQL ; détail dans le Journal (Système).
         /// </summary>
         [RelayCommand]
         private async System.Threading.Tasks.Task RecupererBesanconMaintenantAsync()
@@ -265,17 +264,15 @@ namespace Metrologo.ViewModels
                 "Accès à la gestion du catalogue d'appareils.");
 
             string utilisateur = Journal.Utilisateur ?? "admin";
-            // On est dans AdminViewModel : forcement un admin derriere (l'acces a AdminView
-            // n'est propose qu'aux comptes Administrateur).
+            // Écran réservé aux comptes Administrateur : estAdmin est donc toujours vrai ici.
             var vm = new GestionAppareilsViewModel(utilisateur, estAdmin: true);
             var win = new GestionAppareilsWindow(vm) { Owner = Application.Current.MainWindow };
             win.ShowDialog();
         }
 
         /// <summary>
-        /// Ouvre l'editeur des adresses GPIB des appareils legacy (EIP / Racal / Stanford).
-        /// Reserve a l'admin : on y attribue une adresse distincte a chaque appareil pour pouvoir
-        /// les brancher en meme temps. Tout est enregistre sur le reseau (appareils-legacy.json).
+        /// Ouvre l'éditeur des adresses GPIB des appareils legacy (EIP / Racal / Stanford), pour
+        /// les brancher simultanément à des adresses distinctes (enregistré dans appareils-legacy.json).
         /// </summary>
         [RelayCommand]
         private void OuvrirAdressesLegacy()
@@ -289,10 +286,9 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Ouvre la configuration des chemins de stockage. L'admin peut y remplacer les
-        /// emplacements par defaut (locaux) par un partage reseau commun a tous les postes du
-        /// site (modules d'incertitude, presets, archives logs, etc.). La base SQL Server, elle,
-        /// reste centralisee et ne se configure pas ici (voir CheminsMetrologo + paths.config.json).
+        /// Ouvre la configuration des chemins de stockage (emplacements locaux par défaut remplaçables
+        /// par un partage réseau commun). La base SQL Server ne se configure pas ici
+        /// (voir CheminsMetrologo + paths.config.json).
         /// </summary>
         [RelayCommand]
         private void OuvrirCheminsStockage()

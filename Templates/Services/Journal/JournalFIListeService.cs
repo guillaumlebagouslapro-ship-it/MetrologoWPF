@@ -27,11 +27,9 @@ namespace Metrologo.Services.Journal
     }
 
     /// <summary>
-    /// Dresse la liste des fiches d'intervention (FI) à partir des dossiers présents sous
-    /// <see cref="CheminsMetrologo.MesuresLocal"/> (l'emplacement Mesures configuré, par défaut le
-    /// partage réseau). Pour chaque FI, on lit son <c>Journal_&lt;FI&gt;.txt</c> pour en tirer les
-    /// opérateurs et la dernière activité. Cela remplace l'ancien journal SQL de la vue Admin :
-    /// chaque FI a maintenant son propre fichier log, et on se contente d'y donner un accès rapide.
+    /// Liste les fiches d'intervention (FI) d'après les dossiers sous
+    /// <see cref="CheminsMetrologo.MesuresLocal"/> (Mesures configuré, par défaut le partage réseau).
+    /// Le <c>Journal_&lt;FI&gt;.txt</c> de chaque FI donne ses opérateurs et sa dernière activité.
     /// </summary>
     public static class JournalFIListeService
     {
@@ -82,7 +80,7 @@ namespace Metrologo.Services.Journal
                     string numFI = Path.GetFileName(dossier);
                     if (!dejaVues.Add(numFI)) continue;
 
-                    // On attend un Journal_<FI>.txt ; à défaut, on prend le premier Journal_*.txt venu.
+                    // Journal_<FI>.txt attendu ; à défaut, le premier Journal_*.txt du dossier.
                     string logAttendu = Path.Combine(dossier, $"Journal_{numFI}.txt");
                     string? log = File.Exists(logAttendu)
                         ? logAttendu

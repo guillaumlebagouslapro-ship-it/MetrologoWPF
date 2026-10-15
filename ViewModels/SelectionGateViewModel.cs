@@ -15,11 +15,9 @@ namespace Metrologo.ViewModels
     /// seul indice dans <see cref="IndicesGatesResultats"/> (la liste ne contient alors qu'un élément).
     /// </para>
     /// <para>
-    /// En Stabilité, les gates s'affichent sous forme de cases à cocher : l'utilisateur peut
-    /// en sélectionner plusieurs pour les balayer l'une après l'autre — c'est la version
-    /// moderne des anciennes « procédures auto ». Les combinaisons qui reviennent souvent sont
-    /// conservées comme presets dans <see cref="PresetsStabiliteService"/>, modifiables sans
-    /// avoir à recompiler.
+    /// En Stabilité, les gates sont des cases à cocher : plusieurs peuvent être balayées l'une
+    /// après l'autre (équivalent des anciennes « procédures auto »). Les combinaisons fréquentes
+    /// sont des presets (<see cref="PresetsStabiliteService"/>), modifiables sans recompiler.
     /// </para>
     /// </summary>
     public partial class SelectionGateViewModel : ObservableObject
@@ -94,8 +92,7 @@ namespace Metrologo.ViewModels
 
             if (IsStabilite)
             {
-                // On présélectionne le 1er preset (l'équivalent de l'ancienne procédure Auto) pour
-                // que l'écran s'ouvre déjà sur un choix cohérent, sans que l'utilisateur ait à cocher.
+                // Présélectionne le 1er preset (ancienne procédure Auto) : l'écran s'ouvre sur un choix cohérent.
                 PresetSelectionne = Presets.FirstOrDefault();
                 if (PresetSelectionne != null) AppliquerPreset(PresetSelectionne);
             }
@@ -109,9 +106,8 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Monte la liste des gates à afficher. On la limite à celles cochées dans le catalogue
-        /// pour l'appareil sélectionné (voir <see cref="ConfigurationViewModel.GateTimes"/>). Et si
-        /// aucun appareil du catalogue ne correspond, on retombe sur l'échelle canonique complète.
+        /// Monte la liste des gates affichées : celles cochées au catalogue pour l'appareil
+        /// (voir <see cref="ConfigurationViewModel.GateTimes"/>), sinon l'échelle canonique complète.
         /// </summary>
         private void ConstruireGatesDisponibles()
         {
@@ -236,9 +232,8 @@ namespace Metrologo.ViewModels
                     .OrderBy(i => i)
                     .ToList();
 
-                // On journalise ce qui part réellement vers l'orchestrator. Pratique pour traquer
-                // les désynchros entre l'UI et le modèle (typiquement une case décochée à l'écran
-                // alors que EstCoche est resté à true).
+                // Journalise ce qui part vers l'orchestrator, pour traquer les désynchros UI/modèle
+                // (ex. case décochée à l'écran alors que EstCoche est resté à true).
                 int nbCochees = GatesDisponibles.Count(g => g.EstCoche);
                 Services.Journal.Journal.Info(Services.Journal.CategorieLog.Configuration,
                     "STAB_GATES_VALIDEES",

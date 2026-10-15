@@ -68,9 +68,8 @@
                     </TextBlock>
                 </Border>
 
-                <!-- Bouton d'aide : ouvre la même fiche d'aide que dans EnregistrementAppareilWindow.
-                     Identique visuellement (cercle bleu + ?) pour rester cohérent avec les autres
-                     fenêtres admin qui exposent des champs de configuration SCPI. -->
+                <!-- Bouton d'aide : même fiche et même rendu (cercle bleu + ?) que dans
+                     EnregistrementAppareilWindow. -->
                 <Button Grid.Column="2"
                         Click="OnOuvrirAide"
                         VerticalAlignment="Center"
@@ -203,10 +202,8 @@
                                             </StackPanel>
                                         </Button>
 
-                                        <!-- Bouton Supprimer : réservé aux administrateurs.
-                                             La modification reste accessible à tous (bouton précédent),
-                                             la suppression purge le catalogue de manière irréversible
-                                             donc gardée pour les admins uniquement. -->
+                                        <!-- Supprimer : réservé aux administrateurs (purge irréversible du
+                                             catalogue), alors que la modification reste ouverte à tous. -->
                                         <Button Grid.Column="2"
                                                 Command="{Binding DataContext.SupprimerModeleCommand,
                                                          RelativeSource={RelativeSource AncestorType=Window}}"

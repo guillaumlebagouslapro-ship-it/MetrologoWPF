@@ -357,16 +357,10 @@ namespace Metrologo.ViewModels
         private void AllerAccueil() => VueActuelle = _accueilViewModel;
 
         /// <summary>
-        /// Le bouton Administration est visible pour tout le monde. Au clic :
-        ///   • Si un admin est DÉJÀ authentifié dans la session courante
-        ///     (<see cref="EtatApplication.AdminConnecte"/> non null), on bascule
-        ///     directement sur AdminView sans redemander le mot de passe.
-        ///   • Sinon, modale d'identifiant + mot de passe. Si OK, on enregistre
-        ///     le compte authentifié et on bascule sur AdminView.
-        ///
-        /// L'authentification reste valide pour toute la durée de l'app (jusqu'à
-        /// fermeture du logiciel). Le retour Accueil ne déconnecte plus l'admin
-        /// pour éviter de devoir resaisir les identifiants à chaque aller-retour.
+        /// Bouton Administration (visible pour tous) : si un admin est déjà authentifié
+        /// (<see cref="EtatApplication.AdminConnecte"/> non null), bascule directement sur AdminView ;
+        /// sinon demande identifiant + mot de passe dans une modale. L'authentification reste valide
+        /// jusqu'à un changement d'utilisateur ou la fermeture ; le retour Accueil ne la révoque pas.
         /// </summary>
         [RelayCommand]
         private void OuvrirAdmin()
@@ -389,10 +383,8 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Retour à l'écran d'accueil. NB : on NE déconnecte PAS l'admin
-        /// (<see cref="EtatApplication.AdminConnecte"/> reste actif). L'utilisateur
-        /// peut revenir dans la zone admin sans resaisir ses identifiants — la
-        /// déconnexion ne se fait qu'à la fermeture de l'app.
+        /// Retour à l'écran d'accueil sans déconnecter l'admin (<see cref="EtatApplication.AdminConnecte"/>
+        /// reste actif) : il peut revenir en zone admin sans ressaisir ses identifiants.
         /// </summary>
         [RelayCommand]
         private void RetourAccueil()
@@ -401,22 +393,16 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Revient à l'écran de sélection d'utilisateur sans quitter l'application — pour
-        /// changer d'opérateur (relais / reprise de FI), ou prendre en compte un compte tout
-        /// juste créé en administration. Clôture proprement la session journal de l'utilisateur
-        /// courant, déconnecte l'admin éventuellement authentifié, puis recharge la liste des
-        /// comptes (à jour, y compris ceux créés depuis un autre poste) avant de réafficher
-        /// l'écran de connexion.
+        /// Revient à l'écran de sélection d'utilisateur sans quitter l'application (relais / reprise
+        /// de FI, ou prise en compte d'un compte tout juste créé). Voir <see cref="RevenirAEcranConnexionAsync"/>.
         /// </summary>
         [RelayCommand]
         private Task ChangerUtilisateur() => RevenirAEcranConnexionAsync("Changement d'utilisateur");
 
         /// <summary>
-        /// Logique commune de retour à l'écran de connexion (utilisée par le bouton
-        /// « Changer d'utilisateur » de la barre de navigation et par le retour depuis la
-        /// sélection du poste). Clôture proprement la session journal de l'utilisateur courant,
-        /// déconnecte l'admin éventuellement authentifié, recharge la liste des comptes (à jour,
-        /// y compris ceux créés depuis un autre poste) puis réaffiche l'écran de connexion.
+        /// Retour à l'écran de connexion (bouton « Changer d'utilisateur » et retour depuis la
+        /// sélection du poste) : clôture la session journal courante, déconnecte l'admin, recharge
+        /// la liste des comptes (y compris ceux créés depuis un autre poste).
         /// </summary>
         private async Task RevenirAEcranConnexionAsync(string motif)
         {

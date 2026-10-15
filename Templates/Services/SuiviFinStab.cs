@@ -5,10 +5,8 @@ namespace Metrologo.Services
     /// cours » : « Fin estimée vers 14:35 · reste ≈ 1 h 12 », ou pour une série
     /// « Stab 2/3 · fin de la série vers 15:10 · reste ≈ 48 min ».
     /// <para>
-    /// L'heure de fin est calculée au lancement de chaque stab puis RECALÉE à la fin de chaque gate
-    /// (les durées réelles affinent l'estimation, voir <see cref="EstimationDureeStab"/>). Entre deux
-    /// gates, le temps restant décompte simplement jusqu'à cette heure. Une fois l'heure dépassée,
-    /// le bandeau dit « Fin imminente… » plutôt qu'un temps négatif.
+    /// L'heure de fin est calculée au lancement de chaque stab puis recalée à la fin de chaque gate
+    /// (voir <see cref="EstimationDureeStab"/>). Une fois dépassée, le bandeau dit « Fin imminente… ».
     /// </para>
     /// Thread-safe : écrit par le thread de mesure, lu par le thread du bandeau.
     /// </summary>

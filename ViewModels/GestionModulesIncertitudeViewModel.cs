@@ -241,9 +241,7 @@ namespace Metrologo.ViewModels
             }
         }
 
-        // AjouterLigne (1 ligne unique) retiré — l'admin ajoute désormais des temps de
-        // mesure via AjouterTrio (3 plages auto). Évite des lignes orphelines hors du
-        // schéma "1 temps de mesure = 3 plages" du format C.E.A.O.
+        // Pas d'ajout de ligne isolée : 1 temps de mesure = 3 plages (format C.E.A.O.), voir AjouterTrio.
 
         /// <summary>Ajoute 3 lignes (plages basse/moyenne/haute) pour un temps de mesure — format tableau C.E.A.O.</summary>
         [RelayCommand(CanExecute = nameof(PeutEnregistrerSupprimer))]

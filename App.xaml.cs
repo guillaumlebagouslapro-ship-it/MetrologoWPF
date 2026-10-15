@@ -14,7 +14,7 @@ namespace Metrologo
         {
             base.OnStartup(e);
 
-            // ===== PROFILING DÉMARRAGE (À RETIRER APRÈS OPTIMISATION) =====
+            // Profiling du démarrage (TODO : à retirer après optimisation).
             // Chronomètre chaque étape ; résultat dans le journal + startup_profiling.txt.
             var swStartup = System.Diagnostics.Stopwatch.StartNew();
             var lapsStartup = new System.Collections.Generic.List<(string Etape, long MsDebut, long MsFin)>();
@@ -25,29 +25,24 @@ namespace Metrologo
                 lapsStartup.Add((etape, lastLap, now));
                 lastLap = now;
             }
-            // ========================================================================
 
             Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             StartupLap("ShutdownMode set");
 
-            // Mise a jour automatique (Velopack) : verifie le dossier reseau, telecharge
-            // et applique une version plus recente puis redemarre. Sans effet en dev ou
-            // si M: est indisponible. Place ici (avant les prerequis) pour tourner sur la
-            // derniere version des le lancement. ShutdownMode explicite ci-dessus evite
-            // que l'app se ferme pendant l'affichage de la fenetre de progression.
+            // Mise a jour automatique (Velopack) : verifie le dossier reseau, applique une
+            // version plus recente puis redemarre. Sans effet en dev ou si M: est indisponible.
+            // Placee avant les prerequis pour tourner sur la derniere version des le lancement.
+            // Le ShutdownMode explicite evite la fermeture pendant la fenetre de progression.
             await UpdateService.CheckAndApplyAsync();
             StartupLap("UpdateService.CheckAndApplyAsync");
 
-            // Attribue automatiquement la fenêtre active comme Owner de toute modale sans
-            // Owner explicite. Sans ça, ShowDialog peut passer derrière la principale
-            // (désactivée → app gelée en apparence). Windows maintient alors la modale
-            // au-dessus et la fait clignoter si on clique sur la principale.
+            // Donne un Owner à toute modale qui n'en a pas : sans ça, ShowDialog peut passer
+            // derrière la fenêtre principale (désactivée → app gelée en apparence).
             EventManager.RegisterClassHandler(typeof(Window), Window.LoadedEvent,
                 new RoutedEventHandler(AttribuerOwnerAutomatique));
 
-            // Adapte chaque fenêtre à la zone de travail : rétrécit si besoin et la
-            // recale pour qu'elle soit entièrement visible. Le ScrollViewer prend le
-            // relais pour le contenu qui ne tient plus.
+            // Adapte chaque fenêtre à la zone de travail (taille et position). Le
+            // ScrollViewer prend le relais pour le contenu qui ne tient plus.
             EventManager.RegisterClassHandler(typeof(Window), Window.LoadedEvent,
                 new RoutedEventHandler(AdapterTailleAEcran));
 
@@ -61,7 +56,6 @@ namespace Metrologo
                 bool? choix = dlg.ShowDialog();
                 if (choix != true)
                 {
-                    // l'utilisateur a choisi de quitter
                     Application.Current.Shutdown();
                     return;
                 }
@@ -89,7 +83,6 @@ namespace Metrologo
                 bool? choixReseau = dlgReseau.ShowDialog();
                 if (choixReseau != true)
                 {
-                    // L'utilisateur a choisi de fermer l'application.
                     Application.Current.Shutdown();
                     return;
                 }
@@ -98,17 +91,16 @@ namespace Metrologo
             }
 
             // Charge les overrides de chemins. Poste vierge : adopte le maître serveur
-            // silencieusement (bootstrap). Tous les services suivants lisent les chemins partagés.
+            // (bootstrap). Les services suivants lisent les chemins partagés.
             CheminsMetrologo.ChargerConfigChemins();
             StartupLap("ChargerConfigChemins");
 
-            // Renommage des anciens dossiers de modules d'incertitude (ex. TachyContact
-            // → TachymetreContact). Idempotent.
+            // Renomme les anciens dossiers de modules d'incertitude (TachyContact → TachymetreContact).
             Services.Incertitude.ModulesIncertitudeService.MigrerAnciensNomsDossiers();
             StartupLap("MigrerAnciensNomsDossiers");
 
-            // Dossier local de sauvegarde des rapports (C:\Users\Public\Documents\Metrologo_Backup).
-            // Créé au démarrage si absent. Overridable via Admin → Chemins de stockage.
+            // Dossier local de sauvegarde des rapports (C:\Users\Public\Documents\Metrologo_Backup),
+            // modifiable via Admin → Chemins de stockage.
             bool dossierOk = CheminsMetrologo.AssurerDossierMesuresLocal();
             bool premierDemarrage = CheminsMetrologo.EstPremierDemarrage();
             StartupLap("AssurerDossierMesuresLocal + EstPremierDemarrage");
@@ -139,8 +131,8 @@ namespace Metrologo
                   + "l'app fonctionnera sur les chemins locaux mis en cache lors du dernier démarrage réussi.");
             }
 
-            // Premier démarrage : informe l'utilisateur du dossier créé et ajoute un
-            // raccourci Bureau. Affiché une seule fois (flag dans Configuration\).
+            // Premier démarrage : informe du dossier créé et ajoute un raccourci Bureau
+            // (une seule fois, flag dans Configuration\).
             if (premierDemarrage && dossierOk)
             {
                 string? raccourci = CheminsMetrologo.CreerRaccourciBureauMesuresLocal();
@@ -174,19 +166,14 @@ namespace Metrologo
             // valable pour toute la session — un changement est pris au prochain démarrage.
             Metrologo.Models.Preferences.RechargerFormatRapports();
 
-            // (Diagnostic SQL retiré : suivi Besançon 100 % fichier txt. Évite le timeout
-            // de 6 s au démarrage quand SVR-OR est injoignable.)
-
             // Sessions zombies (crash, taskkill, debug brutal) : sans ce nettoyage elles
             // s'accumulent et restent « En cours » dans le journal indéfiniment.
             await Journal.NettoyerSessionsZombiesAsync();
             StartupLap("NettoyerSessionsZombiesAsync (I/O M:\\)");
 
-            // Archive le mois précédent si besoin. Idempotent, multi-postes-safe.
-            // Fire-and-forget.
+            // Archive le mois précédent si besoin (sans risque en multi-postes). Fire-and-forget.
             _ = ArchivesLogsService.ArchiverMoisPrecedentSiNecessaireAsync();
 
-            // Catalogue local des modèles d'appareils.
             await CatalogueAppareilsService.Instance.ChargerAsync();
             StartupLap("CatalogueAppareilsService.ChargerAsync");
 
@@ -195,12 +182,12 @@ namespace Metrologo
             Metrologo.Services.Catalogue.SeedLegacyAppareils.EnsureSeeded();
             StartupLap("SeedLegacyAppareils.EnsureSeeded");
 
-            // Presets de balayage de stabilité (séédés au 1er démarrage).
+            // Presets de balayage de stabilité (créés au 1er démarrage).
             await PresetsStabiliteService.Instance.ChargerAsync();
             StartupLap("PresetsStabiliteService.ChargerAsync");
 
-            // METROLOGO_Stab.xlsx livré avec l'app (issu de Stab1.xls, graphe pro intégré).
-            // Builder déclenché uniquement si le template a été supprimé → version basique sans graphe.
+            // METROLOGO_Stab.xlsx est livré avec l'app (graphe intégré). Le builder ne sert
+            // que si le template a été supprimé : version basique, sans graphe.
             try
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -218,19 +205,17 @@ namespace Metrologo
                     $"Construction du template Stabilité échouée : {ex.Message}.");
             }
 
-            // Instance Excel cachée pré-démarrée (héritage Delphi) : plus de coût COM
-            // dans la boucle chaude au lancement d'une mesure.
+            // Instance Excel cachée pré-démarrée : évite le coût COM au lancement d'une mesure.
             _ = ExcelInteropHost.Instance.DemarrerAsync();
 
-            // Reprend les transferts FI en attente (M:\ down ou latence lors des sessions
-            // précédentes). No-op si liste vide ou M:\ toujours indispo. Fire-and-forget.
-            // Réveille le lecteur réseau des mesures en arrière-plan (un M: endormi met plusieurs
-            // secondes à répondre) : la 1re mesure saura tout de suite s'il est joignable.
+            // Réveille le lecteur réseau des mesures en arrière-plan (un M: endormi met
+            // plusieurs secondes à répondre) : la 1re mesure saura s'il est joignable.
+            // Puis reprend les transferts FI restés en attente (M:\ indisponible auparavant).
             CheminsMetrologo.ReveillerReseauMesures();
             _ = TransfertReseauService.TenterTransfertsEnAttenteAsync();
 
             // Tâche quotidienne Besançon : FTP → valeurs_besancon.txt. Le marqueur partagé
-            // empêche les doublons inter-postes. Fire-and-forget.
+            // évite les doublons entre postes.
             try { Metrologo.Services.Besancon.BesanconScheduler.Demarrer(); }
             catch (Exception exBes)
             {
@@ -238,12 +223,8 @@ namespace Metrologo
                     $"Démarrage de la tâche Besançon échoué : {exBes.Message}");
             }
 
-            // (Rattrapage hebdo SQL retiré : moyennes Besançon recalculées à la volée depuis
-            // le txt. Plus de timeout ni SqlException quand SVR-OR est injoignable.)
-
-            // Warm-up ClosedXML : ouvre les 2 templates en arrière-plan pour pré-JIT
-            // (ClosedXML.dll, OpenXml.dll) et amorcer le cache disque. Sans ça, la 1ère
-            // InitialiserRapportAsync prend ~1 s ; après warm-up ~25 ms. Fire-and-forget.
+            // Warm-up ClosedXML : ouvre les 2 templates en arrière-plan (pré-JIT + cache disque).
+            // Sans ça, la 1ère InitialiserRapportAsync prend ~1 s, ~25 ms après.
             _ = Task.Run(() =>
             {
                 try
@@ -273,26 +254,25 @@ namespace Metrologo
 
             StartupLap("Vérif template Stab + start Excel COM + warm-up ClosedXML (FaF)");
 
-            // ===== DÉMARRAGE =====
             // L'app s'ouvre sur l'écran de sélection utilisateur. MainViewModel orchestre
             // la suite (Baie/Paillasse → Accueil) et démarre la session journal au choix.
             var mainVM = new MainViewModel();
             StartupLap("new MainViewModel");
             var mainWin = new MainWindow { DataContext = mainVM };
             StartupLap("new MainWindow (XAML parse)");
-            // Pas de mainWin.Closed += async void : l'app s'arrêtait avant l'écriture de
-            // sessions.json → zombies. Fermeture faite de façon synchrone dans OnExit.
+            // Pas de Closed async void : l'app s'arrêtait avant l'écriture de sessions.json
+            // (sessions zombies). La fermeture se fait de façon synchrone dans OnExit.
             Application.Current.MainWindow = mainWin;
             Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
             mainWin.Show();
             StartupLap("mainWin.Show");
 
-            // Surveille les changements admin inter-postes → toast non-bloquant (rubidium,
-            // chemins, modules, catalogue, utilisateurs). Sur le thread UI.
+            // Surveille les changements admin faits depuis d'autres postes (rubidium, chemins,
+            // modules, catalogue, utilisateurs) → toast non bloquant. Non critique.
             try { Metrologo.Services.Journal.NotificationsAdminWatcher.Demarrer(); }
             catch { /* la notif inter-postes n'est pas critique */ }
 
-            // ===== ÉCRITURE DU PROFILING (À RETIRER UNE FOIS L'OPTIMISATION FAITE) =====
+            // Écriture du profiling (TODO : à retirer avec le chronométrage ci-dessus).
             swStartup.Stop();
             try
             {
@@ -313,7 +293,6 @@ namespace Metrologo
                     $"Démarrage total {swStartup.ElapsedMilliseconds}ms — voir startup_profiling.txt à côté de l'exe.\n"
                     + contenu);
 
-                // Copie dans un fichier à côté de l'exe (facile à partager).
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
                 string fichierProfiling = System.IO.Path.Combine(baseDir, "startup_profiling.txt");
                 System.IO.File.WriteAllText(fichierProfiling, contenu);
@@ -323,13 +302,11 @@ namespace Metrologo
                 Journal.Warn(CategorieLog.Systeme, "STARTUP_PROFILING_KO",
                     $"Écriture profiling démarrage échouée : {ex.Message}");
             }
-            // ========================================================================
         }
 
         /// <summary>
         /// Handler de classe sur Loaded : attribue la fenêtre active comme Owner à toute
-        /// Window sans Owner explicite. Gère les dialogues imbriqués (l'actif est le
-        /// parent, pas la MainWindow). Best-effort : échec = comportement habituel.
+        /// Window sans Owner (dialogues imbriqués inclus). Best-effort.
         /// </summary>
         private static void AttribuerOwnerAutomatique(object sender, RoutedEventArgs e)
         {
@@ -338,8 +315,8 @@ namespace Metrologo
                 if (sender is not Window fenetre) return;
 
                 // Thread UI secondaire (ex. StopMesureFloatingWindow) : ne rien faire.
-                // Current.MainWindow et Current.Windows appartiennent au thread principal ;
-                // y accéder cross-thread lève InvalidOperationException (plantage STOP).
+                // MainWindow et Windows appartiennent au thread principal ; y accéder
+                // depuis un autre lève InvalidOperationException.
                 var app = Application.Current;
                 if (app == null || app.Dispatcher != fenetre.Dispatcher) return;
 
@@ -364,8 +341,8 @@ namespace Metrologo
                 }
                 catch (InvalidOperationException)
                 {
-                    // ShowDialog déjà appelé : WPF refuse Owner à ce stade. On le pose
-                    // via GWLP_HWNDPARENT (Win32) — même effet z-order.
+                    // ShowDialog déjà appelé : WPF refuse Owner. On le pose via
+                    // GWLP_HWNDPARENT (Win32), même effet sur le z-order.
                     nint hwnd = new System.Windows.Interop.WindowInteropHelper(fenetre).Handle;
                     nint hOwner = new System.Windows.Interop.WindowInteropHelper(proprietaire).Handle;
                     if (hwnd != 0 && hOwner != 0)
@@ -492,11 +469,10 @@ namespace Metrologo
             if (_nettoyageFait) return;
             _nettoyageFait = true;
 
-            // Filet de sécurité : quoi qu'il arrive pendant le ménage (Excel qui ne répond
-            // plus, verrou tenu par une mesure...), le processus ne doit pas survivre à sa
-            // fenêtre. Sinon il reste invisible en tâche de fond, garde le verrou d'instance
-            // unique et Metrologo ne peut plus être relancé. Thread d'arrière-plan : si la
-            // fermeture se passe bien, il disparaît avec le processus sans rien faire.
+            // Filet de sécurité : si le ménage se bloque (Excel qui ne répond plus, verrou tenu
+            // par une mesure...), le processus resterait invisible en tâche de fond avec le
+            // verrou d'instance unique, et Metrologo ne pourrait plus être relancé.
+            // Thread d'arrière-plan : il disparaît avec le processus si tout se passe bien.
             new System.Threading.Thread(() =>
             {
                 System.Threading.Thread.Sleep(15000);
@@ -508,13 +484,11 @@ namespace Metrologo
             try { Metrologo.Services.Journal.JournalFIService.TerminerSession("Fermeture application"); }
             catch { /* best-effort */ }
 
-            // Fermeture synchrone obligatoire : sessions.json doit être écrit avant
-            // l'arrêt du process. En async void l'app pouvait se terminer avant
-            // l'écriture → session restait « en cours » indéfiniment.
-            // Task.Run : SURTOUT pas GetAwaiter().GetResult() directement sur le thread UI.
-            // Les await internes (WriteAllTextAsync...) voulaient reprendre sur ce thread,
-            // bloqué à les attendre → interblocage : fenêtre fermée mais processus figé.
-            // Sur le pool de threads, pas de contexte à reprendre ; 5 s maximum.
+            // Fermeture synchrone : sessions.json doit être écrit avant l'arrêt du process,
+            // sinon la session reste « en cours » indéfiniment.
+            // Task.Run obligatoire : un GetAwaiter().GetResult() direct sur le thread UI
+            // provoque un interblocage (les await internes veulent reprendre sur ce thread),
+            // fenêtre fermée mais processus figé. 5 s maximum.
             try
             {
                 System.Threading.Tasks.Task.Run(() => Journal.TerminerSessionAsync())

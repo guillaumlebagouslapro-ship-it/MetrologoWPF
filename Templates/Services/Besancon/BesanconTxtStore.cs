@@ -37,7 +37,6 @@ namespace Metrologo.Services.Besancon
         {
             Directory.CreateDirectory(CheminsMetrologo.Besancon);
 
-            // Charge l'historique pour dédoublonner.
             var parMjd = await LireAsync();
 
             int nouvelles = 0;

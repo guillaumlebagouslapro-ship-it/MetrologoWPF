@@ -6,12 +6,12 @@ namespace Metrologo.Services.Journal
 {
     /// <summary>
     /// Journal centralisé sur fichiers JSON dans CheminsMetrologo.Logs (par défaut
-    /// M:\exe_spe\Data_Metrologo\Logs\). Remplace l'ancien SqlServerJournalService.
+    /// M:\exe_spe\Data_Metrologo\Logs\).
     /// </summary>
     // sessions.json : tableau complet relu/réécrit (une session = une ouverture d'app).
     // entries-YYYY-MM.jsonl : JSON-lines append-only, un fichier par mois (archivable).
     // Multi-postes : sessions par Guid, entries en append avec FileShare.Read.
-    // Partage M:\ HS → écritures perdues silencieusement, l'app reste utilisable.
+    // Partage M:\ HS : écritures perdues silencieusement, l'app reste utilisable.
     public class FichierJournalService : IJournalService
     {
         private readonly SemaphoreSlim _semaSessions = new(1, 1);
@@ -166,8 +166,7 @@ namespace Metrologo.Services.Journal
 
                     // 1) JSON-lines (lu par le JournalViewer)
                     string ligne = JsonSerializer.Serialize(entry, _jsonOpts);
-                    // Append concurrent-safe : FileShare.Read → lectures simultanées OK,
-                    // un seul writer à la fois côté Windows.
+                    // FileShare.Read : lectures simultanées OK, un seul writer à la fois.
                     using (var fs = new FileStream(fichier, FileMode.Append, FileAccess.Write,
                         FileShare.Read, bufferSize: 4096, useAsync: false))
                     using (var sw = new StreamWriter(fs, Encoding.UTF8))

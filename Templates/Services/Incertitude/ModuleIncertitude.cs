@@ -5,9 +5,9 @@ namespace Metrologo.Services.Incertitude
 {
     /// <summary>
     /// Module métrologique (compteur, tachymètre…) avec son tableau d'incertitudes.
-    /// Un module = un CSV dans <c>%LocalAppData%\Metrologo\Incertitudes\</c> ; le nom
-    /// du fichier (sans extension) est l'identifiant. Les valeurs distinctes de
-    /// <c>Fonction</c> définissent les types de mesure supportés (filtre du ComboBox Configuration).
+    /// Un module = un CSV dans <see cref="CheminsMetrologo.Incertitudes"/> ; le nom du fichier
+    /// (sans extension) est l'identifiant. Les valeurs distinctes de <c>Fonction</c> définissent les
+    /// types de mesure supportés (filtre du ComboBox Configuration).
     /// </summary>
     public partial class ModuleIncertitude : ObservableObject
     {
@@ -51,10 +51,9 @@ namespace Metrologo.Services.Incertitude
         /// </summary>
         public LigneIncertitude? Trouver(string fonction, double tempsSec, double freqHz)
         {
-            // Le sous-dossier du CSV fixe déjà le type de mesure. Si le module ne contient
-            // aucune ligne de la fonction attendue (ex. module Stabilité saisi en « Freq »,
-            // fonction par défaut de l'ajout de temps), on ignore la colonne Fonction au lieu
-            // de déclarer toute la mesure hors domaine.
+            // Le sous-dossier du CSV fixe déjà le type de mesure : si le module n'a aucune ligne de
+            // la fonction attendue (ex. module Stabilité saisi en « Freq »), on ignore la colonne
+            // Fonction plutôt que de déclarer la mesure hors domaine.
             bool filtrerFonction = SupportFonction(fonction);
             return Lignes.FirstOrDefault(l =>
                 (!filtrerFonction || string.Equals(l.Fonction, fonction, System.StringComparison.OrdinalIgnoreCase)) &&

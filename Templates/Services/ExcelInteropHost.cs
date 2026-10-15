@@ -190,20 +190,9 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Range les EXCEL.EXE externes en deux catégories :
-        ///   - <c>visibles</c> : ils ont une fenêtre principale (MainWindowHandle != 0), donc c'est
-        ///     un vrai classeur ouvert par l'utilisateur, qui peut contenir un travail non sauvegardé.
-        ///     On ne les ferme JAMAIS sans confirmation.
-        ///   - <c>fantomes</c> : aucune fenêtre, c'est un reliquat de pilotage COM (session Metrologo
-        ///     précédente, complément, crash). Comme l'utilisateur ne les voit pas, on peut les fermer
-        ///     en silence pour libérer un éventuel verrou de fichier.
-        /// </summary>
-        /// <summary>
-        /// Prend une photo de tous les PID EXCEL.EXE actuellement en cours. À appeler JUSTE avant
-        /// <c>Activator.CreateInstance("Excel.Application")</c> : ça nous permet, une fois l'instance
-        /// créée, de retrouver de façon fiable le PID de NOTRE nouvelle instance (voir
-        /// <see cref="ResoudrePidExcelCree"/>). C'est plus robuste que de lire le HWND, qui échoue
-        /// tant que l'instance cachée n'a pas (encore) de fenêtre exploitable.
+        /// Photo des PID EXCEL.EXE en cours, à prendre juste avant <c>CreateInstance</c> pour
+        /// retrouver ensuite le PID de notre instance (<see cref="ResoudrePidExcelCree"/>).
+        /// Plus fiable que le HWND, absent tant que l'instance cachée n'a pas de fenêtre.
         /// </summary>
         private static HashSet<int> SnapshotPidsExcel()
         {
@@ -220,10 +209,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Renvoie le PID du process EXCEL.EXE qui est apparu depuis <paramref name="avant"/>
-        /// (le snapshot pris avant <c>CreateInstance</c>) : c'est notre instance COM. Renvoie 0
-        /// si rien de neuf n'est apparu (souci de timing ou échec), et dans ce cas l'appelant
-        /// se rabat sur la lecture du HWND.
+        /// PID du EXCEL.EXE apparu depuis le snapshot <paramref name="avant"/> (notre instance COM),
+        /// ou 0 si rien de neuf : l'appelant se rabat alors sur le HWND.
         /// </summary>
         private static int ResoudrePidExcelCree(HashSet<int> avant)
         {
@@ -238,6 +225,12 @@ namespace Metrologo.Services
             return 0;
         }
 
+        /// <summary>
+        /// Range les EXCEL.EXE externes en deux catégories :
+        /// <c>visibles</c> (fenêtre principale : classeur de l'utilisateur, jamais fermé sans
+        /// confirmation) et <c>fantomes</c> (sans fenêtre : reliquat de pilotage COM, fermable
+        /// en silence pour libérer un verrou de fichier).
+        /// </summary>
         public (List<Process> visibles, List<Process> fantomes) ListerExcelsExternesClasses()
         {
             var visibles = new List<Process>();
@@ -255,12 +248,10 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Vrai s'il y a actuellement un classeur de mesure ouvert dans l'instance Excel.
-        /// <see cref="MesureOrchestrator"/> s'en sert pour choisir son chemin :
-        ///   - false (1ère mesure de la session app) → init ClosedXML + OuvrirEtAfficher
-        ///   - true (mesure 2 et suivantes sur le même FI, ou multi-gates) →
-        ///     <see cref="AjouterFeuilleMesureAsync"/> en pur COM, sans jamais fermer le classeur,
-        ///     ce qui évite la fenêtre grise SDI.
+        /// Vrai si un classeur de mesure est ouvert dans l'instance Excel.
+        /// <see cref="MesureOrchestrator"/> en déduit son chemin : false (1ère mesure) → ClosedXML
+        /// + OuvrirEtAfficher ; true → <see cref="AjouterFeuilleMesureAsync"/> en pur COM, sans
+        /// fermer le classeur (évite la fenêtre grise SDI).
         /// </summary>
         public bool AClasseurActif
         {
@@ -275,10 +266,8 @@ namespace Metrologo.Services
 
 
         /// <summary>
-        /// PID du process EXCEL.EXE qu'on a démarré, qu'on garde sous la main pour pouvoir le tuer
-        /// en urgence si les appels COM se bloquent — typiquement quand l'utilisateur ferme Excel
-        /// à la main pendant une écriture en cours, ce qui laisse les appels RPC suspendus jusqu'au
-        /// timeout système (~60 s). Vaut 0 tant qu'Excel n'est pas démarré.
+        /// PID du EXCEL.EXE qu'on a démarré, pour le tuer en urgence si les appels COM se bloquent
+        /// (Excel fermé à la main pendant une écriture : RPC suspendus ~60 s). 0 si non démarré.
         /// </summary>
         private int _excelPid;
 
@@ -320,10 +309,8 @@ namespace Metrologo.Services
         private const uint SWP_NOACTIVATE = 0x0010;
         private static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
 
-        // Timer qui masque les fenêtres shell en continu : il se réveille toutes les 500 ms tant
-        // qu'un classeur est ouvert dans Excel. Comme ça, n'importe quelle shell qui finirait par
-        // apparaître (1ère ouverture, race COM, etc.) est masquée dans la demi-seconde — même si la
-        // toute première tentative avait raté à cause du timing.
+        // Masque en continu les fenêtres shell (toutes les 500 ms tant qu'un classeur est ouvert),
+        // même si la toute première tentative a raté à cause du timing COM.
         private System.Threading.Timer? _timerMasquageShell;
         private readonly object _timerLock = new();
 
@@ -334,16 +321,14 @@ namespace Metrologo.Services
 
         /// <summary>
         /// Vérifie au niveau OS si le process Excel (PID enregistré) est encore vivant.
-        /// Ne prend PAS le lock <c>_sync</c> — peut être appelé en boucle par un watchdog
-        /// sans bloquer ni être bloqué par les COM calls en cours. Retourne false aussi
-        /// si le PID n'est pas connu (Excel jamais démarré).
+        /// Ne prend PAS le lock <c>_sync</c> : appelable en boucle par un watchdog sans bloquer
+        /// ni être bloqué par les appels COM en cours.
         /// </summary>
         public bool EstProcessExcelEnVie()
         {
             int pid = _excelPid;
-            // PID inconnu (pas encore résolu, ou instance en cours de redémarrage) : on ne peut
-            // rien conclure, on suppose vivant. Renvoyer « mort » ici faisait abandonner une
-            // mesure par la surveillance de l'accueil alors qu'Excel tournait.
+            // PID inconnu (pas encore résolu, ou redémarrage) : on suppose vivant, sinon la
+            // surveillance de l'accueil abandonnerait une mesure alors qu'Excel tourne.
             if (pid <= 0) return true;
             try
             {
@@ -386,10 +371,8 @@ namespace Metrologo.Services
                     _excel.ScreenUpdating = false;
                     _excel.AskToUpdateLinks = false;
 
-                    // Identifie le PID de NOTRE instance par diff de la liste des process
-                    // (fiable même sans fenêtre). Repli sur le HWND si le diff ne trouve rien.
-                    // Ce PID sert à s'auto-exclure de la détection « Excel externe » et à
-                    // TuerProcessExcelAsync() en cas de COM bloqué pendant une mesure.
+                    // PID de NOTRE instance (diff des process, repli sur le HWND). Sert à s'exclure
+                    // de la détection « Excel externe » et à TuerProcessExcelAsync() si le COM bloque.
                     _excelPid = ResoudrePidExcelCree(pidsAvant);
                     if (_excelPid == 0)
                     {
@@ -408,11 +391,9 @@ namespace Metrologo.Services
                     JournalLog.Info(CategorieLog.Excel, "EXCEL_HOTE_DEMARRE",
                         $"Instance Excel cachée prête en arrière-plan (PID={_excelPid}).");
 
-                    // Pré-ouvre Metrologo.xla comme classeur dans l'instance — c'est ce que
-                    // faisait le Delphi historique. Sans ça, les formules [1]!Cal_xxx(...)
-                    // des rapports affichent #NOM? jusqu'à ce que l'utilisateur clique
-                    // « Ouvrir le classeur » dans le panneau « Liaisons de classeur ».
-                    // Avec le .xla déjà dans Workbooks, Excel résout le link en silence.
+                    // Pré-ouvre Metrologo.xla (comme le Delphi historique) : sans lui, les formules
+                    // [1]!Cal_xxx des rapports affichent #NOM? tant que l'utilisateur n'a pas
+                    // cliqué « Ouvrir le classeur » dans « Liaisons de classeur ».
                     PreChargerXlaInterne();
                 }
                 catch (Exception ex)
@@ -427,20 +408,17 @@ namespace Metrologo.Services
         });
 
         /// <summary>
-        /// Ouvre le classeur sauvegardé par <c>ExcelService</c> dans l'instance Excel cachée,
-        /// positionne la feuille de mesure active, puis affiche la fenêtre Excel à l'utilisateur.
-        /// Si un classeur était déjà ouvert, il est fermé en premier (choix : une seule mesure
-        /// en direct à la fois — simplifie le suivi utilisateur).
+        /// Ouvre le classeur sauvegardé par <c>ExcelService</c> dans l'instance cachée, active la
+        /// feuille de mesure et affiche Excel. Un classeur déjà ouvert est fermé (une seule mesure
+        /// live à la fois).
         /// </summary>
         public Task OuvrirEtAfficherAsync(string cheminFichier, string nomFeuilleMesure)
             => Task.Run(() =>
             {
                 lock (_sync)
                 {
-                    // Vérifie que l'instance Excel est encore vivante (l'utilisateur a pu
-                    // fermer la fenêtre Excel manuellement, ou Excel a planté). Si KO,
-                    // on relance une nouvelle instance avant de continuer — sinon RPC
-                    // disconnecté (0x800706BA) au prochain accès à _excel.
+                    // Excel a pu être fermé à la main ou planter : on relance une instance, sinon
+                    // RPC déconnecté (0x800706BA) au prochain accès à _excel.
                     if (!EstInstanceVivante())
                     {
                         JournalLog.Warn(CategorieLog.Excel, "EXCEL_HOTE_REDEMARRE",
@@ -449,20 +427,15 @@ namespace Metrologo.Services
                         if (_excel == null) return;   // redémarrage a échoué, on abandonne
                     }
 
-                    // L'instance peut répondre au COM sans avoir encore le .xla : fenêtre Excel
-                    // fermée par l'utilisateur entre deux mesures → Excel ferme tous ses classeurs,
-                    // .xla compris, mais le process reste vivant (on le pilote). Sans ce contrôle,
-                    // le rapport suivant s'ouvrait avec des #NOM? sur les cellules [1]!Cal_xxx.
+                    // Fenêtre Excel fermée entre deux mesures : Excel ferme tous ses classeurs, .xla
+                    // compris, mais le process survit. Sans ce contrôle : #NOM? sur [1]!Cal_xxx.
                     VerifierXlaChargeInterne();
 
                     // Ferme tout classeur précédent (une seule mesure live à la fois).
                     FermerClasseurActifInterne();
 
-                    // Workbooks.Open(Filename, UpdateLinks=0). On ne met PAS à jour les liens
-                    // ici : le Metrologo.xla est déjà pré-ouvert dans l'instance Excel par
-                    // PreChargerXlaInterne() au démarrage, donc Excel résout [1]!Cal_xxx(...)
-                    // directement via le Workbook déjà en mémoire — pas besoin de re-scanner
-                    // les liens (UpdateLinks=3 forcerait une recherche réseau lente et inutile).
+                    // UpdateLinks=0 : le .xla est déjà pré-ouvert (PreChargerXlaInterne), donc Excel
+                    // résout [1]!Cal_xxx sans re-scanner les liens (UpdateLinks=3 = recherche réseau lente).
                     _classeurActif = _excel.Workbooks.Open(cheminFichier, 0);
                     _cheminClasseurActif = cheminFichier;
                     try { _fullNameActifExcel = (string)_classeurActif.FullName; }
@@ -479,11 +452,8 @@ namespace Metrologo.Services
                         }
                     }
 
-                    // Force Excel à recalculer formules + caches des graphes. Sans ça, le
-                    // graphe Stab (axe Y log) reste vide : ClosedXML n'a pas peuplé le
-                    // numCache des charts au moment de l'écriture, et l'ouverture avec
-                    // UpdateLinks=0 ne déclenche pas le recalcul automatique. Le rebuild
-                    // recompose la chaîne de calcul + régénère les caches des graphes.
+                    // Recalcul forcé : sans lui le graphe Stab (axe Y log) reste vide, car ClosedXML ne
+                    // peuple pas le numCache des charts et UpdateLinks=0 ne déclenche pas de recalcul.
                     try { _excel.CalculateFullRebuild(); }
                     catch (Exception ex)
                     {
@@ -491,20 +461,15 @@ namespace Metrologo.Services
                             $"CalculateFullRebuild échoué : {ex.Message}");
                     }
 
-                    // Ferme les éventuels classeurs résiduels (Book1 vide par défaut au
-                    // démarrage Excel, ou anciens fichiers ouverts manuellement par
-                    // l'utilisateur via double-clic) — sans ce nettoyage, plusieurs fenêtres
-                    // Excel grises parasites apparaissent à côté du classeur actif après
-                    // une relance.
+                    // Ferme les classeurs résiduels (Book1 vide, fichiers ouverts par double-clic) qui
+                    // laisseraient des fenêtres Excel grises à côté du classeur actif.
                     FermerClasseursParasitesInterne();
 
                     _excel.ScreenUpdating = true;
                     _excel.Visible = true;
 
-                    // Élargit la zone des onglets en bas (par défaut ~60% de la barre, ce qui
-                    // tronque les onglets 1..13 d'une stab et oblige à naviguer avec les flèches).
-                    // 0.85 = 85% de largeur réservée aux onglets, 15% restant pour la scrollbar
-                    // horizontale → tous les onglets visibles d'un coup pour la plupart des FI.
+                    // Élargit la zone des onglets (défaut ~60 %) à 85 % de la barre, pour voir d'un
+                    // coup les onglets 1..13 d'une stab.
                     try
                     {
                         dynamic w = _classeurActif.Windows[1];
@@ -513,18 +478,14 @@ namespace Metrologo.Services
                     }
                     catch { /* best-effort, non bloquant */ }
 
-                    // Masquage de la shell SDI vide qui apparaît avec Visible=true.
-                    // Léger clignotement résiduel possible (le temps que ShowWindow s'applique).
+                    // Masque la shell SDI vide qui apparaît avec Visible=true (léger clignotement possible).
                     MasquerFenetresShellExcelInterne();
                     MasquerFenetresNonActivesInterne();
 
-                    // Force le rapport au premier plan (annule toute shell TopMost que Workbooks.Open
-                    // aurait pu créer par-dessus).
+                    // Rapport au premier plan (annule une éventuelle shell TopMost créée par Workbooks.Open).
                     ForcerRapportAuPremierPlanInterne();
 
-                    // Démarre le timer de masquage continu : si une shell réapparaît plus tard
-                    // (sur un Save, Open, ou autre opération COM qui réactive le window manager
-                    // Excel), elle sera re-masquée dans la demi-seconde max.
+                    // Timer de masquage continu : re-masque une shell qui réapparaîtrait (Save, Open...).
                     DemarrerTimerMasquageShellInterne();
 
                     JournalLog.Info(CategorieLog.Excel, "EXCEL_CLASSEUR_OUVERT",
@@ -533,12 +494,11 @@ namespace Metrologo.Services
             });
 
         /// <summary>
-        /// Écrit une valeur dans la ligne correspondant à la i-ème mesure. Les formules
-        /// <c>Fréq. Réelle</c> (col C) et <c>F(i)-F(i+1)</c> (col D) sont déjà en place grâce
-        /// à la phase d'initialisation ClosedXML.
+        /// Écrit la i-ème mesure (heure + valeur brute, colonnes A:B). Les formules des colonnes C
+        /// (<c>Fréq. Réelle</c>) et D (<c>F(i)-F(i+1)</c>) sont déjà posées par l'init ClosedXML.
         /// </summary>
-        /// <param name="indexMesure">0-based — la 1ère mesure va en ligne <paramref name="ligneDebut"/>.</param>
-        /// <param name="ligneDebut">Ligne Excel où commence la zone de mesures (9 dans le template).</param>
+        /// <param name="indexMesure">0-based : la 1ère mesure va en <paramref name="ligneDebut"/>.</param>
+        /// <param name="ligneDebut">Première ligne de la zone de mesures (9 dans le template).</param>
         public Task EcrireValeurLiveAsync(int indexMesure, double valeur, DateTime horodatage, int ligneDebut = 9)
             => Task.Run(() =>
             {
@@ -549,14 +509,8 @@ namespace Metrologo.Services
                     try
                     {
                         int row = ligneDebut + indexMesure;
-                        // Tableau en A-D : col=1 (A) = HEURE, col=2 (B) = mesure brute.
-                        //
-                        // Écriture en bloc A:B via un Range + matrice [1,2] au lieu de 2 appels
-                        // .Cells[r,c].Value2 successifs. Excel ne ré-active alors qu'une seule
-                        // fois le rectangle de sélection visible sur la zone écrite (au lieu de
-                        // 2 fois — col A puis col B). Réduit le clignotement / effet « valeur
-                        // barrée pendant la saisie » côté utilisateur.
-                        // Bonus perf : ~30-40 % plus rapide (1 marshal COM au lieu de 2).
+                        // Écriture en bloc A:B (un seul Range.Value2) plutôt que 2 Cells[r,c] : une seule
+                        // réactivation du rectangle de sélection (moins de clignotement), ~30-40 % plus rapide.
                         range = _feuilleMesure.Range[
                             _feuilleMesure.Cells[row, 1],
                             _feuilleMesure.Cells[row, 2]];
@@ -579,14 +533,12 @@ namespace Metrologo.Services
             });
 
         /// <summary>
-        /// Écrit toutes les mesures d'une gate en un seul appel COM (Range.Value2 = matrix).
-        /// Beaucoup plus rapide que N appels <see cref="EcrireValeurLiveAsync"/> quand l'utilisateur
-        /// n'a pas besoin de voir les valeurs apparaître au fil de l'acquisition (ex: balayage de
-        /// stabilité où chaque gate fait 30 mesures à ~10 ms — la boucle complète prend ~1 s,
-        /// l'œil humain ne peut pas suivre, autant tout écrire d'un coup à la fin).
+        /// Écrit toutes les mesures d'une gate en un seul appel COM, bien plus rapide que N appels
+        /// <see cref="EcrireValeurLiveAsync"/> quand le suivi live n'a pas d'intérêt (balayage de
+        /// stabilité : 30 mesures à ~10 ms par gate).
         /// </summary>
-        /// <param name="ligneDebut">Ligne Excel où commence la zone (9 dans le template).</param>
-        /// <param name="mesures">Liste ordonnée (timestamp, valeur). Index 0 = ligneDebut.</param>
+        /// <param name="ligneDebut">Première ligne de la zone (9 dans le template).</param>
+        /// <param name="mesures">Liste ordonnée (timestamp, valeur) ; l'index 0 va en <paramref name="ligneDebut"/>.</param>
         public Task EcrireValeursEnBlocAsync(int ligneDebut, IList<(DateTime ts, double valeur)> mesures)
             => Task.Run(() =>
             {
@@ -596,8 +548,7 @@ namespace Metrologo.Services
                     if (feuille == null || mesures.Count == 0) return;
                     try
                     {
-                        // Construction de la matrice 2D : N lignes × 2 colonnes (HEURE, mesure).
-                        // Excel COM accepte object[,] indexé en 0-based pour Range.Value2.
+                        // Matrice N lignes × 2 colonnes (heure, mesure), 0-based pour Range.Value2.
                         object[,] matrix = new object[mesures.Count, 2];
                         for (int i = 0; i < mesures.Count; i++)
                         {
@@ -605,7 +556,6 @@ namespace Metrologo.Services
                             matrix[i, 1] = mesures[i].valeur;
                         }
 
-                        // Tableau en A-D : col 1 (A) = HEURE, col 2 (B) = mesure brute.
                         int ligneFin = ligneDebut + mesures.Count - 1;
                         dynamic plage = feuille.Range[
                             feuille.Cells[ligneDebut, 1],
@@ -768,9 +718,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Écrit une valeur dans une zone nommée (scope feuille) du classeur actif. Utilisé
-        /// pour les saisies post-mesure (fréquence lue, incertitudes) qui complètent le rapport
-        /// après acquisition des valeurs brutes.
+        /// Écrit une valeur dans une zone nommée (portée feuille) du classeur actif, pour les
+        /// saisies post-mesure (fréquence lue, incertitudes).
         /// </summary>
         public Task EcrireZoneNommeeAsync(string zoneNom, object valeur) => Task.Run(() =>
         {
@@ -778,11 +727,8 @@ namespace Metrologo.Services
             {
                 if (_feuilleMesure == null) return;
 
-                // En fin de mesure, toutes les feuilles sont protégées
-                // (ProtegerToutesFeuillesActifInterne). Comme cette écriture intervient APRÈS
-                // (saisie post-mesure : résolution / incertitude), il faut déprotéger la feuille
-                // avant d'écrire — sinon Value2 = ... lève sur une feuille protégée et la valeur
-                // n'est jamais enregistrée (bug : résolution/incertitude absentes du rapport).
+                // Les feuilles sont protégées en fin de mesure (ProtegerToutesFeuillesActifInterne) :
+                // on déprotège avant d'écrire, sinon Value2 lève et la valeur est perdue.
                 bool etaitProtegee = false;
                 try { etaitProtegee = (bool)_feuilleMesure.ProtectContents; } catch { }
                 if (etaitProtegee)
@@ -793,7 +739,6 @@ namespace Metrologo.Services
 
                 try
                 {
-                    // Names(name).RefersToRange.Value2 = valeur — sheet-scope names only.
                     dynamic nom = _feuilleMesure.Names.Item(zoneNom);
                     try { nom.RefersToRange.Value2 = valeur; }
                     finally { try { Marshal.ReleaseComObject(nom); } catch { } }
@@ -829,26 +774,14 @@ namespace Metrologo.Services
         });
 
         /// <summary>
-        /// SOLUTION NUCLÉAIRE : tue le process EXCEL.EXE par son PID, sans passer par
-        /// <c>_sync</c> ni par aucun appel COM. À utiliser uniquement en cas d'urgence
-        /// quand un appel COM en cours est bloqué (typiquement : l'utilisateur a fermé
-        /// la fenêtre Excel pendant qu'on écrivait une cellule → RPC en attente d'une
-        /// réponse qui ne viendra jamais → timeout système ~60 s).
-        /// <para/>
-        /// Effets :
-        ///   • Tous les appels COM en cours sur ce process lèvent immédiatement
-        ///     <c>COMException 0x800706BA</c> (RPC server unavailable), les locks
-        ///     <c>_sync</c> se libèrent, la mesure peut se terminer proprement.
-        ///   • L'instance Excel partagée doit être recréée avant la prochaine mesure
-        ///     (cf. <see cref="EstInstanceVivante"/> + <see cref="RedemarrerInstanceInterne"/>).
-        /// <para/>
-        /// Non bloquant : exécuté en Task.Run, ne nécessite pas de réponse.
+        /// Urgence : tue le process EXCEL.EXE par son PID, sans <c>_sync</c> ni appel COM, quand un
+        /// appel COM est bloqué (Excel fermé pendant une écriture : RPC en attente ~60 s). Les appels
+        /// bloqués lèvent aussitôt <c>COMException 0x800706BA</c> et libèrent <c>_sync</c> ; l'instance
+        /// devra être recréée (<see cref="EstInstanceVivante"/> + <see cref="RedemarrerInstanceInterne"/>).
         /// </summary>
         public Task TuerProcessExcelAsync() => Task.Run(() =>
         {
-            // VOLONTAIREMENT pas de lock(_sync) ici — l'objectif est précisément de
-            // débloquer les threads qui tiennent ce lock via COM hang. Si on prenait
-            // le lock, on serait nous-même bloqué et on n'aiderait personne.
+            // Volontairement SANS lock(_sync) : on veut débloquer les threads qui le tiennent.
             int pid = _excelPid;
             if (pid <= 0)
             {
@@ -866,7 +799,7 @@ namespace Metrologo.Services
             }
             catch (ArgumentException)
             {
-                // Process déjà mort → c'est OK, c'est ce qu'on voulait.
+                // Déjà mort : c'est le résultat voulu.
                 JournalLog.Info(CategorieLog.Excel, "EXCEL_KILL_DEJA_MORT",
                     $"Process Excel (PID={pid}) déjà terminé.");
             }
@@ -877,8 +810,7 @@ namespace Metrologo.Services
             }
             finally
             {
-                // Marque l'instance comme morte. Les locks tenus par les threads bloqués
-                // vont se libérer dès que leur appel COM lève (immédiat après le kill).
+                // Marque l'instance comme morte.
                 _excelPid = 0;
                 _excel = null;
                 _classeurActif = null;
@@ -889,9 +821,8 @@ namespace Metrologo.Services
         });
 
         /// <summary>
-        /// Ping l'instance Excel pour vérifier qu'elle répond encore au COM. Utilisé avant
-        /// chaque ouverture de classeur pour éviter le RPC disconnect (0x800706BA) si
-        /// l'utilisateur a fermé la fenêtre Excel manuellement ou si le process a crashé.
+        /// Vérifie que l'instance répond encore au COM, avant chaque ouverture de classeur
+        /// (évite le RPC déconnecté 0x800706BA si Excel a été fermé ou a crashé).
         /// </summary>
         private bool EstInstanceVivante()
         {
@@ -908,8 +839,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Recrée une instance Excel après que la précédente ait été perdue (fermée par
-        /// l'utilisateur, crashée, etc.). Doit être appelé sous lock <see cref="_sync"/>.
+        /// Recrée une instance Excel après perte de la précédente (fermée, crashée).
+        /// À appeler sous lock <see cref="_sync"/>.
         /// </summary>
         private void RedemarrerInstanceInterne()
         {
@@ -922,11 +853,10 @@ namespace Metrologo.Services
             _excel = null;
             _cheminClasseurActif = string.Empty;
             _fullNameActifExcel = string.Empty;
-            _cheminXlaPreCharge = string.Empty;   // l'ancienne instance avait son propre .xla : il n'a plus de sens ici
-            // L'ancien PID est mort : on l'oublie TOUT DE SUITE. Gardé jusqu'à la fin du
-            // redémarrage (pré-chargement du .xla compris, plusieurs secondes), il faisait
-            // conclure à la surveillance de l'accueil qu'Excel était mort → mesure abandonnée
-            // en silence juste après son lancement.
+            _cheminXlaPreCharge = string.Empty;   // le .xla appartenait à l'ancienne instance
+            // On oublie l'ancien PID tout de suite : conservé pendant le redémarrage (plusieurs
+            // secondes), il ferait conclure à la surveillance de l'accueil qu'Excel est mort
+            // et abandonner la mesure.
             _excelPid = 0;
 
             try
@@ -941,10 +871,9 @@ namespace Metrologo.Services
                 _excel.ScreenUpdating = false;
                 _excel.AskToUpdateLinks = false;
 
-                // On récupère le PID du NOUVEAU process Excel AVANT le pré-chargement du .xla :
-                // sans ça, TuerProcessExcelAsync viserait un PID périmé, et le nettoyage des Excel
-                // « fantômes » au lancement d'une mesure pourrait fermer notre propre instance.
-                // Diff fiable, avec repli sur le HWND.
+                // PID du NOUVEAU process AVANT le pré-chargement du .xla : sinon TuerProcessExcelAsync
+                // viserait un PID périmé et le nettoyage des Excel « fantômes » pourrait fermer
+                // notre propre instance.
                 _excelPid = ResoudrePidExcelCree(pidsAvant);
                 if (_excelPid == 0)
                 {
@@ -960,8 +889,6 @@ namespace Metrologo.Services
                     catch { _excelPid = 0; }
                 }
 
-                // On rouvre Metrologo.xla d'avance, sinon les formules [1]!Cal_xxx des prochains
-                // rapports ne se résoudraient pas toutes seules (voir PreChargerXlaInterne).
                 PreChargerXlaInterne();
                 JournalLog.Info(CategorieLog.Excel, "EXCEL_HOTE_REDEMARRE",
                     $"Instance Excel recréée (PID={_excelPid}).");
@@ -976,21 +903,9 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Ouvre Metrologo.xla comme classeur dans l'instance Excel pour que les formules
-        /// <c>[1]!Cal_xxx(...)</c> des rapports se résolvent silencieusement à l'ouverture.
-        /// Reproduit ce que faisait le Delphi historique (cf. F_Main.pas: XLApp.Workbooks.Open(S_XLA, ...)).
-        /// <para/>
-        /// Sans ce pré-chargement, Excel affiche le panneau « Liaisons de classeur » qui force
-        /// l'utilisateur à cliquer « Ouvrir le classeur » pour résoudre les fonctions VBA Cal_xxx.
-        /// Un add-in chargé via HKCU\Excel\Options\OPENn ne suffit PAS : il fournit
-        /// <c>=Cal_xxx(...)</c> direct mais pas <c>=[1]!Cal_xxx(...)</c> qui réfère un classeur.
-        /// <para/>
-        /// Doit être appelée sous lock <see cref="_sync"/> avec <see cref="_excel"/> non null.
-        /// </summary>
-        /// <summary>
-        /// Rouvre Metrologo.xla s'il n'est plus ouvert dans l'instance (vérifié par son nom : un
+        /// Rouvre Metrologo.xla s'il n'est plus ouvert dans l'instance (testé par nom : un
         /// complément n'apparaît pas dans l'énumération de Workbooks mais reste accessible par
-        /// <c>Workbooks.Item(nom)</c>). Doit être appelée sous lock <see cref="_sync"/>.
+        /// <c>Workbooks.Item(nom)</c>). À appeler sous lock <see cref="_sync"/>.
         /// </summary>
         private void VerifierXlaChargeInterne()
         {
@@ -1012,6 +927,13 @@ namespace Metrologo.Services
             PreChargerXlaInterne();
         }
 
+        /// <summary>
+        /// Ouvre Metrologo.xla comme classeur pour que les formules <c>[1]!Cal_xxx(...)</c> des
+        /// rapports se résolvent sans le panneau « Liaisons de classeur » (comme le Delphi, cf.
+        /// F_Main.pas : XLApp.Workbooks.Open(S_XLA, ...)). Un add-in chargé via HKCU\Excel\Options\OPENn
+        /// ne suffit pas : il fournit <c>=Cal_xxx(...)</c> mais pas <c>=[1]!Cal_xxx(...)</c>.
+        /// À appeler sous lock <see cref="_sync"/>, <see cref="_excel"/> non null.
+        /// </summary>
         private void PreChargerXlaInterne()
         {
             if (_excel == null) return;
@@ -1025,17 +947,13 @@ namespace Metrologo.Services
             }
             try
             {
-                // UpdateLinks=0 : le .xla n'a pas de liens externes à mettre à jour ;
-                // ReadOnly=true : sécurité, on ne risque pas d'altérer le .xla par accident.
+                // UpdateLinks=0 (pas de liens externes), ReadOnly=true (on n'altère pas le .xla).
                 dynamic wb = _excel.Workbooks.Open(xlaPath, 0, true);
                 _cheminXlaPreCharge = (string)wb.FullName;
-                // Force IsAddin=true pour qu'Excel masque la fenêtre du .xla : sinon Excel 365
-                // traite un .xla ouvert via Workbooks.Open comme un classeur normal et affiche
-                // une fenêtre grise vide à côté du rapport quand l'utilisateur passe en Visible=true.
-                // Une fois IsAddin=true, le classeur reste résolvable par les links mais invisible.
-                try { wb.IsAddin = true; } catch { /* déjà true sur la plupart des .xla, on tente quand même */ }
-                // On libère le proxy COM : Excel garde le classeur en mémoire via la collection
-                // Workbooks, mais on n'a plus besoin de la référence côté C#.
+                // IsAddin=true masque sa fenêtre : sinon Excel 365 le traite en classeur normal et
+                // affiche une fenêtre grise vide à côté du rapport (Visible=true). Il reste résolvable par les liens.
+                try { wb.IsAddin = true; } catch { /* souvent déjà true */ }
+                // Excel garde le classeur via Workbooks : on libère juste le proxy COM.
                 try { Marshal.ReleaseComObject(wb); } catch { }
                 JournalLog.Info(CategorieLog.Excel, "XLA_PRE_CHARGE",
                     $"Metrologo.xla pré-ouvert dans Excel ({_cheminXlaPreCharge}) — formules [1]!Cal_xxx résolues auto.");
@@ -1049,12 +967,9 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Masque toutes les fenêtres Excel SAUF celle du classeur actif (rapport en cours).
-        /// Excel a la fâcheuse habitude de réafficher les fenêtres du .xla (et de tout autre
-        /// classeur résiduel) à chaque toggle <c>Visible=false→true</c> de l'instance hôte.
-        /// Sans cette méthode : une 2e fenêtre grise vide apparaît à côté du rapport dès la
-        /// 2e mesure (toggle qui réveille la fenêtre du .xla).
-        /// Doit être appelée sous lock <see cref="_sync"/>, après <c>_excel.Visible=true</c>.
+        /// Masque toutes les fenêtres Excel SAUF celle du classeur actif : Excel réaffiche celles du
+        /// .xla et des classeurs résiduels à chaque toggle <c>Visible=false→true</c>, d'où une 2e
+        /// fenêtre grise dès la 2e mesure. À appeler sous lock <see cref="_sync"/>, après <c>Visible=true</c>.
         /// </summary>
         private void MasquerFenetresNonActivesInterne()
         {
@@ -1098,19 +1013,16 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Ferme tous les classeurs ouverts dans l'instance Excel hôte SAUF
-        /// <see cref="_classeurActif"/> ET <see cref="_cheminXlaPreCharge"/>. Évite que des
-        /// fenêtres grises parasites (Book1 par défaut, anciens classeurs) restent visibles
-        /// à côté du classeur de mesure, sans refermer le .xla qu'on veut garder en mémoire.
-        /// Doit être appelée sous lock <see cref="_sync"/>.
+        /// Ferme les classeurs de mesure résiduels de l'instance hôte (Book1, anciens rapports) SAUF
+        /// <see cref="_classeurActif"/> et le .xla (<see cref="_cheminXlaPreCharge"/>), pour éviter les
+        /// fenêtres grises parasites. À appeler sous lock <see cref="_sync"/>.
         /// </summary>
         private void FermerClasseursParasitesInterne()
         {
             if (_excel == null) return;
             try
             {
-                // On itère sur Workbooks via index décroissant — la collection se met à
-                // jour à chaque Close, et un foreach risque de lever InvalidOperationException.
+                // Index décroissant : la collection change à chaque Close (un foreach lèverait).
                 int nb = _excel.Workbooks.Count;
                 var diag = new System.Text.StringBuilder($"actif=[{_cheminClasseurActif}] xla=[{_cheminXlaPreCharge}] nb={nb} ");
                 for (int i = nb; i >= 1; i--)
@@ -1119,17 +1031,11 @@ namespace Metrologo.Services
                     try
                     {
                         string fullName = (string)wb.FullName;
-                        // Comparaison robuste : Path.GetFullPath normalise les variations
-                        // (backslash final, capitalisation drive, raccourcis 8.3, /vs\, etc.)
-                        // qui font échouer un simple string.Equals — ce qui faisait fermer
-                        // le rapport tout juste ouvert et donnait une fenêtre Excel grise
-                        // vide à côté.
                         bool estClasseurActif = EstClasseurActif(fullName);
                         bool estXlaPreCharge = !string.IsNullOrEmpty(_cheminXlaPreCharge)
                             && ChemPathEgal(fullName, _cheminXlaPreCharge);
-                        // On ne ferme QUE les classeurs de mesure Metrologo (freq/stab sous
-                        // l'arborescence Metrologo) : un fichier Excel personnel ouvert par
-                        // l'utilisateur ne doit jamais être refermé (Close(false) = sans sauvegarde).
+                        // Seuls les classeurs de mesure sont fermés : un fichier personnel de
+                        // l'utilisateur ne doit jamais l'être (Close(false) = sans sauvegarde).
                         bool estClasseurMesure = EstClasseurDeMesure(fullName);
                         string action = "skip";
                         if (!estClasseurActif && !estXlaPreCharge && estClasseurMesure)
@@ -1159,13 +1065,11 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Vrai si le classeur est un rapport de mesure Metrologo : nom de fichier imposé
-        /// (<c>freq</c> / <c>stab</c>, éventuellement suffixé d'un n° de fallback : freq2, stab3…)
-        /// ET situé dans un dossier de mesures : <c>…\Metrologo\&lt;FI&gt;\</c> (repli local) ou
-        /// le dossier réseau des mesures (<see cref="CheminsMetrologo.MesuresLocal"/>, par ex.
-        /// <c>M:\…\Data_Metrologo\Mesures\&lt;FI&gt;\</c>, qu'Excel peut aussi désigner en
-        /// <c>\\serveur\partage\…</c>). La double condition évite de refermer un fichier Excel
-        /// personnel de l'utilisateur qui porterait un nom proche.
+        /// Vrai si le classeur est un rapport de mesure Metrologo : nom <c>freq</c> / <c>stab</c>
+        /// (suffixe numérique de fallback possible : freq2, stab3…) ET dossier de mesures
+        /// (<c>…\Metrologo\&lt;FI&gt;\</c> ou <see cref="CheminsMetrologo.MesuresLocal"/>, que
+        /// Excel peut aussi écrire en <c>\\serveur\partage\…</c>). La double condition évite de
+        /// refermer un fichier personnel au nom proche.
         /// </summary>
         private static bool EstClasseurDeMesure(string fullName)
         {
@@ -1184,24 +1088,15 @@ namespace Metrologo.Services
             catch { return false; }
         }
 
-        // ============================================================================
-        //  OPTION A — Finalisation de mesure 100% en COM
-        // ============================================================================
-        //  Au lieu du cycle ferme-COM / écrit-ClosedXML / rouvre-COM (qui cause la fenêtre
-        //  grise à la fin de la mesure), on écrit directement dans le Workbook ouvert via
-        //  Excel COM. Plus aucune fermeture/réouverture → l'instance reste stable, le
-        //  rapport reste visible, plus de fenêtre Frame parasite.
-        //
-        //  Couvre : coeffs d'incertitude (ZNCoeffA/B/C/D) + ligne Récap (Freq) + Save.
-        //  Limitations actuelles : Stab + Tachy fréquence auxiliaire couverts par le même
-        //  chemin ; le graphe Stab reste créé via le chemin ClosedXML historique.
-        // ============================================================================
+        // ---------- Finalisation de mesure 100 % en COM ----------
+        // On écrit directement dans le classeur ouvert, sans cycle ferme/écrit-ClosedXML/rouvre
+        // (cause d'une fenêtre grise parasite en fin de mesure). Couvre : coefficients
+        // d'incertitude (ZNCoeffA/B/C/D), ligne Récap (Freq), Save. Stab et Tachy (fréquence
+        // auxiliaire) passent par le même chemin ; le graphe Stab reste créé via ClosedXML.
 
         /// <summary>
-        /// Finalise la mesure en écrivant via Excel COM (sans cycle ferme/rouvre) :
-        /// les coefficients d'incertitude résolus depuis le module sélectionné, puis la
-        /// ligne Récap correspondante au type de mesure, puis Save du Workbook actif.
-        /// L'instance Excel et le rapport restent visibles tout du long.
+        /// Finalise la mesure via Excel COM : coefficients d'incertitude du module sélectionné,
+        /// ligne Récap du type de mesure, puis Save du classeur actif (qui reste visible).
         /// </summary>
         public Task FinaliserMesureViaComAsync(Mesure mesure, List<double> resultats,
             string nomFeuille, double tempsGateSecondes, bool isDerniereGate = false,
@@ -1211,11 +1106,8 @@ namespace Metrologo.Services
             {
                 if (_excel == null || _classeurActif == null) return;
 
-                // FREEZE TOTAL DU RENDU EXCEL pendant la finalisation. Sans ça, les ~80+
-                // opérations COM sur la feuille Récap (Clear + Style + NumberFormat + Value2
-                // + Formula + alignment H/V sur ~12 cellules) déclenchent chacune un repaint :
-                // l'utilisateur voit Excel scroller, basculer entre feuilles, animer = effet
-                // de "balayage" visible avant l'affichage final de Récap.
+                // Rendu Excel gelé pendant la finalisation : sinon les ~80 opérations COM sur la
+                // feuille Récap provoquent chacune un repaint (effet de « balayage » visible).
                 bool screenUpdatingOriginal = true;
                 int calculationOriginal = -4105;   // xlCalculationAutomatic
                 try { screenUpdatingOriginal = (bool)_excel.ScreenUpdating; } catch { }
@@ -1225,13 +1117,9 @@ namespace Metrologo.Services
 
                 try
                 {
-                    // ⚠ CalculerEtEcrireVarianceViaComInterne RETIRÉ (avait été ajouté pour
-                    //    la voie COM v2 qui rejetait la formule `=[1]!Cal_variance` en .Formula).
-                    //    Avec le retour à la voie ClosedXML, ClosedXML pose correctement la formule
-                    //    de Variance dans PreparerLignesMesureAsync — on doit la LAISSER en place,
-                    //    pas l'écraser avec une valeur littérale. Sinon F43 (ZNVariance) perd sa
-                    //    formule `[1]!Cal_variance(SUMSQ(G10:G38),ZNNbMesures,ZNFreqMoyReel)` qui
-                    //    permet le recalcul live si l'utilisateur modifie les données.
+                    // La formule de variance (ZNVariance, `[1]!Cal_variance(SUMSQ(G10:G38),...)`) est
+                    // posée par ClosedXML (PreparerLignesMesureAsync) : ne pas l'écraser par une valeur,
+                    // elle permet le recalcul si l'utilisateur modifie les données.
 
                     // 1. Coeffs d'incertitude + sigma Stab si applicable
                     EcrireCoeffsIncertitudeViaComInterne(mesure, resultats, nomFeuille, tempsGateSecondes);
@@ -1250,37 +1138,27 @@ namespace Metrologo.Services
                     {
                         AjouterLigneRecapStabViaComInterne(mesure, nomFeuille);
 
-                        // À la dernière gate Stab : patcher le graphe via COM (plages des
-                        // séries + bornes axe Y log) — équivalent de RendreGrapheStabDynamique
-                        // + CalibrerAxeYGrapheStab de ExcelService, mais sans cycle ferme/rouvre.
+                        // Dernière gate Stab : plages des séries du graphe via COM (équivalent de
+                        // RendreGrapheStabDynamique de ExcelService). Bornes de l'axe Y : après
+                        // le recalcul (étape 4), car elles se calent sur les valeurs de la Récap.
                         if (isDerniereGate)
                         {
                             int nbGates = nbGatesStabBalayees > 0
                                 ? nbGatesStabBalayees
                                 : _sigmasRelatifsParGate.Count;
                             AjusterPlagesGrapheStabViaComInterne(nbGates);
-                            // Bornes de l'axe Y : posées après le recalcul (étape 4), car elles
-                            // se calent sur les valeurs calculées de la Récap.
                         }
                     }
 
-                    // 3. Redirige le lien externe Metrologo.xla vers Preferences.CheminMacroXLA
-                    //    via ChangeLink COM (équivalent du PatcherLienMacroXLA ClosedXML qui
-                    //    n'est plus appelé en mode visible). Évite que Excel demande à pointer
-                    //    le .xla si le rels contient des chemins obsolètes.
+                    // 3. Redirige le lien externe Metrologo.xla vers Preferences.CheminMacroXLA (ChangeLink
+                    //    COM), pour qu'Excel ne demande pas de repointer le .xla si le fichier
+                    //    contient des chemins obsolètes.
                     RedirigerLinksXlaViaComInterne();
 
-                    // 4. ⚠ Recalc complet AVANT le Save. Toutes les formules ont été posées sous
-                    //    Calculation=Manual (pas d'auto-recalc à chaque pose, pour éviter le
-                    //    balayage Récap). Sans ce recalc, le fichier sauvegardé contient les
-                    //    formules MAIS pas leurs valeurs caches → à la réouverture, les cellules
-                    //    dépendant de liens externes (=[1]!Cal_variance, etc. → Metrologo.xla)
-                    //    s'affichent comme "périmées" (style strikethrough Excel natif) car le
-                    //    lien externe est désactivé par défaut et le cache est vide.
-                    //
-                    //    On force Calculation=Automatic puis Calculate() pour résoudre toutes
-                    //    les formules, AVANT le Save → le .xlsx contient les valeurs à jour →
-                    //    réouverture propre, pas de cellule barrée.
+                    // 4. Recalcul complet AVANT le Save. Les formules ont été posées en Calculation=Manual :
+                    //    sans recalcul, le fichier n'a pas de valeurs en cache et, à la réouverture,
+                    //    les cellules liées à Metrologo.xla (=[1]!Cal_variance...) s'affichent
+                    //    « périmées » (barrées), le lien externe étant désactivé par défaut.
                     try { _excel.Calculation = -4105; /* xlCalculationAutomatic */ } catch { }
                     try { _classeurActif.Calculate(); } catch { }
 
@@ -1292,22 +1170,17 @@ namespace Metrologo.Services
                         CalibrerAxeYGrapheStabViaComInterne(nbGatesAxe, _sigmasRelatifsParGate.Values);
                     }
 
-                    // Configure le workbook pour ne PAS tenter d'actualiser les liens externes
-                    // (vers Metrologo.xla) à la prochaine ouverture. Sans ce réglage, Excel
-                    // recalcule les liens à chaque ouverture du .xlsx → marque le classeur
-                    // "modifié" même si rien n'a été touché → propose enregistrer à la fermeture.
-                    // xlUpdateLinksNever = 2 : pas de mise à jour auto, les valeurs caches du
-                    // .xlsx (posées par notre Calculate ci-dessus) sont utilisées telles quelles.
+                    // Pas d'actualisation des liens externes (Metrologo.xla) à la prochaine ouverture :
+                    // sinon Excel marque le classeur « modifié » et propose d'enregistrer à la fermeture.
+                    // Les valeurs en cache posées par le Calculate ci-dessus sont utilisées telles quelles.
                     try { _classeurActif.UpdateLinks = 2; /* xlUpdateLinksNever */ } catch { }
 
-                    // 4.ter Verrouillage post-mesure : à la dernière gate, on re-protège toutes
-                    //       les feuilles avec le mot de passe prédéfini AVANT le Save (pour que la
-                    //       protection soit persistée). Le rapport devient non modifiable dans Excel
-                    //       sans le mot de passe ; l'app le déprotège seule à la relance (mdp connu).
+                    // Verrouillage post-mesure : à la dernière gate, on re-protège toutes les feuilles
+                    // AVANT le Save (pour persister la protection). L'app les déprotège seule à la relance.
                     if (isDerniereGate)
                         ProtegerToutesFeuillesActifInterne();
 
-                    // 5. Save (avec valeurs caches à jour grâce au Calculate ci-dessus)
+                    // 5. Save
                     try { _classeurActif.Save(); }
                     catch (Exception ex)
                     {
@@ -1318,16 +1191,12 @@ namespace Metrologo.Services
                         EnregistrerEnLocalApresEchecInterne(mesure);
                     }
 
-                    // Marque le classeur comme "non modifié" après le Save. Si Excel fait un
-                    // recalc interne entre maintenant et la fermeture de notre instance hôte
-                    // (ou même à la réouverture côté utilisateur), il considérera que le
-                    // fichier sur disque correspond déjà à l'état mémoire → pas de prompt
-                    // "Voulez-vous enregistrer les modifications ?".
+                    // Classeur « non modifié » après le Save : évite le prompt « Voulez-vous enregistrer
+                    // les modifications ? » en cas de recalcul interne d'Excel.
                     try { _classeurActif.Saved = true; } catch { }
 
-                    // 5. Active la feuille Récap. en fin de mesure (visibilité utilisateur) —
-                    //    pour Stab on attend la dernière gate du balayage, sinon on resterait
-                    //    sur Récap entre chaque gate au lieu de voir la feuille en cours.
+                    // 6. Active la feuille Récap. en fin de mesure ; pour Stab, seulement à la dernière
+                    //    gate (sinon on ne verrait pas la feuille en cours entre deux gates).
                     bool peutBasculerRecap = mesure.TypeMesure != TypeMesure.Stabilite
                                               || isDerniereGate;
                     if (peutBasculerRecap)
@@ -1354,26 +1223,14 @@ namespace Metrologo.Services
                 }
                 finally
                 {
-                    // Restaure les flags Excel dans l'ordre inverse :
-                    //   1. Calculation = original   → repasse en Automatic (typiquement)
-                    //   2. Calculate() FORCÉ        → Excel ne recalcule PAS automatiquement
-                    //                                  les formules qui ont été posées pendant
-                    //                                  la phase Manual. Sans ce force, les
-                    //                                  cellules figées dans leur dernier état
-                    //                                  (#VALEUR!, #DIV/0!, 0) gardent leur style
-                    //                                  "erreur" du template (couleur grise +
-                    //                                  strikethrough) même quand les données
-                    //                                  saisies les auraient résolues.
-                    //   3. ScreenUpdating = original → Excel dessine l'état final propre d'un
-                    //                                  coup, formules à jour, sans le balayage
-                    //                                  intermédiaire ni les cellules "barrées".
-                    //   4. Saved = true              → marque le classeur "non modifié" APRÈS
-                    //                                  toutes les opérations Excel (Calculate
-                    //                                  inclus). Sans ce dernier flag, le
-                    //                                  Calculate du finally re-marque le classeur
-                    //                                  dirty même quand rien n'a vraiment changé,
-                    //                                  ce qui fait que Excel propose d'enregistrer
-                    //                                  à la fermeture côté utilisateur.
+                    // Restauration des flags Excel, dans cet ordre :
+                    //  1. Calculation d'origine ;
+                    //  2. Calculate() forcé : Excel ne recalcule pas seul les formules posées en mode
+                    //     Manual, et les cellules figées (#VALEUR!, #DIV/0!, 0) garderaient le style
+                    //     « erreur » du template (gris barré) ;
+                    //  3. ScreenUpdating d'origine : Excel dessine l'état final d'un coup ;
+                    //  4. Saved = true en dernier : le Calculate précédent a re-marqué le classeur
+                    //     modifié, ce qui ferait proposer l'enregistrement à la fermeture.
                     try { _excel.Calculation = calculationOriginal; } catch { }
                     try { _classeurActif.Calculate(); } catch { }
                     try { _excel.ScreenUpdating = screenUpdatingOriginal; } catch { }
@@ -1383,40 +1240,14 @@ namespace Metrologo.Services
         });
 
         /// <summary>
-        /// Ajoute une nouvelle feuille de mesure (copie de ModFeuille) dans le classeur
-        /// actuellement ouvert, en pur COM, sans jamais fermer le Workbook. Remplace pour
-        /// les mesures 2+ la séquence
-        /// <c>FermerClasseurActif → ClosedXML InitialiserRapport + PreparerLignesMesure
-        /// + Sauvegarder → OuvrirEtAfficher</c> qui laissait Excel <c>Visible=true</c>
-        /// avec 0 Workbook visible pendant 1-3 secondes (= shell SDI grise visible).
-        ///
-        /// Reproduit exactement le travail de <c>ExcelService.InitialiserRapportAsync</c> +
-        /// <c>PreparerLignesMesureAsync</c> :
-        /// <list type="number">
-        ///   <item><c>ModFeuille.Copy</c> en COM (place la copie en fin de classeur).</item>
-        ///   <item>Rename, visibilité, déprotection, largeurs E/F/H.</item>
-        ///   <item><b>Clonage des Names sheet-scope</b> : pour chaque Name workbook-scope dont le
-        ///         RefersTo pointe vers <c>ModFeuille!</c>, création d'un Name sheet-scope sur la
-        ///         nouvelle feuille (via <c>Worksheet.Names.Add</c>, pas <c>Workbook.Names.Add</c>) avec
-        ///         le RefersTo redirigé vers la nouvelle feuille. <b>Sans ce clonage</b>, les formules
-        ///         locales <c>ZNFreqMoyReel = AVERAGE(F9:F38)</c>, <c>ZNVariance</c>, etc. résoudraient
-        ///         vers ModFeuille (vide) → variance/écart-type/incert KO (= cause du fail de la
-        ///         précédente tentative option A).</item>
-        ///   <item>En-têtes D/E/F/G + labels col E + colonnes n°Module/Fonction/Condition 1 ligne 9.</item>
-        ///   <item>Colonne N conversion tr/min si tachymétrie.</item>
-        ///   <item>Métadonnées via zones nommées sheet-scope (ZNNoFiche, ZNDate, ZNTypeMesure, …).</item>
-        ///   <item>Coefficients hardcoded (1e-10 / 5e-13) — surcharge dans <c>FinaliserMesureViaComAsync</c>
-        ///         si module d'incertitude sélectionné.</item>
-        ///   <item>InsertRowsAbove + formules F (conversion) + G (delta) + N (tr/min) pour nbMesures &gt; 2.</item>
-        ///   <item>Formules métier (ZNFreqMoyReel = AVERAGE, ZNVariance = Cal_variance VBA, etc.).</item>
-        ///   <item>Activate la feuille (visible utilisateur immédiatement) + Save du Workbook.</item>
-        /// </list>
-        ///
-        /// Le Workbook n'est jamais fermé entre le moment où il a été ouvert (mesure 1 via
-        /// <see cref="OuvrirEtAfficherAsync"/>) et la fermeture définitive de l'app. Plus de
-        /// moment 0-Workbook-visible → plus de shell SDI grise.
+        /// Ajoute une feuille de mesure (copie de ModFeuille) au classeur ouvert, en pur COM et sans
+        /// le fermer : l'ancienne séquence fermer/ClosedXML/rouvrir laissait Excel visible sans
+        /// classeur pendant 1-3 s (shell SDI grise). Reproduit le travail de
+        /// <c>ExcelService.InitialiserRapportAsync</c> + <c>PreparerLignesMesureAsync</c> :
+        /// copie de la feuille, renommage/déprotection, <b>clonage des Names portée feuille</b>,
+        /// en-têtes, métadonnées en zones nommées, formules, Activate + Save.
         /// </summary>
-        /// <returns>Nom de la nouvelle feuille créée (ex: <c>"freq2"</c>, <c>"stab3"</c>).</returns>
+        /// <returns>Nom de la nouvelle feuille (ex : <c>"freq2"</c>, <c>"stab3"</c>).</returns>
         public Task<string> AjouterFeuilleMesureAsync(
             Mesure config, Rubidium rubidium, int gateInscrite)
             => Task.Run<string>(() =>
@@ -1435,12 +1266,8 @@ namespace Metrologo.Services
                     dynamic? modFeuille = null;
                     dynamic? nouvelleFeuille = null;
 
-                    // FREEZE COMPLET pendant la séquence COM (mesure : opération qui prend
-                    // ~6 secondes sans freeze à cause des 33 Names.Add + 60 EcrireFormuleCellule
-                    // + redraw à chaque écriture). Avec ScreenUpdating=false on tombe à ~1-2s.
-                    // L'écran peut sembler "gris" pendant ce temps, mais le délai est tellement
-                    // réduit que c'est imperceptible. ForcerRapportAuPremierPlanInterne à la fin
-                    // force le rafraîchissement final.
+                    // Rendu gelé pendant la séquence COM : ~6 s sans (33 Names.Add + 60 écritures de
+                    // formules avec redraw), ~1-2 s avec. ForcerRapportAuPremierPlanInterne rafraîchit à la fin.
                     bool screenUpdatingOriginal = true, enableEventsOriginal = true;
                     int calculationOriginal = -4105;
                     try { screenUpdatingOriginal = (bool)_excel.ScreenUpdating; } catch { }
@@ -1464,22 +1291,16 @@ namespace Metrologo.Services
                         // --- 2. Génère un nom de feuille unique (freq2, stab3, etc.) ---
                         string nomNouvelleFeuille = TrouverNomFeuilleUniqueInterne(config.TypeMesure);
 
-                        // Feuilles à nom fixe (avinter / fqfinale) : à la relance d'une mesure
-                        // avant/après intervention sur la même FI, le nom existe déjà → on ÉCRASE
-                        // l'ancienne feuille ET sa ligne Récap avant la copie (sinon le rename plus
-                        // bas lèverait sur doublon et la Récap afficherait deux lignes). No-op pour
-                        // les feuilles numérotées (nom toujours neuf).
+                        // Feuilles à nom fixe (avinter / fqfinale) : à la relance sur la même FI le nom
+                        // existe déjà, on écrase l'ancienne feuille ET sa ligne Récap avant la copie
+                        // (sinon le rename lèverait et la Récap aurait deux lignes). No-op pour les
+                        // feuilles numérotées.
                         SupprimerFeuilleEtRecapInterne(nomNouvelleFeuille);
 
                         // --- 3. Copie ModFeuille à la fin du classeur ---
-                        // ⚠ PIÈGE CRITIQUE D'EXCEL COM ⚠ : ws.Copy(Before, After) — selon la doc
-                        // Microsoft, "If neither Before nor After is specified, Excel creates a
-                        // new workbook that contains the copied object." En late-binding dynamic,
-                        // passer Type.Missing pour Before était interprété comme "non spécifié"
-                        // → Excel créait un NOUVEAU WORKBOOK parasite à chaque appel !
-                        // Solution : utiliser le paramètre nommé After: (C# dynamic supporte les
-                        // named args via IDispatch). Excel comprend correctement et ajoute la
-                        // feuille au classeur existant.
+                        // Piège Excel COM : sans Before ni After, Copy crée un NOUVEAU classeur. En
+                        // late-binding, Type.Missing pour Before était pris pour « non spécifié » (classeur
+                        // parasite à chaque appel) : on passe donc le paramètre nommé After:.
                         dynamic derniereFeuille = _classeurActif.Worksheets
                             [(int)_classeurActif.Worksheets.Count];
                         try
@@ -1488,9 +1309,8 @@ namespace Metrologo.Services
                         }
                         finally { try { Marshal.ReleaseComObject(derniereFeuille); } catch { } }
 
-                        // Après Copy, la feuille copiée devient ActiveSheet du classeur cible.
-                        // On vérifie via _classeurActif.ActiveSheet (et pas Application.ActiveSheet
-                        // qui pourrait pointer ailleurs si Excel a changé de classeur actif).
+                        // La copie devient ActiveSheet du classeur cible (on lit celui du classeur, pas
+                        // Application.ActiveSheet, qui peut pointer ailleurs).
                         nouvelleFeuille = _classeurActif.ActiveSheet;
 
                         // --- 4. Rename + Visible + Unprotect ---
@@ -1512,14 +1332,11 @@ namespace Metrologo.Services
                         }
                         catch { /* best-effort */ }
 
-                        // --- 5. CLONAGE DES NAMES SHEET-SCOPE (PARTIE CRITIQUE) ---
-                        // Les templates ont les Names workbook-scope pointant vers ModFeuille!
-                        // (33 sur METROLOGO.xlsx, idem sur Stab/Tachy). Worksheet.Copy COM ne
-                        // les clone PAS automatiquement (il ne clone que les sheet-scope, qui
-                        // n'existent pas sur ModFeuille). On doit donc recréer chaque Name en
-                        // version sheet-scope sur la nouvelle feuille — sans ça, ZNFreqMoyReel,
-                        // ZNVariance, ZNEcartType, ZNIncertEcartType, ZNFreqCorr résoudraient
-                        // vers ModFeuille (vide) au lieu de la feuille de mesure.
+                        // --- 5. Clonage des Names portée feuille (critique) ---
+                        // Les Names des templates sont portée classeur et pointent vers ModFeuille!
+                        // (33 sur METROLOGO.xlsx, idem Stab/Tachy) ; Worksheet.Copy ne les clone pas.
+                        // On les recrée portée feuille, sinon ZNFreqMoyReel, ZNVariance, ZNEcartType...
+                        // résoudraient vers ModFeuille (vide) au lieu de la feuille de mesure.
                         int nbNamesClones = 0, nbNamesIgnores = 0;
                         var nomsAClones = new List<(string Nom, string RefersTo)>();
                         foreach (dynamic name in (dynamic)_classeurActif.Names)
@@ -1545,8 +1362,7 @@ namespace Metrologo.Services
                         {
                             try
                             {
-                                // Worksheet.Names.Add (sheet-scope) — PAS Workbook.Names.Add
-                                // (workbook-scope, ce qui créerait un conflit avec l'existant).
+                                // Worksheet.Names.Add (portée feuille), pas Workbook.Names.Add (conflit avec l'existant).
                                 ((dynamic)nouvelleFeuille.Names).Add(nomZone, newRefersTo);
                                 nbNamesClones++;
                             }
@@ -1573,10 +1389,8 @@ namespace Metrologo.Services
                         EcrireValeurCelluleInterne(nouvelleFeuille, "B25", entetes.LabelIncertResol);
                         EcrireValeurCelluleInterne(nouvelleFeuille, "B31", entetes.LabelIncertGlob);
 
-                        // --- 7. Module d'incertitude affiché UNE seule fois ---
-                        // On écrit le module SÉLECTIONNÉ dans la config (config.NumModuleIncertitude),
-                        // dans la cellule valeur à côté du label « Module = » : F10 (layout standard)
-                        // ou G10 (tachy, 1 colonne de plus).
+                        // --- 7. Module d'incertitude sélectionné (config.NumModuleIncertitude), écrit une
+                        // seule fois à côté du label « Module = » : F10 (standard) ou G10 (tachy, 1 colonne de plus).
                         bool estTachy = EnTetesMesureHelper.EstTachymetre(config.TypeMesure);
                         string moduleSelectionne = config.NumModuleIncertitude ?? string.Empty;
                         string celluleModule = estTachy ? "G10" : "F10";
@@ -1616,24 +1430,18 @@ namespace Metrologo.Services
                             config.FNominale);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNNbMesures",
                             (double)config.NbMesures);
-                        // Résolution ET incertitude relative = 0 à l'init : seule la saisie
-                        // post-mesure de l'utilisateur peut les renseigner. NE PAS seeder
-                        // ZNIncertSup depuis config.IncertSupp : config est réutilisé entre
-                        // relances sur une même FI, ce qui faisait réapparaître la valeur saisie
-                        // au fréquencemètre sur une mesure suivante (ex. Générateur) sans popup.
-                        // (cf. ExcelService.InitialiserRapportAsync pour le raisonnement complet.)
+                        // Résolution et incertitude relative à 0 : seule la saisie post-mesure les renseigne.
+                        // Ne PAS seeder ZNIncertSup depuis config.IncertSupp (config est réutilisé entre
+                        // relances sur une même FI : la valeur saisie au fréquencemètre réapparaîtrait sans
+                        // popup sur la mesure suivante). Cf. ExcelService.InitialiserRapportAsync.
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertResol", 0.0);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertSup", 0.0);
-                        // Valeur de référence (= fréquence du rubidium actif) : écrite DIRECTEMENT
-                        // en cellule C21 de la feuille de mesure. La résolution par zone nommée
-                        // pouvait retomber sur le scope workbook (cellule de ModFeuille cachée) et
-                        // laisser C21 vide sur la feuille visible. L'écriture par adresse garantit
-                        // que la référence du rubidium apparaît bien. (ZNFreqRef pointe sur C21.)
+                        // Fréquence de référence (rubidium actif) écrite DIRECTEMENT en C21 (ZNFreqRef pointe
+                        // dessus) : la résolution par zone nommée pouvait retomber sur la cellule de
+                        // ModFeuille (cachée) et laisser C21 vide sur la feuille visible.
                         EcrireValeurCelluleInterne(nouvelleFeuille, "C21", rubidium.FrequenceMoyenne);
-                        // 7 décimales : maximum FIDÈLE pour un nombre à ~10 MHz (Excel ne garde que
-                        // 15 chiffres significatifs = 8 entiers + 7 décimales). Au-delà, Excel forçait
-                        // des « 00 » parasites en fin de valeur. Les écarts Besançon usuels restent
-                        // visibles ; un offset < 1e-7 Hz est sous la précision affichable d'Excel.
+                        // 7 décimales : maximum fidèle à ~10 MHz (Excel garde 15 chiffres significatifs =
+                        // 8 entiers + 7 décimales) ; au-delà, des « 00 » parasites apparaissent.
                         try
                         {
                             dynamic cFmt = nouvelleFeuille.Range["C21"];
@@ -1648,10 +1456,9 @@ namespace Metrologo.Services
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNNbMesAccredite", 30.0);
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNTempsMesureAccredite", 10.0);
 
-                        // --- 10. Insertion des lignes additionnelles (PreparerLignesMesure) ---
-                        // Le template a 2 lignes pré-créées (9 et 10). Pour nbMesures > 2, on
-                        // insère (nbMesures - 2) rangées AVANT le point d'insertion (par défaut
-                        // ligne 11 = position de ZNPointInsertion).
+                        // --- 10. Lignes additionnelles (PreparerLignesMesure) ---
+                        // Le template a 2 lignes (9 et 10) : pour nbMesures > 2, on insère
+                        // (nbMesures - 2) rangées avant ZNPointInsertion (défaut : ligne 11).
                         int nbMesures = config.NbMesures;
                         if (nbMesures > 2)
                         {
@@ -1670,7 +1477,6 @@ namespace Metrologo.Services
                             catch { /* défaut 11 */ }
 
                             int nbInsert = nbMesures - 2;
-                            // Insère en bloc : Range(rows pointInsertionRow..pointInsertionRow+nbInsert-1).Insert
                             try
                             {
                                 string plage = $"{pointInsertionRow}:{pointInsertionRow + nbInsert - 1}";
@@ -1696,7 +1502,7 @@ namespace Metrologo.Services
                             }
                         }
 
-                        // --- 11. Formules F (conversion) + G (delta) + N (tachy) pour lignes 11..N ---
+                        // --- 11. Formules C (conversion), D (delta) et K (tr/min, tachy) des lignes 11..N ---
                         // Identique à ExcelService.PreparerLignesMesureAsync mais en COM.
                         bool conversionTrMin = estTachy;
                         for (int i = 2; i < nbMesures; i++)
@@ -1710,32 +1516,19 @@ namespace Metrologo.Services
                                 EcrireFormuleCelluleInterne(nouvelleFeuille, $"K{row}", $"=B{row}*60");
                         }
 
-                        // --- 12. n°Module : plus écrit par ligne (colonne retirée) ; il est
-                        //         affiché une seule fois dans la cellule « Module = » (étape 7).
-
-                        // --- 13. Formules métier (ZNFreqMoyReel, ZNVariance, ZNEcartType, …) ---
-                        // Posées via Worksheet.Names → RefersToRange.Formula (les Names sheet-scope
-                        // créés à l'étape 5 résolvent vers les cellules du template — F13 = moyenne,
-                        // F18 = variance, F19 = écart-type, etc. selon le layout ModFeuille).
+                        // --- 12. Formules métier (ZNFreqMoyReel, ZNVariance, ZNEcartType, …) ---
+                        // Posées via Names → RefersToRange.Formula (Names portée feuille de l'étape 5 ;
+                        // F13 = moyenne, F18 = variance, F19 = écart-type... selon le layout ModFeuille).
                         int ligneDeb = 9;
                         int ligneFin = 9 + nbMesures - 1;
                         EcrireFormuleZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqMoyReel",
                             $"=IF(ISBLANK(ZNNbMesures),,AVERAGE(C{ligneDeb}:C{ligneFin}))");
 
-                        // ⚠ PIÈGE EXCEL COM : la formule `=[1]!Cal_variance(SUMSQ(...),...,...)`
-                        // est rejetée (0x800A03EC) par .Formula/.Formula2/.FormulaLocal en COM
-                        // dynamic, alors qu'elle marche via ClosedXML (écriture XML directe).
-                        // On contourne en CALCULANT la variance en C# à la fin de mesure (via
-                        // Application.Run pour appeler la macro Cal_variance VBA) et en écrivant
-                        // le résultat comme VALEUR dans ZNVariance — cf. FinaliserMesureViaComAsync.
-                        //
-                        // MAIS : Excel COM rejette aussi la pose des formules `=IF(ISBLANK(ZNVariance),...)`
-                        // si ZNVariance pointe vers une cellule TOTALEMENT VIDE — Excel essaie
-                        // de résoudre la référence à la pose et plante. Solution : initialiser
-                        // ZNVariance avec une valeur 0 placeholder AVANT de poser les formules
-                        // qui en dépendent. FinaliserMesureViaComAsync écrasera cette valeur par
-                        // la vraie variance, et Excel recalculera ZNEcartType / ZNIncertEcartType
-                        // automatiquement.
+                        // Piège Excel COM : `=[1]!Cal_variance(SUMSQ(...),...)` est rejetée (0x800A03EC)
+                        // par .Formula/.Formula2/.FormulaLocal en COM dynamic (elle passe via ClosedXML),
+                        // et les formules `=IF(ISBLANK(ZNVariance),...)` sont rejetées si ZNVariance
+                        // pointe sur une cellule totalement vide. D'où un placeholder 0 AVANT de poser
+                        // les formules qui en dépendent ; la variance réelle le remplace ensuite.
                         EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNVariance", 0.0);
 
                         EcrireFormuleZoneNommeeInterne(nomNouvelleFeuille, "ZNEcartType",
@@ -1745,9 +1538,8 @@ namespace Metrologo.Services
                         EcrireFormuleZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqCorr",
                             "=IF(ISBLANK(ZNFreqMoyReel),,[1]!Cal_freq_corrigee(ZNFreqMoyReel,ZNFreqRef))");
 
-                        // --- 14. Forcer format General sur cellules de formules ---
-                        // Sans ça, si le format hérité est Texte, Excel garde la formule littéralement
-                        // (cf. EcrireFormuleRecapInterne pour le même fix sur Récap.).
+                        // --- 13. Format General sur les cellules de formules : en format Texte hérité,
+                        // Excel garderait la formule littérale (cf. EcrireFormuleRecapInterne).
                         try
                         {
                             dynamic rangeFormules = nouvelleFeuille.Range[$"C{ligneDeb}:D{ligneFin}"];
@@ -1756,22 +1548,21 @@ namespace Metrologo.Services
                         }
                         catch { }
 
-                        // --- 15. Active la feuille (utilisateur la voit immédiatement) ---
+                        // --- 14. Active la feuille ---
                         nouvelleFeuille.Activate();
 
-                        // Re-masque toute shell éventuelle (Activate peut réveiller le window
-                        // manager Excel) + assure que le timer périodique est armé.
+                        // Activate peut réveiller le window manager Excel : on re-masque les shells.
                         MasquerFenetresShellExcelInterne();
                         DemarrerTimerMasquageShellInterne();
 
-                        // Synchronise le tracking de feuille active dans l'instance
+                        // Feuille de mesure courante
                         if (_feuilleMesure != null)
                         {
                             try { Marshal.ReleaseComObject(_feuilleMesure); } catch { }
                         }
                         _feuilleMesure = nouvelleFeuille;
 
-                        // --- 16. Save (mise à jour fichier disque, Workbook reste ouvert) ---
+                        // --- 15. Save ---
                         try { _classeurActif.Save(); }
                         catch (Exception ex)
                         {
@@ -1790,42 +1581,30 @@ namespace Metrologo.Services
                         // nouvelleFeuille reste dans _feuilleMesure → on ne release PAS ici.
                         try { if (modFeuille != null) Marshal.ReleaseComObject(modFeuille); } catch { }
 
-                        // Ferme tous les workbooks parasites qui auraient pu être créés malgré
-                        // notre paramètre nommé After: (ceinture+bretelles si une version d'Excel
-                        // exotique ne respecte pas la convention ; en pratique = no-op si After:
-                        // a fonctionné correctement).
+                        // Ceinture et bretelles : ferme les classeurs parasites qu'un Copy aurait créés
+                        // malgré After: (no-op en pratique).
                         try { FermerClasseursParasitesInterne(); } catch { }
 
-                        // Restaure les flags Excel : Calculation d'abord (déclenche le recalc
-                        // des formules métier qu'on vient de poser) puis EnableEvents puis
-                        // ScreenUpdating en dernier (le rendu final apparaît d'un coup, sans flash).
+                        // Restauration des flags : Calculation d'abord (recalcule les formules posées),
+                        // ScreenUpdating en dernier (rendu final d'un coup, sans flash).
                         try { _excel.Calculation = calculationOriginal; } catch { }
                         try { _excel.EnableEvents = enableEventsOriginal; } catch { }
                         try { _excel.ScreenUpdating = screenUpdatingOriginal; } catch { }
 
-                        // Re-masque toute shell qui aurait pu apparaître malgré le freeze
-                        // (sécurité — le timer le ferait dans 500ms max de toute façon).
                         try { MasquerFenetresShellExcelInterne(); } catch { }
 
-                        // CRUCIAL : force la fenêtre du rapport au premier plan. Sans ça, Excel
-                        // SDI peut laisser une window grise temporaire en TopMost par-dessus
-                        // le rapport (= ce que l'utilisateur voit comme "fenêtre grise qui se
-                        // ferme quand on clique sur l'autre Excel manuellement").
+                        // Indispensable : sans cela, Excel SDI peut laisser une fenêtre grise TopMost
+                        // par-dessus le rapport (elle disparaît au clic sur l'autre Excel).
                         try { ForcerRapportAuPremierPlanInterne(); } catch { }
                     }
                 }
             });
 
         /// <summary>
-        /// Réinitialise le classeur ouvert en supprimant toutes les feuilles de mesure (freq*,
-        /// stab*, inter*, topti*, tcont*, strob*, avinter, fqfinale) tout en gardant ModFeuille
-        /// + Récap. — l'équivalent d'un "fichier vierge" SANS fermer le Workbook. Évite la shell
-        /// SDI qui apparaissait quand l'utilisateur cliquait "Oui = écraser" dans Relancer
-        /// (le code historique faisait FermerClasseurActif + File.Delete = ~1-3s à 0 Workbook).
-        ///
-        /// Tout est encadré par ScreenUpdating=false pour qu'aucun flash visuel ne soit perçu.
-        /// Le Récap. est aussi nettoyé (lignes après l'entête) car ses formules cross-sheet
-        /// pointant vers les feuilles supprimées deviendraient #REF! sinon.
+        /// Réinitialise le classeur ouvert (« fichier vierge ») en supprimant toutes les feuilles de
+        /// mesure (freq*, stab*, inter*, topti*, tcont*, strob*, avinter, fqfinale) sauf ModFeuille et
+        /// Récap., SANS fermer le classeur : évite la shell SDI de « Relancer » → « Oui = écraser ».
+        /// La Récap. est aussi nettoyée, ses formules vers les feuilles supprimées devenant #REF!.
         /// </summary>
         public Task ReinitialiserClasseurActifAsync()
             => Task.Run(() =>
@@ -1839,8 +1618,8 @@ namespace Metrologo.Services
                         return;
                     }
 
-                    // Freeze léger (cf. AjouterFeuilleMesureAsync) — pas de ScreenUpdating=false
-                    // qui causerait l'effet "écran gris" pendant la suppression des feuilles.
+                    // Freeze léger (cf. AjouterFeuilleMesureAsync) : pas de ScreenUpdating=false,
+                    // qui donnerait un « écran gris » pendant la suppression des feuilles.
                     bool enableEventsOriginal = true;
                     int calculationOriginal = -4105;
                     try { enableEventsOriginal = (bool)_excel.EnableEvents; } catch { }
@@ -1851,9 +1630,8 @@ namespace Metrologo.Services
 
                     try
                     {
-                        // 1. Énumère les feuilles à supprimer (toutes sauf ModFeuille et Récap.).
-                        //    On collecte d'abord les noms avant de supprimer pour éviter de muter
-                        //    la collection pendant qu'on itère.
+                        // 1. Feuilles à supprimer (toutes sauf ModFeuille et Récap.) : noms collectés
+                        //    d'abord, pour ne pas muter la collection pendant l'itération.
                         var aSupprimer = new List<string>();
                         try
                         {
@@ -1866,9 +1644,8 @@ namespace Metrologo.Services
                                     try
                                     {
                                         string nom = (string)ws.Name;
-                                        // Conservation : ModFeuille (modèle de copie) + Récap. (vue
-                                        // d'ensemble). On supprime toutes les autres feuilles
-                                        // (freq1, stab1, inter1, etc. + anciennes "1".."10" résiduelles).
+                                        // Conservées : ModFeuille (modèle de copie) et Récap. ; les autres
+                                        // (freq1, stab1, ... et anciennes "1".."10" résiduelles) sautent.
                                         if (!string.Equals(nom, "ModFeuille", StringComparison.OrdinalIgnoreCase)
                                             && !string.Equals(nom, "Récap.", StringComparison.OrdinalIgnoreCase))
                                         {
@@ -1899,10 +1676,9 @@ namespace Metrologo.Services
                             catch { /* déjà supprimée ou protection — non bloquant */ }
                         }
 
-                        // 3. Nettoyage Récap. : on supprime les lignes de données (à partir de la
-                        //    ligne 6, l'entête étant en ligne 5 pour la Récap. Fréquence ; on
-                        //    nettoie largement pour couvrir Stab aussi). Sans ça, les formules
-                        //    cross-sheet `='freq1'!ZN*` deviennent #REF! après suppression.
+                        // 3. Nettoyage Récap. : lignes de données à partir de la ligne 6 (entête en 5 pour
+                        //    la Récap. Fréquence ; large pour couvrir Stab), sinon les formules
+                        //    `='freq1'!ZN*` deviennent #REF!.
                         try
                         {
                             dynamic recap = _classeurActif.Worksheets.Item("Récap.");
@@ -1931,8 +1707,7 @@ namespace Metrologo.Services
                         }
                         catch { /* Récap. absent : pas de souci */ }
 
-                        // 4. Save : persiste l'état "vierge" sur disque (le fichier existe toujours
-                        //    avec son chemin original, mais ne contient plus que ModFeuille + Récap. propre).
+                        // 4. Save : persiste l'état vierge (ModFeuille + Récap. propre) sous le même chemin.
                         try { _classeurActif.Save(); }
                         catch (Exception ex)
                         {
@@ -1940,8 +1715,8 @@ namespace Metrologo.Services
                                 $"Save après nettoyage échoué : {ex.Message}");
                         }
 
-                        // _feuilleMesure pointait sur une feuille supprimée → on l'invalide.
-                        // La prochaine AjouterFeuilleMesureAsync recréera freq1.
+                        // _feuilleMesure pointait sur une feuille supprimée : la prochaine
+                        // AjouterFeuilleMesureAsync recréera freq1.
                         if (_feuilleMesure != null)
                         {
                             try { Marshal.ReleaseComObject(_feuilleMesure); } catch { }
@@ -1964,13 +1739,8 @@ namespace Metrologo.Services
             });
 
         /// <summary>
-        /// Génère un nom de feuille unique (freq2, stab3, inter1, …) en parcourant les feuilles
-        /// déjà présentes dans le classeur actif. Reproduit <c>ExcelService.TrouverNomFeuilleUnique</c>.
-        /// </summary>
-        /// <summary>
-        /// Supprime la feuille de mesure <paramref name="nomFeuille"/> du classeur COM actif
-        /// (et sa ligne Récap.) puis sauvegarde. Appelé quand une mesure est STOPPÉE : la feuille
-        /// créée au démarrage ne doit pas être conservée (mesure traitée comme nulle).
+        /// Supprime la feuille <paramref name="nomFeuille"/> (et sa ligne Récap.) puis sauvegarde.
+        /// Appelé à l'arrêt d'une mesure : la feuille créée au démarrage n'est pas conservée.
         /// Best-effort, ne lève jamais.
         /// </summary>
         public Task SupprimerFeuilleMesureAsync(string nomFeuille) => Task.Run(() =>
@@ -1983,8 +1753,7 @@ namespace Metrologo.Services
                 {
                     SupprimerFeuilleEtRecapInterne(nomFeuille);
 
-                    // La feuille courante était celle qu'on vient de supprimer → on lâche la
-                    // référence COM pour éviter tout accès ultérieur sur un objet déconnecté.
+                    // La feuille courante vient d'être supprimée : on lâche la référence COM.
                     if (_feuilleMesure != null)
                     {
                         try { Marshal.ReleaseComObject(_feuilleMesure); } catch { }
@@ -2010,16 +1779,14 @@ namespace Metrologo.Services
         });
 
         /// <summary>
-        /// Supprime du classeur COM actif la feuille <paramref name="nomFeuille"/> si elle existe,
-        /// ainsi que les lignes de la Récap. qui la référencent. À appeler SOUS LOCK (_sync).
-        /// Gère DisplayAlerts pour éviter la confirmation Excel de suppression de feuille. No-op si
-        /// la feuille n'existe pas (cas des feuilles numérotées au nom neuf).
+        /// Supprime la feuille <paramref name="nomFeuille"/> du classeur actif si elle existe, ainsi
+        /// que les lignes de la Récap. qui la référencent (DisplayAlerts coupé pour éviter la
+        /// confirmation Excel). No-op si elle n'existe pas. À appeler sous lock <c>_sync</c>.
         /// </summary>
         private void SupprimerFeuilleEtRecapInterne(string nomFeuille)
         {
             if (_classeurActif == null || string.IsNullOrWhiteSpace(nomFeuille)) return;
 
-            // La feuille existe-t-elle ? Sinon no-op.
             bool existe = false;
             try
             {
@@ -2123,6 +1890,10 @@ namespace Metrologo.Services
             return false;
         }
 
+        /// <summary>
+        /// Nom de feuille unique (freq2, stab3, inter1, …) d'après les feuilles du classeur actif.
+        /// Reproduit <c>ExcelService.TrouverNomFeuilleUnique</c>.
+        /// </summary>
         private string TrouverNomFeuilleUniqueInterne(TypeMesure type)
         {
             if (_classeurActif == null) return "1";
@@ -2131,8 +1902,8 @@ namespace Metrologo.Services
 
             string prefixe = type switch
             {
-                TypeMesure.Frequence    => "",   // fréquence : numéros seuls (1, 2, 3, …)
-                TypeMesure.Stabilite    => "",   // stab : 1 feuille par temps de porte (1, 2, 3, …)
+                TypeMesure.Frequence    => "",   // numéros seuls (1, 2, 3, …)
+                TypeMesure.Stabilite    => "",   // 1 feuille par temps de porte (1, 2, 3, …)
                 TypeMesure.Interval     => "inter",
                 TypeMesure.TachyOptique => "topti",
                 TypeMesure.TachyContact => "tcont",
@@ -2140,7 +1911,6 @@ namespace Metrologo.Services
                 _ => "Mesure"
             };
 
-            // Collecte des noms existants
             var existants = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
@@ -2164,8 +1934,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Écrit une valeur dans une cellule via <c>Range["A1"].Value2</c>. Utilitaire interne
-        /// pour les écritures en-têtes/labels de <see cref="AjouterFeuilleMesureAsync"/>.
+        /// Écrit une valeur dans une cellule (<c>Range["A1"].Value2</c>) : en-têtes et labels de
+        /// <see cref="AjouterFeuilleMesureAsync"/>.
         /// </summary>
         private static void EcrireValeurCelluleInterne(dynamic feuille, string adresseA1, object valeur)
         {
@@ -2195,14 +1965,11 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Écrit une formule dans la cellule pointée par une zone nommée sheet-scope.
-        /// Équivalent de <see cref="EcrireValeurZoneNommeeInterne"/> mais pour
-        /// <c>RefersToRange.Formula</c>. Si l'écriture échoue (typiquement parce que la formule
-        /// commence par <c>[1]!</c> et que le link externe n'est pas encore résolu à ce stade,
-        /// ou parce que la formule contient une syntaxe que <c>.Formula</c> rejette mais que
-        /// <c>.Formula2</c>/<c>.FormulaLocal</c> accepte), on essaie plusieurs variantes en
-        /// cascade et on logge l'erreur précise — pour ne plus jamais avoir un échec silencieux
-        /// comme celui de <c>ZNVariance</c> qui restait vide.
+        /// Écrit une formule dans la cellule d'une zone nommée portée feuille (équivalent de
+        /// <see cref="EcrireValeurZoneNommeeInterne"/> pour <c>RefersToRange.Formula</c>). Excel
+        /// rejette parfois <c>.Formula</c> (lien <c>[1]!</c> non résolu, syntaxe) alors que
+        /// <c>.Formula2</c>/<c>.FormulaLocal</c> passent : on tente les variantes en cascade et
+        /// on journalise chaque échec pour éviter un échec silencieux.
         /// </summary>
         private void EcrireFormuleZoneNommeeInterne(string nomFeuille, string nomZone, string formule)
         {
@@ -2229,7 +1996,7 @@ namespace Metrologo.Services
                             try
                             {
                                 try { refRange.NumberFormat = "General"; } catch { }
-                                // Essai 1 : .Formula (US, virgules) — méthode standard.
+                                // Essai 1 : .Formula (US, virgules).
                                 try
                                 {
                                     refRange.Formula = formule;
@@ -2238,7 +2005,7 @@ namespace Metrologo.Services
                                 catch (Exception ex1)
                                 {
                                     echecsAccumules += $".Formula KO: {ex1.Message}; ";
-                                    // Essai 2 : .Formula2 (Excel 365+, supporte arrays dynamiques).
+                                    // Essai 2 : .Formula2 (Excel 365+).
                                     try
                                     {
                                         refRange.Formula2 = formule;
@@ -2271,7 +2038,7 @@ namespace Metrologo.Services
 
                     if (!succes)
                     {
-                        // Fallback workbook-scope
+                        // Repli : Name portée classeur
                         try
                         {
                             dynamic nomWb = _classeurActif.Names.Item(nomZone);
@@ -2321,19 +2088,12 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Calcule la variance en appelant la macro VBA <c>Cal_variance</c> du Metrologo.xla
-        /// via <c>Application.Run</c>, puis écrit le résultat comme valeur littérale dans
-        /// <c>ZNVariance</c>. Workaround au rejet Excel 0x800A03EC de la formule
-        /// <c>=[1]!Cal_variance(SUMSQ(...),...,...)</c> via <c>.Formula</c> en COM dynamic.
-        ///
-        /// Reproduit en C# le calcul que ferait la formule :
-        ///   - <c>SUMSQ(G{deb+1}:G{fin})</c> = somme des carrés des deltas de fréquence réelle
-        ///   - On convertit chaque mesure brute en fréquence réelle (mode Direct/Indirect) pour
-        ///     reproduire la colonne F du rapport
-        ///   - On passe ces 3 arguments à Cal_variance qui retourne la variance Allan-like
-        ///
-        /// Si Application.Run échoue (xla pas chargé, macro absente, etc.), on fallback sur
-        /// un calcul C# pur <c>sumSq / (2*(N-1))</c> = formule Allan classique.
+        /// Calcule la variance via la macro VBA <c>Cal_variance</c> du Metrologo.xla
+        /// (<c>Application.Run</c>) et l'écrit comme valeur dans <c>ZNVariance</c> : contournement
+        /// du rejet 0x800A03EC de <c>=[1]!Cal_variance(...)</c> par <c>.Formula</c> en COM dynamic.
+        /// Les arguments reproduisent la formule du rapport (SUMSQ des deltas de fréquence réelle,
+        /// nombre de mesures, moyenne). Si <c>Run</c> échoue : repli C# <c>sumSq / (2*(N-1))</c>
+        /// (variance d'Allan). Actuellement non appelée.
         /// </summary>
         private void CalculerEtEcrireVarianceViaComInterne(Mesure mesure, List<double> resultats,
             string nomFeuille)
@@ -2343,13 +2103,12 @@ namespace Metrologo.Services
 
             try
             {
-                // 1. Reproduit la colonne F (fréq. réelle) en C#, comme le ferait la formule
+                // 1. Fréquence réelle en C#, comme la formule
                 //    `=IF(ISBLANK(ZNCoeffMult),E,(((E-1e7)/(POWER(10,Mult)*1e7))+1)*FNominale)`.
                 var corriges = new List<double>(resultats.Count);
                 foreach (var v in resultats) corriges.Add(ConvertirEnFreqReelleLocal(v, mesure));
 
-                // 2. SUMSQ des deltas (G_{i+1} = F_i - F_{i+1}, donc on somme les carrés des
-                //    différences consécutives à partir de l'indice 1).
+                // 2. SUMSQ des carrés des différences consécutives (F_i - F_{i+1}).
                 double sumSq = 0;
                 for (int i = 1; i < corriges.Count; i++)
                 {
@@ -2362,9 +2121,7 @@ namespace Metrologo.Services
                 moyenne /= corriges.Count;
                 int nbMesures = corriges.Count;
 
-                // 3. Appel macro VBA Cal_variance via Application.Run.
-                //    Syntaxe COM : Application.Run("Metrologo.xla!Cal_variance", arg1, arg2, arg3)
-                //    Si pas accessible (Run non disponible, macro absente), fallback C# pur.
+                // 3. Macro VBA Cal_variance via Application.Run (repli C# pur si indisponible).
                 double? variance = null;
                 try
                 {
@@ -2377,7 +2134,7 @@ namespace Metrologo.Services
                 }
                 catch (Exception exRun)
                 {
-                    // Fallback : calcul C# pur Allan variance σ²(τ) = sumSq / (2 * (N-1))
+                    // Repli : variance d'Allan σ²(τ) = sumSq / (2 * (N-1))
                     if (nbMesures >= 2)
                     {
                         variance = sumSq / (2.0 * (nbMesures - 1));
@@ -2387,7 +2144,6 @@ namespace Metrologo.Services
                     }
                 }
 
-                // 4. Écrit la valeur numérique dans ZNVariance.
                 if (variance.HasValue)
                 {
                     EcrireValeurZoneNommeeInterne(nomFeuille, "ZNVariance", variance.Value);
@@ -2401,16 +2157,15 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Calcule les coefficients d'incertitude depuis le module sélectionné et les écrit
-        /// dans les zones nommées <c>ZNCoeffA/B</c> (ou <c>C/D</c> pour tachymètres) via COM.
-        /// Porte la logique de <c>ExcelService.EcrireStatsAsync</c> mais en écriture COM directe.
+        /// Résout les coefficients d'incertitude du module sélectionné et les écrit dans
+        /// <c>ZNCoeffA/B</c> (<c>C/D</c> pour les tachymètres) via COM, comme
+        /// <c>ExcelService.EcrireStatsAsync</c>.
         /// </summary>
         private void EcrireCoeffsIncertitudeViaComInterne(Mesure mesure, List<double> resultats,
             string nomFeuille, double tempsGateSecondes)
         {
-            // Estimation sigma relatif (n-1 classique) pour Stabilité : calibre l'axe Y log
-            // du graphe Stab à la dernière gate. Identique à la logique de
-            // ExcelService.EcrireStatsAsync — équivalent en C# pur, pas d'écriture Excel.
+            // Stabilité : sigma relatif (n-1) mémorisé par gate pour calibrer l'axe Y log du graphe
+            // à la dernière gate (comme ExcelService.EcrireStatsAsync, C# pur, sans écriture Excel).
             if (mesure.TypeMesure == TypeMesure.Stabilite && resultats.Count >= 2)
             {
                 int i = nomFeuille.Length;
@@ -2484,11 +2239,10 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Redirige tous les liens externes pointant vers un fichier <c>*.xla</c> du classeur
-        /// actif vers <see cref="Preferences.CheminMacroXLA"/> via la méthode COM
-        /// <c>Workbook.ChangeLink</c>. Excel nettoie alors proprement le rels (1 seul
-        /// Relationship par lien) et résout immédiatement les formules <c>[1]!Cal_xxx(...)</c>.
-        /// Remplace le PatcherLienMacroXLA (ClosedXML) qui n'est plus appelé en mode visible.
+        /// Redirige les liens externes vers un <c>Metrologo.xla</c> du classeur actif vers
+        /// <see cref="Preferences.CheminMacroXLA"/> (<c>Workbook.ChangeLink</c>) : Excel nettoie le
+        /// rels et résout aussitôt les formules <c>[1]!Cal_xxx(...)</c>. Remplace le
+        /// PatcherLienMacroXLA (ClosedXML), non appelé en mode visible.
         /// </summary>
         private void RedirigerLinksXlaViaComInterne()
         {
@@ -2497,7 +2251,7 @@ namespace Metrologo.Services
             if (string.IsNullOrWhiteSpace(xlaPath)) return;
             try
             {
-                // LinkSources(xlLinkTypeExcelLinks=1) retourne array 1-based des chemins liés.
+                // LinkSources(xlLinkTypeExcelLinks=1) : tableau 1-based des chemins liés.
                 dynamic? links = null;
                 try { links = _classeurActif.LinkSources(1); } catch { /* aucun lien */ }
                 if (links == null) return;
@@ -2532,9 +2286,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Écrit une valeur dans une zone nommée workbook-scope du classeur actif via COM.
-        /// Utilisé pour les zones partagées entre feuilles (ex: ZNNoFicheRecapFreq qui couvre
-        /// l'en-tête de la feuille Récap).
+        /// Écrit une valeur dans une zone nommée portée classeur (zones partagées entre feuilles,
+        /// ex : ZNNoFicheRecapFreq pour l'en-tête de la Récap).
         /// </summary>
         private void EcrireValeurZoneNommeeClasseurInterne(string nomZone, object valeur)
         {
@@ -2562,11 +2315,10 @@ namespace Metrologo.Services
         };
 
         /// <summary>
-        /// (Re)pose les plages nommées du récap sur les lignes remplies : de la ligne qui suit la
-        /// ligne modèle du template (ZNRecapF_Ligne0, ligne 6) jusqu'à la dernière dont la colonne A
-        /// n'est pas vide. Appelé à chaque ligne ajoutée et à la réinitialisation : les plages
-        /// suivent le nombre de mesures. Récap vide : la plage se réduit à sa 1re ligne plutôt que
-        /// de disparaître. À appeler SOUS LOCK (_sync).
+        /// (Re)pose les plages nommées du récap sur les lignes remplies (de la ligne suivant la
+        /// ligne modèle ZNRecapF_Ligne0, ligne 6, à la dernière dont la colonne A est non vide).
+        /// Appelé à chaque ligne ajoutée et à la réinitialisation ; récap vide : la plage se
+        /// réduit à sa 1re ligne. À appeler sous lock <c>_sync</c>.
         /// </summary>
         private void MettreAJourPlagesNommeesRecapInterne(dynamic recap)
         {
@@ -2623,10 +2375,10 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Repli quand l'enregistrement du classeur échoue (typiquement : rapport sur le réseau et
-        /// M: perdu pendant la mesure). Enregistre le classeur sous le même nom dans le dossier
-        /// local de repli de la FI (Bureau\Metrologo\FI), bascule la FI en local pour la suite de
-        /// la session et l'inscrit pour rapatriement automatique. À appeler SOUS LOCK (_sync).
+        /// Repli si l'enregistrement échoue (typiquement : rapport sur le réseau, M: perdu en cours
+        /// de mesure). Enregistre sous le même nom dans le dossier local de la FI (Bureau\Metrologo\FI),
+        /// bascule la FI en local pour la session et l'inscrit au rapatriement automatique.
+        /// À appeler sous lock <c>_sync</c>.
         /// </summary>
         private void EnregistrerEnLocalApresEchecInterne(Mesure mesure)
         {
@@ -2658,7 +2410,7 @@ namespace Metrologo.Services
             }
         }
 
-        /// <summary>Écrit une valeur dans une zone nommée sheet-scope via COM.</summary>
+        /// <summary>Écrit une valeur dans une zone nommée portée feuille (repli sur la portée classeur).</summary>
         private void EcrireValeurZoneNommeeInterne(string nomFeuille, string nomZone, object valeur)
         {
             if (_classeurActif == null) return;
@@ -2676,7 +2428,6 @@ namespace Metrologo.Services
                 }
                 catch
                 {
-                    // Fallback workbook-scope si la zone n'est pas sur la feuille
                     try
                     {
                         dynamic nomWb = _classeurActif.Names.Item(nomZone);
@@ -2694,15 +2445,11 @@ namespace Metrologo.Services
         private const string MotDePasseProtectionFeuille = "METROL";
 
         /// <summary>
-        /// Re-protège TOUTES les feuilles du classeur actif (feuilles de mesure + Récap.) avec
-        /// <see cref="MotDePasseProtectionFeuille"/>. Appelé en fin de mesure, juste avant le Save :
-        /// le rapport n'est plus modifiable dans Excel sans le mot de passe.
-        ///
-        /// L'app, qui connaît ce mot de passe, déprotège automatiquement à chaque relance / ajout
-        /// de mesure (AjouterFeuilleMesureAsync déprotège la nouvelle feuille, les mises à jour
-        /// Récap. déprotègent la feuille Récap.). Chaque feuille est d'abord déprotégée (idempotent —
-        /// Protect lève si déjà protégée) puis re-protégée. Best-effort : un échec sur une feuille
-        /// n'interrompt ni les autres ni la sauvegarde.
+        /// Re-protège toutes les feuilles du classeur actif avec <see cref="MotDePasseProtectionFeuille"/>,
+        /// en fin de mesure juste avant le Save : le rapport n'est plus modifiable dans Excel sans
+        /// le mot de passe, que l'app connaît et utilise pour déprotéger à chaque relance / ajout de
+        /// mesure. Chaque feuille est d'abord déprotégée (Protect lève si déjà protégée).
+        /// Best-effort par feuille.
         /// </summary>
         private void ProtegerToutesFeuillesActifInterne()
         {
@@ -2751,20 +2498,17 @@ namespace Metrologo.Services
 
             try
             {
-                // Déprotéger
                 try { recap.Unprotect("METROL"); } catch { try { recap.Unprotect("metrol"); } catch { try { recap.Unprotect(); } catch { } } }
 
-                // Élargit la colonne D (date) pour qu'elle s'affiche en entier au lieu de « #### ».
+                // Colonne D (date) élargie pour éviter « #### ».
                 try { recap.Columns["D"].ColumnWidth = 13.0; } catch { }
 
-                // En-tête fiche : N° FI + date du jour. Écraser les valeurs héritées du
-                // template (sinon le récap affiche un FI/date qui n'a rien à voir avec la
-                // mesure en cours).
+                // En-tête fiche : N° FI + date du jour (écrase les valeurs héritées du template).
                 EcrireValeurZoneNommeeClasseurInterne("ZNNoFicheRecapFreq", mesure.NumFI);
                 EcrireValeurZoneNommeeClasseurInterne("ZNDateRecapFreq",
                     DateTime.Now.ToString("dd/MM/yyyy"));
 
-                // Trouver la 1ère ligne vide après l'entête (ligne 5)
+                // 1re ligne vide après l'entête (ligne 5)
                 int ligneEntete = 5;
                 int nouvelleLigne = ligneEntete + 1;
                 while (true)
@@ -2791,10 +2535,8 @@ namespace Metrologo.Services
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 2,  $"={qf}ZNLibGate");
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 3,  $"={qf}ZNFreqCorr");
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 4,  $"={qf}ZNEcartType");
-                // Col 5 : fréquence indiquée. Générateur = « Géné. » (écrit direct).
-                // Fréquencemètre = valeur saisie en post-mesure, écrite DIRECTEMENT dans
-                // cette cellule par EcrireFreqIndiqueeRecapAsync (la pop-up) → on laisse
-                // la cellule vide ici, plus aucune formule vers ZNFreqRef de la feuille.
+                // Col 5 : fréquence indiquée. Générateur : « Géné. ». Fréquencemètre : cellule laissée
+                // vide, la valeur saisie en post-mesure y est écrite par EcrireFreqIndiqueeRecapAsync.
                 if (mesure.SourceMesure == SourceMesure.Generateur)
                     EcrireValeurRecapInterne(recap, nouvelleLigne, 5,  "Géné.");
                 // Col 6 : ZNIncertResol | 7 : ZNIncertSup | 8 : ZNIncertAccreditee | 9 : ZNIncertGlobale
@@ -2805,8 +2547,7 @@ namespace Metrologo.Services
                 // Col 10 : fréquence finale calculée
                 int n = nouvelleLigne;
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 10, $"=IF(ISNUMBER(E{n}),(E{n}/C{n})*A{n},C{n})");
-                // Col 11 : n°Module — lu depuis la cellule « Module = » de la feuille (F10, ou
-                // G10 en tachy). La colonne Fonction a été retirée.
+                // Col 11 : n°Module, lu dans la cellule « Module = » de la feuille (F10, G10 en tachy).
                 string celModuleRecap = EnTetesMesureHelper.EstTachymetre(mesure.TypeMesure) ? "G10" : "F10";
                 EcrireFormuleRecapInterne(recap, nouvelleLigne, 11, $"={qf}{celModuleRecap}");
 
@@ -2825,14 +2566,11 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Écrit la « fréquence indiquée » saisie en post-mesure (mode Fréquencemètre)
-        /// DIRECTEMENT dans la colonne 5 de la ligne Récap de la feuille de mesure active —
-        /// à l'emplacement exact où le mode Générateur écrit « Géné. ».
-        ///
-        /// Ne touche PAS la feuille de mesure : la valeur n'est qu'un report d'affichage
-        /// dans le récap, elle n'alimente plus ZNFreqRef ni la fréquence corrigée (ZNFreqCorr).
-        /// La bonne ligne est identifiée par la formule de sa colonne 1
-        /// (<c>='&lt;feuille&gt;'!ZNFreqMoyReel</c>) qui référence la feuille active.
+        /// Écrit la « fréquence indiquée » saisie en post-mesure (mode Fréquencemètre) dans la
+        /// colonne 5 de la ligne Récap de la feuille active, là où le mode Générateur écrit « Géné. ».
+        /// Simple report d'affichage : la feuille de mesure n'est pas touchée et ZNFreqRef /
+        /// ZNFreqCorr ne sont pas alimentés. La ligne est repérée par la formule de sa colonne 1
+        /// (<c>='&lt;feuille&gt;'!ZNFreqMoyReel</c>).
         /// </summary>
         public Task EcrireFreqIndiqueeRecapAsync(double valeur) => Task.Run(() =>
         {
@@ -2853,8 +2591,6 @@ namespace Metrologo.Services
                     try { recap.Unprotect("METROL"); }
                     catch { try { recap.Unprotect("metrol"); } catch { try { recap.Unprotect(); } catch { } } }
 
-                    // Parcourt les lignes de données (à partir de la ligne 6) et repère
-                    // celle dont la col 1 référence la feuille active.
                     for (int row = 6; row <= 100; row++)
                     {
                         dynamic? cell = null;
@@ -2896,21 +2632,19 @@ namespace Metrologo.Services
             {
                 try { recap.Unprotect("METROL"); } catch { try { recap.Unprotect("metrol"); } catch { try { recap.Unprotect(); } catch { } } }
 
-                // Élargit la colonne D (date) pour qu'elle s'affiche en entier au lieu de « #### ».
                 try { recap.Columns["D"].ColumnWidth = 13.0; } catch { }
 
                 // En-tête fiche
                 EcrireValeurRecapInterne(recap, 1, 2, mesure.NumFI);
                 EcrireValeurRecapInterne(recap, 1, 4, DateTime.Now.ToString("dd/MM/yyyy"));
 
-                // Numéro de gate (parsé depuis le nom de feuille — fallback compteur)
+                // N° de gate lu dans le nom de feuille (repli : compteur de lignes remplies)
                 int numero;
                 int i = nomFeuille.Length;
                 while (i > 0 && char.IsDigit(nomFeuille[i - 1])) i--;
                 string chiffres = nomFeuille.Substring(i);
                 if (!int.TryParse(chiffres, out numero))
                 {
-                    // Compte les lignes remplies (col A non vide)
                     int compteur = 0;
                     for (int r = 6; r <= 18; r++)
                     {
@@ -2939,7 +2673,7 @@ namespace Metrologo.Services
                 // incertitude (« * » en col I). Un 0 rendait le point invisible sur l'axe log.
                 EcrireFormuleRecapInterne(recap, ligne, 8,
                     $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0.000000000001,MAX(0.000000000001,C{ligne}-F{ligne})))");
-                // n°Module lu depuis la cellule « Module = » (F10) ; colonne Fonction retirée.
+                // n°Module lu dans la cellule « Module = » (F10).
                 EcrireFormuleRecapInterne(recap, ligne, 11, $"={qf}F10");
 
                 // Écritures scientifiques (écart-type + incertitudes) : forcées à 2 décimales.
@@ -2954,11 +2688,10 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Force le format scientifique à 2 décimales sur les cellules indiquées d'une ligne du
-        /// récap (incertitudes / écart-type). On utilise <c>NumberFormatLocal</c> avec la VIRGULE
-        /// (« 0,00E+00 ») : sur un Excel français, poser une chaîne de format avec un point via
-        /// <c>NumberFormat</c> est mal interprété et corrompt l'affichage (mantisse non normalisée).
-        /// Best-effort par cellule, avec repli sur le format US si besoin.
+        /// Force le format scientifique à 2 décimales sur des cellules d'une ligne du récap
+        /// (incertitudes, écart-type). <c>NumberFormatLocal</c> avec la VIRGULE (« 0,00E+00 ») :
+        /// sur un Excel français, un format à point posé via <c>NumberFormat</c> est mal interprété
+        /// (mantisse non normalisée). Repli sur le format US, best-effort par cellule.
         /// </summary>
         private static void FormaterScientifiqueRecapInterne(dynamic recap, int row, params int[] colonnes)
         {
@@ -2983,32 +2716,23 @@ namespace Metrologo.Services
                 dynamic c = recap.Cells[row, col];
                 try
                 {
-                    // CAUSE RACINE du bug "ligne 1 du Récap. en texte" :
-                    // Le template METROLOGO.xlsx a une ligne 6 pré-stylée avec des cellules
-                    // marquées t="s" (shared string) dans le XML xlsx. Quand la 1ère mesure
-                    // tombe sur cette ligne, l'écriture .Formula = "=..." STOCKE LA FORMULE
-                    // COMME STRING (entrée dans sharedStrings.xml) au lieu d'une vraie formule.
-                    // Résultat : Excel affiche « ='freq1'!ZNLibGate » littéralement.
-                    //
-                    // NumberFormat = "General" et Clear() ne changent pas le type stocké (t="s"
-                    // reste). La SEULE façon de forcer le type numérique est d'écrire un nombre
-                    // dans la cellule AVANT de poser la formule. Ceci convertit t="s" en t="n"
-                    // (numeric), et la pose de formule suivante stocke correctement.
+                    // Le template METROLOGO.xlsx a une ligne 6 pré-stylée dont les cellules sont typées
+                    // t="s" (shared string) : y écrire .Formula stocke alors la formule COMME TEXTE et
+                    // Excel affiche « ='freq1'!ZNLibGate » littéralement. NumberFormat = "General" et
+                    // Clear() ne changent pas ce type ; seule l'écriture d'un nombre AVANT la formule
+                    // le convertit en t="n".
                     try { c.Clear(); } catch { }
                     try { c.Style = "Normal"; } catch { }
                     try { c.NumberFormat = "General"; } catch { }
-                    try { c.Value2 = 0.0; } catch { }   // CRUCIAL : force type numeric (t="s" → t="n")
+                    try { c.Value2 = 0.0; } catch { }   // force le type numérique (t="s" → t="n")
                     c.Formula = formule;
 
-                    // Centrage horizontal + vertical pour cohérence visuelle avec le reste
-                    // du Récap (Clear() a effacé l'alignement hérité du template).
-                    // xlCenter = -4108 (constante Excel COM).
+                    // Centrage (Clear() a effacé l'alignement hérité du template) ; xlCenter = -4108.
                     try { c.HorizontalAlignment = -4108; } catch { }
                     try { c.VerticalAlignment = -4108; } catch { }
 
-                    // Vérif post-pose : ceinture+bretelles. Si malgré tout la cellule est
-                    // restée en string, on bypass via Application.Evaluate (perte du recalc
-                    // live mais affichage correct).
+                    // Ceinture et bretelles : si la cellule est quand même restée en texte, on passe par
+                    // Application.Evaluate (affichage correct, mais plus de recalcul live).
                     try
                     {
                         object v = c.Value2;
@@ -3055,9 +2779,8 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Ajuste les plages des séries du graphe Stab au nombre réel de gates balayées —
-        /// équivalent COM de <c>ExcelService.RendreGrapheStabDynamique</c>. Patche XValues
-        /// et Values via la Chart Object Model d'Excel (pas de manipulation XML zippée
+        /// Ajuste les plages des séries du graphe Stab au nombre réel de gates balayées (équivalent
+        /// COM de <c>ExcelService.RendreGrapheStabDynamique</c>, via le modèle objet des graphiques
         /// puisque le fichier reste ouvert).
         /// </summary>
         private void AjusterPlagesGrapheStabViaComInterne(int nbGates)
@@ -3084,7 +2807,7 @@ namespace Metrologo.Services
                                 dynamic serie = seriesColl.Item(j);
                                 try
                                 {
-                                    // Patch des plages via regex sur les chaînes de référence.
+                                    // Plages patchées par regex sur la formule de la série.
                                     string xRef = (string)serie.Formula;
                                     string nouvelle = System.Text.RegularExpressions.Regex.Replace(
                                         xRef,
@@ -3095,7 +2818,7 @@ namespace Metrologo.Services
                                 catch { /* série non patchable */ }
                                 finally { try { Marshal.ReleaseComObject(serie); } catch { } }
                             }
-                            // Axe Y auto-scale (retire les bornes figées 1E-12/1E-08 du Stab1.xls)
+                            // Axe Y en auto (retire les bornes figées 1E-12/1E-08 du Stab1.xls)
                             try
                             {
                                 dynamic valAxis = chart.Axes(2);   // 2 = xlValue
@@ -3122,18 +2845,14 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Calibre l'axe Y log du graphe Stab sur les valeurs de la Récap. (après recalcul) :
-        /// écart type (C), Valeurs Maxi (G) et Valeurs Mini réelles (C − F quand > 0), lignes
-        /// 6..5+nbGates — avant, seuls les sigmas comptaient et les Maxi sortaient par le haut.
-        /// Repli sur les sigmas si la Récap ne donne rien. Place aussi l'axe des abscisses en bas
-        /// (croisement au minimum) : le croisement fixe à 1E-12 hérité de Stab1.xls tombait au
-        /// milieu du graphe dès que l'échelle descendait sous 1E-12.
-        /// <para>Plancher des Valeurs Mini : dans Stab1.xls, un Mini ≤ 0 (sigma ≤ incertitude) vaut
-        /// 1E-12, qui était AUSSI le bas du graphe (« hors échelle, en bas »). Quand l'échelle
-        /// descend plus bas (sigmas &lt; 1E-12 aux longs temps de porte), un plancher resté à 1E-12
-        /// passait AU-DESSUS de l'écart type. Le plancher suit donc le bas de l'échelle :
-        /// min(1E-12, borne basse), toujours sous les sigmas (la borne basse est au moins une
-        /// demi-décade sous le plus petit). Il ne reste à 1E-12 que si l'échelle ne descend pas plus bas.</para>
+        /// Calibre l'axe Y log du graphe Stab (après recalcul) sur les lignes 6..5+nbGates de la
+        /// Récap. : écart type (C), Valeurs Maxi (G) et Valeurs Mini réelles (C − F si > 0) ; repli
+        /// sur les sigmas si la Récap ne donne rien. Place aussi l'axe X en bas (croisement au
+        /// minimum), le croisement fixe à 1E-12 de Stab1.xls tombant au milieu du graphe sous 1E-12.
+        /// <para>Plancher des Valeurs Mini : dans Stab1.xls un Mini ≤ 0 (sigma ≤ incertitude) vaut
+        /// 1E-12, aussi bas du graphe (« hors échelle, en bas »). Si l'échelle descend plus bas
+        /// (sigmas &lt; 1E-12 aux longs temps de porte), ce plancher passerait AU-DESSUS de l'écart
+        /// type : il suit donc min(1E-12, borne basse).</para>
         /// </summary>
         private void CalibrerAxeYGrapheStabViaComInterne(int nbGates, IEnumerable<double> sigmas)
         {
@@ -3180,9 +2899,8 @@ namespace Metrologo.Services
                         dynamic chartObj = chartObjects.Item(i);
                         try
                         {
-                            // Le template ancre le graphe en ligne 18 (prévu pour 10 temps de porte,
-                            // lignes 6-15) : à 13 temps il recouvrait la ligne 100 s. On le place
-                            // sous la dernière ligne de mesure, une ligne vide entre les deux.
+                            // Le template ancre le graphe en ligne 18 (prévu pour 10 temps de porte) : à 13
+                            // temps il recouvrait la ligne 100 s. On le place sous la dernière ligne + 1 vide.
                             try
                             {
                                 dynamic ancre = ws.Range($"A{5 + nbGates + 2}");
@@ -3204,9 +2922,8 @@ namespace Metrologo.Services
                                 valAxis.Crosses = 4;               // xlAxisCrossesMinimum : axe X en bas
                                 try { Marshal.ReleaseComObject(valAxis); } catch { }
 
-                                // Traits verticaux Maxi → Mini (lignes haut-bas) du Stab1.xls : Excel
-                                // les retire dès le 1er enregistrement COM (gate 1, Récap encore vide).
-                                // On les repose ici, juste avant le Save final : trait fin noir.
+                                // Traits Maxi → Mini (HiLoLines) de Stab1.xls : Excel les retire dès le 1er
+                                // enregistrement COM (gate 1, Récap vide) ; on les repose avant le Save final.
                                 dynamic groupe = chart.ChartGroups(1);
                                 groupe.HasHiLoLines = true;
                                 dynamic bordure = groupe.HiLoLines.Border;
@@ -3265,27 +2982,21 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Force la fenêtre du rapport actif au premier plan visuel (SetForegroundWindow +
-        /// BringWindowToTop + WindowState=xlMaximized) — annule l'effet "fenêtre grise par-dessus"
-        /// que produit Excel SDI quand certaines opérations COM (Copy, Save, Open) mettent
-        /// momentanément une shell Excel en TopMost.
-        ///
-        /// Le piège classique de SetForegroundWindow sous Windows : il échoue silencieusement
-        /// si le thread appelant n'a pas le focus. La technique standard pour contourner :
-        /// attacher temporairement le thread courant au thread foreground via AttachThreadInput,
-        /// faire l'opération, puis détacher.
+        /// Amène la fenêtre du rapport actif au premier plan (Activate, xlMaximized, BringWindowToTop,
+        /// SetForegroundWindow) : annule la « fenêtre grise par-dessus » d'Excel SDI quand une
+        /// opération COM (Copy, Save, Open) met une shell en TopMost. SetForegroundWindow échoue
+        /// silencieusement si notre thread n'a pas le focus : on l'attache temporairement au thread
+        /// foreground via AttachThreadInput.
         /// </summary>
         private void ForcerRapportAuPremierPlanInterne()
         {
             if (_excel == null || _classeurActif == null) return;
             try
             {
-                // 1. Activate côté Excel COM : amène la fenêtre du rapport au top du Z-order
-                //    Excel (mais ne touche pas le Z-order Windows).
+                // 1. Activate côté Excel (Z-order Excel uniquement, pas celui de Windows).
                 try { _classeurActif.Activate(); } catch { }
 
-                // 2. WindowState = xlMaximized : la fenêtre du rapport prend tout l'écran Excel,
-                //    masquant visuellement toute autre window Excel en dessous.
+                // 2. xlMaximized : le rapport masque visuellement toute autre fenêtre Excel dessous.
                 try
                 {
                     dynamic w = _classeurActif.Windows[1];
@@ -3294,11 +3005,8 @@ namespace Metrologo.Services
                 }
                 catch { }
 
-                // 3. SetForegroundWindow + BringWindowToTop côté Win32 : amène la fenêtre du
-                //    rapport au top du Z-order Windows, devant TOUTE autre window (y compris
-                //    la shell Excel TopMost qui apparaissait par-dessus). Trick AttachThreadInput
-                //    pour éviter l'échec silencieux de SetForegroundWindow quand notre process
-                //    n'a pas le focus à ce moment-là.
+                // 3. Win32 : le rapport passe devant toute autre fenêtre (y compris une shell TopMost),
+                //    avec l'astuce AttachThreadInput (cf. summary).
                 IntPtr hwndRapport = IntPtr.Zero;
                 try
                 {
@@ -3343,22 +3051,14 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Démarre le timer de masquage continu de la shell SDI. Tant qu'un classeur est ouvert
-        /// dans Excel, on appelle <see cref="MasquerFenetresShellExcelInterne"/> toutes les 500ms.
-        /// Garantit qu'aucune shell ne peut rester visible plus d'une demi-seconde, même si
-        /// l'appel initial post-ouverture rate (race COM, ouverture asynchrone du window manager
-        /// Excel, etc.). Coût quasi nul : <see cref="MasquerFenetresShellExcelInterne"/> fait
-        /// uniquement un EnumWindows Win32 (~quelques µs), sans aucun appel COM.
-        ///
-        /// ⚠ <see cref="FermerClasseursParasitesInterne"/> N'EST PLUS appelé ici. Cet appel
-        ///   itérait sur tous les Workbooks via COM (~100-300 ms par tick) et prenait le lock
-        ///   <c>_sync</c> partagé avec <see cref="EcrireValeurLiveAsync"/>. Pendant une mesure,
-        ///   chaque tick bloquait l'écriture live de la valeur en cours d'arrivée du compteur
-        ///   GPIB → effet « rien ne s'affiche pendant plusieurs secondes puis ça reprend »
-        ///   particulièrement visible quand le compteur met du temps à répondre (signal carré,
-        ///   retries internes, etc.). Le nettoyage des Workbooks parasites est déjà couvert
-        ///   par les appels existants dans <c>OuvrirEtAfficherAsync</c> et
-        ///   <c>AjouterFeuilleMesureAsync</c> — les seuls moments où une shell peut apparaître.
+        /// Démarre le timer (500 ms) qui appelle <see cref="MasquerFenetresShellExcelInterne"/> tant
+        /// qu'un classeur est ouvert : aucune shell SDI ne reste visible plus d'une demi-seconde,
+        /// même si l'appel initial a raté (race COM). Le tick est léger (1 appel COM + EnumWindows).
+        /// Ne PAS y appeler <see cref="FermerClasseursParasitesInterne"/> : il itère sur les Workbooks
+        /// (~100-300 ms) sous le lock <c>_sync</c> partagé avec <see cref="EcrireValeurLiveAsync"/> et
+        /// gèlerait l'affichage live des mesures du compteur GPIB. Ce nettoyage est déjà fait dans
+        /// <c>OuvrirEtAfficherAsync</c> et <c>AjouterFeuilleMesureAsync</c>, seuls moments où une
+        /// shell peut apparaître.
         /// </summary>
         private void DemarrerTimerMasquageShellInterne()
         {
@@ -3372,9 +3072,7 @@ namespace Metrologo.Services
                         lock (_sync)
                         {
                             if (_excel == null || _classeurActif == null) return;
-                            // Uniquement MasquerFenetresShellExcelInterne : fait 1 mini call COM
-                            // (Hwnd du Workbook actif) + EnumWindows Win32. Tick ~1-2 ms total,
-                            // négligeable pour les écritures live concurrentes.
+                            // 1 appel COM (Hwnd) + EnumWindows : ~1-2 ms, négligeable pour les écritures live.
                             MasquerFenetresShellExcelInterne();
                         }
                     }
@@ -3384,8 +3082,7 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Arrête le timer de masquage. À appeler à la fermeture du classeur (plus de risque de
-        /// shell parasite) et au Dispose de l'app. Idempotent.
+        /// Arrête le timer de masquage (fermeture du classeur, Dispose). Idempotent.
         /// </summary>
         private void ArreterTimerMasquageShellInterne()
         {
@@ -3397,22 +3094,17 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Masque la fenêtre « shell » top-level d'Excel (titre = « Excel » sans nom de
-        /// fichier) qui apparaît grise à côté du rapport en SDI. Cette fenêtre n'est pas
-        /// énumérée par <c>Application.Windows</c> (qui ne liste que les Workbook Windows),
-        /// d'où le besoin de descendre au niveau Win32 EnumWindows.
-        /// Ne masque QUE les fenêtres dont le titre est « Excel » ou « Microsoft Excel »
-        /// pour ne pas affecter le rapport ouvert (titre = « Mesures_F6_xxxxx - Excel »).
+        /// Masque les fenêtres top-level d'Excel autres que le rapport actif (shell SDI grise,
+        /// Book1 résiduel…). Elles ne figurent pas dans <c>Application.Windows</c> (Workbook Windows
+        /// seulement) d'où l'EnumWindows Win32. Le critère est le HWND du rapport, pas le titre,
+        /// qui varie selon la langue/version d'Excel.
         /// </summary>
         private void MasquerFenetresShellExcelInterne()
         {
             if (_excel == null || _excelPid <= 0 || _classeurActif == null) return;
             try
             {
-                // Récupère le HWND de la fenêtre du rapport actif — la SEULE fenêtre top-level
-                // Excel du process qu'on garde visible. Tout le reste (shell SDI vide, Book1
-                // résiduel, etc.) est masqué, peu importe le caption (qui varie selon la
-                // langue/version d'Excel : « Excel », « Microsoft Excel », « Book1 », …).
+                // HWND du rapport actif : seule fenêtre top-level du process gardée visible.
                 IntPtr hwndRapport = IntPtr.Zero;
                 try
                 {
@@ -3420,12 +3112,10 @@ namespace Metrologo.Services
                     try { hwndRapport = new IntPtr((int)w.Hwnd); }
                     finally { try { Marshal.ReleaseComObject(w); } catch { } }
                 }
-                catch { /* best-effort, on saura via le log de diag */ }
+                catch { /* best-effort */ }
 
-                // GARDE-FOU CRITIQUE : si on n'a pas pu identifier le HWND du rapport
-                // (race COM : Window pas encore créée), on ne masque RIEN. Sinon on
-                // masquerait TOUTES les fenêtres Excel y compris le rapport lui-même
-                // → l'utilisateur ne voit plus rien et Excel finit par se fermer.
+                // Garde-fou critique : sans HWND du rapport (race COM, fenêtre pas encore créée) on
+                // ne masque RIEN, sinon le rapport lui-même serait caché.
                 if (hwndRapport == IntPtr.Zero)
                 {
                     JournalLog.Warn(CategorieLog.Excel, "EXCEL_SHELL_MASQUE_SKIP",
@@ -3445,16 +3135,10 @@ namespace Metrologo.Services
                         if (hWnd == hwndRapportLocal) return true;       // c'est le rapport, on garde
                         if (GetParent(hWnd) != IntPtr.Zero) return true; // pas top-level (enfant)
 
-                        // CEINTURE + BRETELLES + HARNAIS pour s'assurer que la shell SDI
-                        // disparaît visuellement, même si elle se ré-affiche derrière notre dos
-                        // (Excel SDI peut ré-afficher la shell sur certaines opérations COM —
-                        // SaveAs, Workbooks.Open, etc.).
-                        // 1. SW_HIDE — la cache complètement.
-                        // 2. SW_FORCEMINIMIZE — au cas où elle se ré-afficherait, elle sera
-                        //    en barre des tâches minimisée plutôt qu'à l'écran.
-                        // 3. SetWindowPos HWND_BOTTOM — la pousse tout en bas du Z-order
-                        //    pour que toute fenêtre visible (y compris le rapport) la cache.
-                        // 4. Déplacement hors écran (-32000, -32000) — sécurité ultime visuel.
+                        // Excel SDI peut ré-afficher la shell sur certaines opérations COM (SaveAs,
+                        // Workbooks.Open...) : on cumule les parades.
+                        // 1. SW_HIDE ; 2. SW_FORCEMINIMIZE (si réaffichée : minimisée) ;
+                        // 3. HWND_BOTTOM (sous toute fenêtre visible) ; 4. hors écran (-32000, -32000).
                         try { ShowWindow(hWnd, SW_HIDE); } catch { }
                         try { ShowWindow(hWnd, SW_FORCEMINIMIZE); } catch { }
                         try
@@ -3489,14 +3173,9 @@ namespace Metrologo.Services
             }
         }
 
-        /// <summary>
-        /// Comparaison robuste de chemins : normalise via Path.GetFullPath pour gérer
-        /// les variations (capitalisation, slash, raccourcis 8.3) qui faisaient échouer
-        /// un simple string.Equals et fermaient à tort le rapport actif.
-        /// </summary>
         /// <summary>Vrai si ce classeur (nom complet donné par Excel ou la ROT) est notre rapport
-        /// actif : même nom complet qu'Excel a donné à l'ouverture, ou même chemin une fois
-        /// normalisé. Évite de prendre notre propre rapport pour un « parasite » à masquer/fermer.</summary>
+        /// actif : même nom complet qu'à l'ouverture, ou même chemin normalisé. Évite de prendre
+        /// notre rapport pour un « parasite » à masquer/fermer.</summary>
         private bool EstClasseurActif(string fullName)
         {
             if (string.IsNullOrEmpty(fullName)) return false;
@@ -3507,6 +3186,7 @@ namespace Metrologo.Services
                 || ChemPathEgal(fullName, _fullNameActifExcel);
         }
 
+        /// <summary>Compare deux chemins après <see cref="NormaliserChemin"/> (casse, 8.3, lecteur réseau/UNC).</summary>
         private static bool ChemPathEgal(string a, string b)
         {
             if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
@@ -3537,10 +3217,9 @@ namespace Metrologo.Services
         private static readonly Dictionary<string, string?> _racinesUnc = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Chemin complet, avec la lettre d'un lecteur RÉSEAU remplacée par sa racine UNC
-        /// (<c>M:\x</c> → <c>\\serveur\partage\x</c>). Selon sa configuration, Excel désigne un
-        /// fichier réseau par l'une ou l'autre forme : sans cette normalisation, notre propre rapport
-        /// ouvert sur M: n'était pas reconnu (fenêtre masquée = feuille grisée, doublon d'Excel).
+        /// Chemin complet, la lettre d'un lecteur RÉSEAU étant remplacée par sa racine UNC
+        /// (<c>M:\x</c> → <c>\\serveur\partage\x</c>). Excel désigne un fichier réseau par l'une ou
+        /// l'autre forme : sans cela, notre rapport ouvert sur M: n'était pas reconnu.
         /// </summary>
         private static string NormaliserChemin(string chemin)
         {
@@ -3576,16 +3255,10 @@ namespace Metrologo.Services
 
         private void FermerClasseurActifInterne()
         {
-            // Arrête le timer de masquage shell : plus de classeur ouvert = plus besoin
-            // de scanner les fenêtres parasites.
             ArreterTimerMasquageShellInterne();
 
-            // CRUCIAL pour éviter la shell SDI grise pendant la transition entre 2 mesures :
-            // on cache TOUTE l'instance Excel AVANT de fermer le Workbook. Sans ça, Excel
-            // resterait Visible=true avec 0 Workbook → shell apparaîtrait. Avec Visible=false,
-            // l'instance est totalement invisible Windows pendant que ClosedXML écrit le fichier.
-            // OuvrirEtAfficherAsync remettra Visible=true APRÈS avoir ouvert le nouveau Workbook
-            // (séquence identique à la mesure 1 qui marche parfaitement).
+            // Cache l'instance AVANT de fermer le classeur : visible sans classeur, Excel afficherait
+            // la shell SDI grise. OuvrirEtAfficherAsync remettra Visible=true après l'ouverture suivante.
             if (_excel != null)
             {
                 try { _excel.Visible = false; } catch { }
@@ -3608,25 +3281,14 @@ namespace Metrologo.Services
             _cheminClasseurActif = string.Empty;
             _fullNameActifExcel = string.Empty;
 
-            // Force la libération immédiate des handles fichier détenus par Excel via les
-            // proxys COM RCW. Sans ces 2 lignes, le fichier reste "verrouillé" côté OS pour
-            // 100-500 ms après le Close → ClosedXML bascule sur un nom horodaté à la mesure
-            // suivante au lieu d'écrire dans le même fichier.
+            // Libère aussitôt les handles fichier d'Excel (RCW) : sans cela le fichier reste verrouillé
+            // 100-500 ms après le Close et ClosedXML bascule sur un nom horodaté à la mesure suivante.
             GC.Collect();
             GC.WaitForPendingFinalizers();
-
-            // On NE fait plus _excel.Visible=false ici : ça créait un toggle false→true
-            // à la mesure suivante (= fenêtre grise SDI au moment du Visible=true).
-            // L'instance reste visible avec sa fenêtre principale entre deux mesures ; les
-            // fenêtres parasites (shell SDI vide) sont masquées via MasquerFenetresShellExcelInterne
-            // au moment de l'ouverture du nouveau Workbook. Le Visible=false n'est plus fait
-            // que dans Dispose (à la fermeture définitive de l'app).
         }
 
         /// <summary>
-        /// Quitte l'instance Excel hôte. À appeler à la fermeture de l'application. Les éventuels
-        /// classeurs ouverts par l'utilisateur dans cette instance seront fermés (Excel demandera
-        /// si besoin de sauver si des modifs sont en cours).
+        /// Quitte l'instance Excel hôte, à la fermeture de l'application.
         /// </summary>
         public void Dispose()
         {

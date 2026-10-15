@@ -254,9 +254,8 @@ namespace Metrologo.ViewModels
         /// <summary>MesureConfig réassigné (réouverture) : rebuild pour restaurer l'état sans re-saisie.</summary>
         partial void OnMesureConfigChanged(Mesure value)
         {
-            // Repart d'une sélection vierge pour restaurer l'appareil depuis IdModeleCatalogue,
-            // pas depuis un _appareilSelectionne périmé. Sans ça, en mode baie, le 1er legacy
-            // était auto-sélectionné et écrasait la valeur persistée (bug "oublie l'appareil après une mesure").
+            // Sélection vierge : l'appareil est restauré depuis IdModeleCatalogue, pas depuis une valeur
+            // périmée (sinon, en baie, le 1er legacy auto-sélectionné écraserait la valeur persistée).
             _appareilSelectionne = null;
             RebuildAppareils();
             RebuildReglagesDynamiques();
@@ -297,9 +296,7 @@ namespace Metrologo.ViewModels
             // Seuls les appareils détectés sur le bus — pas de config sur un instrument absent.
             foreach (var det in EtatApplication.AppareilsDetectes)
             {
-                // ⚠ et non ✓ pour le hors-catalogue : un ✓ laissait croire « reconnu/utilisable »
-                // alors qu'un appareil hors catalogue est affiché mais NON mesurable (au lancement,
-                // IdModeleCatalogue est vide → « Aucun appareil sélectionné, enregistrez-le »).
+                // ⚠ pour le hors-catalogue : affiché mais NON mesurable (IdModeleCatalogue vide au lancement).
                 string suffixe = det.ModeleReconnu != null
                     ? $" ✓  (catalogue)"
                     : $" ⚠  NON enregistré — à ajouter au catalogue (inutilisable en l'état)";
@@ -326,7 +323,7 @@ namespace Metrologo.ViewModels
             }
 
             // Rien restauré : sélectionne le 1er via la propriété (setter renseigne IdModeleCatalogue).
-            // Sans ça, l'UI affichait le 1er appareil mais la config restait vide -> "Aucun appareil" au lancement.
+            // Sinon l'UI affiche le 1er appareil mais la config reste vide -> "Aucun appareil" au lancement.
             if (_appareilSelectionne == null && Appareils.Count > 0)
             {
                 AppareilSelectionne = Appareils[0];
@@ -591,13 +588,11 @@ namespace Metrologo.ViewModels
         }
 
         // Couplage / impédance / pente : paires de booléens complémentaires (DC↔AC, 50Ω↔1MΩ,
-        // montant↔descendant). ATTENTION : deux RadioButtons distincts (panneaux « 1 voie » et
-        // « 2 voies », qui s'affichent/se masquent) sont liés TwoWay à la MÊME propriété. Sans le
-        // court-circuit « valeur inchangée » ci-dessous, la mutuelle exclusion des RadioButtons
-        // (re-décochage lors d'un changement de visibilité) déclenche un ping-pong DC→AC→DC… qui
-        // boucle à l'infini → StackOverflow → l'appli fige. Le guard stoppe dès que la valeur est
-        // stable (plus de notification). Le null-safe couvre l'instant de re-binding (MesureConfig
-        // momentanément non affecté). Réf bug : freeze pointant ce setter au 2e lancement de mesure.
+        // montant↔descendant). ATTENTION : les RadioButtons des panneaux « 1 voie » et « 2 voies »
+        // sont liés TwoWay à la MÊME propriété. Sans le court-circuit « valeur inchangée », leur
+        // exclusion mutuelle (re-décochage au changement de visibilité) provoque un ping-pong
+        // DC→AC→DC… infini (StackOverflow, l'appli fige). Le null-safe couvre le re-binding
+        // (MesureConfig momentanément non affecté).
 
         // Couplage voie 1
         public bool IntervDc1

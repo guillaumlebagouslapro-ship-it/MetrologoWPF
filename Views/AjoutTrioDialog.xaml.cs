@@ -8,7 +8,7 @@ namespace Metrologo.Views
 {
     public partial class AjoutTrioDialog : FluentWindow
     {
-        // Les temps de mesure standards qu'on propose à l'admin.
+        // Temps de mesure standards proposés à l'admin.
         private static readonly double[] _tempsStandards =
         {
             0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1d, 2d, 5d, 10d, 20d, 50d, 100d
@@ -25,9 +25,8 @@ namespace Metrologo.Views
         public AjoutTrioDialog() : this(null) { }
 
         /// <summary>
-        /// <paramref name="module"/> = le module qu'on est en train d'éditer. Quand il est
-        /// fourni, on filtre la ComboBox des temps pour retirer ceux déjà saisis sur la
-        /// fonction sélectionnée, histoire d'éviter les doublons.
+        /// <paramref name="module"/> = module édité ; s'il est fourni, la ComboBox des temps
+        /// exclut ceux déjà saisis pour la fonction sélectionnée (anti-doublons).
         /// </summary>
         public AjoutTrioDialog(ModuleIncertitude? module, string? fonctionParDefaut = null)
         {
@@ -43,9 +42,8 @@ namespace Metrologo.Views
                 if (item != null) CbFonction.SelectedItem = item;
             }
 
-            // Pour un module sans temps de mesure, on cache tout le bloc et OnValider mettra
-            // TempsDeMesure à 0 : choisir un temps n'aurait aucun sens (tachy/strobo). Au
-            // passage on coche « 1 plage », qui est le cas habituel en tachy.
+            // Module sans temps de mesure (tachy/strobo) : bloc masqué, OnValider met
+            // TempsDeMesure à 0, et « 1 plage » est coché (cas habituel).
             if (module != null && !module.UtiliseTempsDeMesure)
             {
                 PanelTemps.Visibility = System.Windows.Visibility.Collapsed;
@@ -59,7 +57,6 @@ namespace Metrologo.Views
                 Loaded += (_, _) => RafraichirTempsDisponibles();
             }
 
-            // On met à jour le libellé du bouton au fil du choix de l'utilisateur.
             RbUnePlage.Checked   += (_, _) => MajLibelleBouton();
             RbTroisPlages.Checked += (_, _) => MajLibelleBouton();
             Loaded += (_, _) => MajLibelleBouton();
@@ -76,27 +73,27 @@ namespace Metrologo.Views
         {
             string fnSel = (CbFonction.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Freq";
 
-            // Les temps déjà présents dans le tableau pour cette fonction, sur le module courant.
+            // Temps déjà présents pour cette fonction dans le module courant.
             HashSet<double> dejaPresents = _module == null
                 ? new HashSet<double>()
                 : new HashSet<double>(_module.Lignes
                     .Where(l => string.Equals(l.Fonction, fnSel, System.StringComparison.OrdinalIgnoreCase))
                     .Select(l => l.TempsDeMesure));
 
-            // On mémorise le texte courant pour ne pas écraser une saisie en cours.
+            // Texte courant mémorisé pour ne pas écraser une saisie en cours.
             string textePrecedent = CbTemps.Text;
 
             CbTemps.Items.Clear();
             foreach (double t in _tempsStandards)
             {
-                if (dejaPresents.Contains(t)) continue; // on saute, il est déjà là
+                if (dejaPresents.Contains(t)) continue;
                 CbTemps.Items.Add(new ComboBoxItem
                 {
                     Content = t.ToString(CultureInfo.InvariantCulture)
                 });
             }
 
-            // Si la liste n'est pas vide, on sélectionne le premier temps restant.
+            // Saisie conservée, sinon premier temps restant.
             if (CbTemps.Items.Count > 0 && !string.IsNullOrEmpty(textePrecedent))
                 CbTemps.Text = textePrecedent;
             else if (CbTemps.Items.Count > 0)
@@ -110,7 +107,7 @@ namespace Metrologo.Views
             Fonction = (CbFonction.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Freq";
             NombrePlages = RbUnePlage.IsChecked == true ? 1 : 3;
 
-            // Module sans temps de mesure : inutile de valider quoi que ce soit côté temps.
+            // Module sans temps de mesure : rien à valider côté temps.
             if (_module != null && !_module.UtiliseTempsDeMesure)
             {
                 TempsDeMesure = 0;
@@ -127,7 +124,7 @@ namespace Metrologo.Views
                 return;
             }
 
-            // On refuse si l'admin retape à la main un temps qui existe déjà pour cette fonction.
+            // Refus d'un temps retapé à la main qui existe déjà pour cette fonction.
             if (_module != null && _module.Lignes.Any(l =>
                 string.Equals(l.Fonction, Fonction, System.StringComparison.OrdinalIgnoreCase) &&
                 System.Math.Abs(l.TempsDeMesure - t) < 1e-9))

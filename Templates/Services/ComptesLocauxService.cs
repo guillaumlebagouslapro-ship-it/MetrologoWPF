@@ -296,7 +296,7 @@ namespace Metrologo.Services
         public static string GenererMotDePasse(int longueur = 8)
         {
             const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-            // Ambigus retirés : O/0/o, I/1/l/L
+            // Caractères ambigus retirés (O, 0, o, I, 1, l).
             var buf = new char[longueur];
             byte[] rand = RandomNumberGenerator.GetBytes(longueur);
             for (int i = 0; i < longueur; i++)

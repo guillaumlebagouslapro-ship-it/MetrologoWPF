@@ -15,10 +15,7 @@ namespace Metrologo.Views
         private readonly Func<bool> _testerAcces;
         private int _tentatives;
 
-        /// <param name="cheminPartage">Chemin du partage affiché à l'utilisateur.</param>
-        /// <param name="testerAcces">Teste l'accès au partage et renvoie true s'il est joignable.
-        /// Tourne en dehors du thread UI, car sur un lecteur réseau mort il peut rester bloqué
-        /// plusieurs secondes.</param>
+        /// <param name="testerAcces">Renvoie true si le partage est joignable ; exécuté hors thread UI.</param>
         public ReseauIndisponibleDialog(string cheminPartage, Func<bool> testerAcces)
         {
             InitializeComponent();
@@ -40,9 +37,7 @@ namespace Metrologo.Views
             bool accessible;
             try
             {
-                // On passe par Task.Run parce qu'un lecteur réseau démonté peut figer
-                // plusieurs secondes au premier accès : autant ne pas geler l'UI pendant
-                // ce temps-là.
+                // Task.Run : un lecteur réseau démonté peut bloquer plusieurs secondes.
                 accessible = await Task.Run(_testerAcces);
             }
             catch

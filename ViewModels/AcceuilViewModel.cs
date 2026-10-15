@@ -14,10 +14,8 @@ namespace Metrologo.ViewModels
 {
     public partial class AccueilViewModel : ObservableObject
     {
-        // Driver IEEE bas niveau : VISA reel via NI-VISA (donc materiel branche).
-        // Pour tourner sans materiel, basculer sur new SimulationIeeeDriver().
-        // On a essaye Ni488Driver(0) (P/Invoke ni4882.dll) : memes perfs sur le 53131A,
-        // la latence vient de l'instrument lui-meme, pas de la stack.
+        // Driver IEEE bas niveau : VISA réel (NI-VISA, matériel branché).
+        // Sans matériel, basculer sur new SimulationIeeeDriver().
         private readonly IIeeeDriver _ieeeDriver = new VisaIeeeDriver(gpibBoard: 0);
         // Type concret (et pas IExcelService) pour pouvoir lire FallbackTimestampUtilise.
         private readonly ExcelService _excelService = new ExcelService();
@@ -124,7 +122,7 @@ namespace Metrologo.ViewModels
         {
             _orchestrator = new MesureOrchestrator(_ieeeDriver, _excelService);
 
-            // On se tient a jour si l'administrateur change le rubidium actif.
+            // Suit le changement de rubidium actif par l'administrateur.
             EtatApplication.RubidiumActifChange += (_, _) =>
             {
                 RubidiumActifTexte = EtatApplication.RubidiumActifTexte;
@@ -134,14 +132,13 @@ namespace Metrologo.ViewModels
             // Idem si un scan est relance depuis Diagnostic GPIB (ajout d'un appareil).
             EtatApplication.AppareilsDetectesChange += (_, _) => RafraichirResumeScan();
 
-            // On rafraichit le voyant et le rapport quand la tache Besancon vient de tourner
-            // (recuperation quotidienne ou rattrapage d'une moyenne manquante).
+            // Voyant et rapport rafraîchis après chaque passage de la tâche Besançon.
             BesanconScheduler.StatutChange += (_, _) => _ = RafraichirBesanconAsync();
 
-            // Scan GPIB initial en tache de fond : il ne doit pas bloquer l'ouverture de la fenetre.
+            // Scan GPIB initial en tâche de fond (ne doit pas bloquer l'ouverture de la fenêtre).
             _ = Task.Run(ScannerInitialAsync);
 
-            // Etat Besancon de depart.
+            // État Besançon de départ.
             _ = RafraichirBesanconAsync();
         }
 
@@ -203,11 +200,11 @@ namespace Metrologo.ViewModels
                 Journal.Info(CategorieLog.Systeme, "SCAN_AUTO_DEBUT",
                     "Scan GPIB automatique au démarrage de Metrologo.");
 
-                // Timeout pousse a 3s : certains appareils (le 53131A surtout) sont longs a repondre
-                // au *IDN? juste apres une mise sous tension, ou quand le bus a ete perturbe.
+                // Timeout de 3 s : certains appareils (53131A surtout) répondent lentement au *IDN?
+                // après une mise sous tension ou une perturbation du bus.
                 var resultats = await ScannerGpib.ScannerAsync(gpibBoard: 0, timeoutMs: 3000);
 
-                // On met a jour l'etat global des appareils detectes (lu ensuite par Configuration, etc.).
+                // État global des appareils détectés (lu ensuite par Configuration, etc.).
                 var appareilsDetectes = resultats
                     .Where(r => r.Repond)
                     .Select(r =>
@@ -294,8 +291,7 @@ namespace Metrologo.ViewModels
                 Log($"   • {app.AdresseCourte} — {app.Fabricant} {app.Modele} ({statut})");
             }
 
-            // Avertissement : une reponse *IDN? incoherente trahit souvent un conflit d'adresse
-            // (deux appareils regles sur la meme adresse GPIB).
+            // Une réponse *IDN? incohérente trahit souvent un conflit d'adresse (2 appareils sur la même).
             var conflits = list.Where(a => a.ConflitAdressePossible).ToList();
             if (conflits.Count > 0)
             {
@@ -317,9 +313,8 @@ namespace Metrologo.ViewModels
         [RelayCommand]
         private void OuvrirDossierMesures()
         {
-            // On privilegie le chemin reseau configure (Admin > Chemins d'acces > Mesures), et on
-            // retombe sur Bureau\Metrologo si le reseau est vide ou injoignable
-            // (connexion coupee, partage indisponible).
+            // Chemin réseau configuré (Admin > Chemins d'accès > Mesures), sinon Bureau\Metrologo
+            // si le réseau est vide ou injoignable.
             string dossierLocal = System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
                 "Metrologo");
@@ -375,9 +370,8 @@ namespace Metrologo.ViewModels
             if (win.ShowDialog() == true)
             {
                 MesureConfig = vm.MesureConfig;
-                // L'affectation ci-dessus reaffecte souvent la meme reference (le vm avait recu
-                // notre instance) : du coup CommunityToolkit ne notifie pas et le bandeau
-                // « Fiche en cours » ne s'affiche jamais. On force donc la notification.
+                // Même référence réaffectée (le vm a reçu notre instance) : CommunityToolkit ne notifie
+                // pas, d'où la notification forcée pour le bandeau « Fiche en cours ».
                 OnPropertyChanged(nameof(MesureConfig));
                 OnPropertyChanged(nameof(EstConfigure));
                 OnPropertyChanged(nameof(LibelleAppareilConfigure));
@@ -407,9 +401,8 @@ namespace Metrologo.ViewModels
             }
         }
 
-        /// <summary>Bouton « Lancer la mesure » : on repasse toujours par la fenetre de config (l'utilisateur
-        /// reconfigure a chaque mesure), qui rappelle ExecuterMesureInterneAsync(false) une fois validee.
-        /// Pour relancer sans reconfigurer, c'est le bouton « Relancer ».</summary>
+        /// <summary>Bouton « Lancer la mesure » : passe toujours par la fenêtre de config, qui rappelle
+        /// ExecuterMesureInterneAsync(false) une fois validée. Sans reconfigurer : bouton « Relancer ».</summary>
         [RelayCommand]
         private Task ExecuterMesureAsync() => ExecuterMesureInterneAsync(ouvrirConfigAvant: true);
 
@@ -417,7 +410,7 @@ namespace Metrologo.ViewModels
         {
             if (MesureEnCours || _serieStabEnCours) return;
 
-            // 1) Le rubidium est obligatoire (et ne se definit que dans le menu Administration).
+            // 1) Rubidium obligatoire (défini uniquement dans le menu Administration).
             var rubi = EtatApplication.RubidiumActif;
             if (rubi == null)
             {
@@ -431,10 +424,8 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // 2) Clic sur « Lancer la mesure » : on ouvre la config meme si une config valide
-            //    etait deja en place (N° FI different, parametres modifies...). A la validation,
-            //    OuvrirConfigurationAsync rappellera ExecuterMesureInterneAsync(false) pour
-            //    enchainer sur le lancement reel. On return ici pour ne pas appeler deux fois.
+            // 2) « Lancer la mesure » ouvre la config même si une config valide existe déjà ; à la validation,
+            //    OuvrirConfigurationAsync rappelle ExecuterMesureInterneAsync(false) : d'où le return ici.
             if (ouvrirConfigAvant || string.IsNullOrWhiteSpace(MesureConfig?.NumFI))
             {
                 Log("ℹ Ouverture de la configuration avant lancement.");
@@ -442,10 +433,8 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // 2bis) Le module d'incertitude est obligatoire : sans module choisi, les
-            // coefficients A/B (et C/D en tachy) restent a des valeurs par defaut codees en dur,
-            // ce qui fausse tout le calcul d'incertitude du rapport. On refuse donc le lancement
-            // et on rouvre la fenetre Configuration pour que l'utilisateur fasse son choix.
+            // 2bis) Module d'incertitude obligatoire : sans lui, les coefficients A/B (C/D en tachy) restent
+            // à des valeurs par défaut codées en dur et faussent l'incertitude du rapport.
             if (string.IsNullOrWhiteSpace(MesureConfig.NumModuleIncertitude))
             {
                 Log("✖ Mesure impossible : aucun module d'incertitude sélectionné.");
@@ -461,9 +450,8 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // 2ter) En tachymetrie, le module Frequence auxiliaire (pour ZNCoeffA/B en Hz) est
-            // lui aussi obligatoire : il caracterise le frequencemetre support, donc sans lui le
-            // rapport est incomplet cote Hz.
+            // 2ter) En tachymétrie, le module Fréquence auxiliaire (ZNCoeffA/B en Hz) est aussi obligatoire :
+            // il caractérise le fréquencemètre support, sans lui le rapport est incomplet côté Hz.
             if (EnTetesMesureHelper.EstTachymetre(MesureConfig.TypeMesure)
                 && string.IsNullOrWhiteSpace(MesureConfig.NumModuleIncertitudeFreq))
             {
@@ -481,10 +469,8 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // 3) Gate : deja choisie dans la fenetre Configuration (MesureConfig.GateIndex).
-            //    Pour la Stabilite, on ouvre la fenetre dediee ou l'utilisateur selectionne les
-            //    gates a balayer (une ou plusieurs, via cases a cocher + presets) et le nombre
-            //    de repetitions a enchainer.
+            // 3) Gate : déjà choisie en Configuration (MesureConfig.GateIndex). En Stabilité, fenêtre dédiée
+            //    pour choisir les gates à balayer (cases + presets) et le nombre de répétitions.
             int nbRepetitions = 1;
             if (MesureConfig.TypeMesure == TypeMesure.Stabilite)
             {
@@ -496,22 +482,17 @@ namespace Metrologo.ViewModels
             }
             else if (MesureConfig.GateIndices.Count > 1)
             {
-                // Filet de securite : si on lance une mesure non-Stab juste apres une Stab, les
-                // gates multiples choisies par la Stab trainent encore en memoire. On reduit la
-                // liste a un seul element (la 1ere gate), sinon la mesure Frequence boucle sur
-                // toutes les gates de la Stab precedente.
+                // Filet de sécurité : après une Stab, ses gates multiples traînent en mémoire ; on réduit à
+                // la 1ère, sinon la mesure Fréquence boucle sur toutes les gates de la Stab précédente.
                 MesureConfig.GateIndex = MesureConfig.GateIndices[0]; // le setter ramene la liste a 1 element
             }
             Log($"⏱ Gates à balayer : {string.Join(", ", MesureConfig.GateIndices)}");
 
-            // 3bis) Anti-collision de FI : si un rapport du MÊME nom existe déjà pour cette FI
-            //    (N° repris d'une session précédente), on demande explicitement à l'utilisateur.
-            //    Sans ça, le flux réutilise en silence l'ancien freq.xlsx (et, s'il était resté
-            //    ouvert, une 2e instance Excel apparaît avec sa fenêtre grise vide). Même UX que
-            //    « Relancer » : Oui = fichier vierge / Non = ajoute à la suite / Annuler.
-            //    Question posée UNE fois par rapport et par session : les mesures suivantes de la
-            //    série (feuilles 2, 3…) s'ajoutent sans redemander. La Stabilité est exclue : elle
-            //    gère déjà son versionnage (stab1, stab2…) et n'écrase jamais.
+            // 3bis) Anti-collision de FI : si un rapport du MÊME nom existe déjà (N° repris d'une session
+            //    précédente), on demande à l'utilisateur (sinon l'ancien freq.xlsx serait réutilisé en silence,
+            //    avec une 2e instance Excel à fenêtre grise si il était resté ouvert). Même choix que
+            //    « Relancer ». Posée UNE fois par rapport et par session (feuilles 2, 3… sans redemander).
+            //    Stabilité exclue : elle versionne déjà (stab1, stab2…) et n'écrase jamais.
             if (MesureConfig.TypeMesure != TypeMesure.Stabilite)
             {
                 // Hors thread UI : le choix du dossier de la FI peut tester le réseau. Une FI passée
@@ -546,8 +527,7 @@ namespace Metrologo.ViewModels
                 _rapportsConfirmes.Add(cheminAttendu);
             }
 
-            // 4) La frequence nominale est deja saisie dans ConfigurationWindow (bloc Indirect),
-            //    comme dans le Delphi d'origine (pas de dialog pre-mesure pour FNominale).
+            // 4) Fréquence nominale déjà saisie en Configuration (bloc Indirect), comme dans le Delphi d'origine.
             double? fNominale = MesureConfig.ModeMesure == ModeMesure.Indirect
                 ? MesureConfig.FNominale
                 : (double?)null;
@@ -559,10 +539,9 @@ namespace Metrologo.ViewModels
         }
 
         /// <summary>
-        /// Enchaîne <paramref name="nbRepetitions"/> stabs identiques. Chacune attend la fin RÉELLE de
-        /// la précédente (await) : deux stabs ne peuvent pas se chevaucher, l'estimation de durée ne
-        /// sert qu'à afficher l'heure de fin. Chaque stab crée son fichier (stab, stab1, stab2…, cf.
-        /// ExcelService.InitialiserRapportAsync). Un arrêt, une erreur ou un hors-module interrompt la série.
+        /// Enchaîne <paramref name="nbRepetitions"/> stabs identiques, chacune après la fin RÉELLE de la
+        /// précédente (l'estimation ne sert qu'à afficher l'heure de fin). Chaque stab crée son fichier
+        /// (stab, stab1…, cf. ExcelService.InitialiserRapportAsync). Un arrêt, une erreur ou un hors-module interrompt la série.
         /// </summary>
         private async Task LancerSerieStabAsync(Mesure config, Rubidium rubi, double? fNominale, int nbRepetitions)
         {
@@ -642,22 +621,16 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // Stabilité : chaque stab écrit dans son propre fichier (stab, stab1, stab2…), il n'y a
-            // donc rien à « écraser ». L'ancien flux réinitialisait le classeur resté ouvert — le
-            // dernier rapport de la série — puis l'enregistrait vidé à la fermeture. On rejoue
-            // simplement la même stab (mêmes gates, même nombre de répétitions), sans toucher aux
-            // rapports existants.
+            // Stabilité : chaque stab écrit dans son propre fichier (stab, stab1…), rien à « écraser » ;
+            // on rejoue la même stab (mêmes gates, mêmes répétitions) sans toucher aux rapports existants.
             if (MesureConfig.TypeMesure == TypeMesure.Stabilite)
             {
                 await RelancerStabiliteAsync(rubi);
                 return;
             }
 
-            // Deux possibilites : conserver les anciennes mesures (= ajouter une feuille au
-            // fichier existant) ou ecraser (= repartir d'un fichier neuf depuis le template).
-            //   Oui = ecraser (fichier supprime)
-            //   Non = conserver (comportement par defaut, mesures ajoutees a la suite)
-            //   Annuler = on ne lance rien.
+            // Oui = écraser (repart d'un fichier neuf depuis le template) ; Non = conserver (défaut,
+            // feuille ajoutée au fichier existant) ; Annuler = rien.
             var choix = MessageBox.Show(
                 "Voulez-vous écraser les mesures précédentes ?\n\n"
               + "• Oui : repart d'un fichier vierge (les anciennes mesures sont perdues).\n"
@@ -671,13 +644,9 @@ namespace Metrologo.ViewModels
 
             if (choix == MessageBoxResult.Yes)
             {
-                // OPTION A v2 : si un classeur est ouvert dans Excel COM, on le reinitialise SUR
-                // PLACE (on enleve les feuilles freq*/stab*/etc. et on nettoie le Recap) SANS jamais
-                // fermer le Workbook. Ca evite la fenetre grise SDI qui surgissait avec l'ancien flux
-                // FermerClasseurActif + File.Delete (~1-3s a 0 Workbook = shell garanti).
-                //
-                // Si aucun classeur n'est ouvert (rare : l'utilisateur a ferme Excel a la main apres
-                // la mesure precedente), on retombe sur l'ancien flux fermer + delete.
+                // Classeur ouvert dans Excel COM : réinitialisé SUR PLACE (feuilles freq*/stab* retirées,
+                // Recap nettoyé) sans fermer le Workbook, pour éviter la fenêtre grise SDI qu'entraînent
+                // FermerClasseurActif + File.Delete. Sinon (Excel fermé à la main), fermer + supprimer.
                 if (ExcelInteropHost.Instance.AClasseurActif)
                 {
                     try
@@ -696,7 +665,7 @@ namespace Metrologo.ViewModels
                 }
                 else
                 {
-                    // Aucun classeur ouvert : ancien flux (rien a contourner, pas de shell ici).
+                    // Aucun classeur ouvert : suppression directe du fichier.
                     string cible = _excelService.CheminFichierGenere;
                     if (!string.IsNullOrEmpty(cible)
                         && (System.IO.File.Exists(cible) || System.IO.File.Exists(System.IO.Path.ChangeExtension(cible, ".xls"))))
@@ -765,11 +734,9 @@ namespace Metrologo.ViewModels
 
         /// <summary>
         /// Écrase le rapport déjà présent (<paramref name="cheminAttendu"/>) avant une nouvelle
-        /// mesure sur une FI au numéro repris. Si ce fichier est le classeur actuellement ouvert
-        /// dans Excel, on le réinitialise IN-PLACE (sans fermer le Workbook → pas de fenêtre grise
-        /// SDI, comme « Relancer ») ; sinon on le supprime sur disque (après avoir fermé une
-        /// éventuelle instance hôte qui le tiendrait). Renvoie false si la suppression échoue
-        /// (fichier verrouillé) — un message a alors été montré à l'utilisateur.
+        /// mesure sur une FI au numéro repris : réinitialisation IN-PLACE si c'est le classeur ouvert
+        /// dans Excel (comme « Relancer »), sinon suppression sur disque. Renvoie false si la
+        /// suppression échoue (fichier verrouillé), message déjà affiché.
         /// </summary>
         /// <summary>Premier module de la config (principal, puis Fréquence auxiliaire en tachy) qui
         /// n'est pas marqué « dégradé », ou null si tous le sont (ou si aucun n'est choisi).</summary>
@@ -880,13 +847,12 @@ namespace Metrologo.ViewModels
             // répond (rapatriement du dossier local, puis suppression).
             await CheminsMetrologo.ReevaluerDossierFIAsync(config.NumFI ?? string.Empty);
 
-            // On regarde si un Excel externe (autre que notre instance COM cachee) est ouvert : il
-            // peut garder verrouille le .xlsx de la mesure et faire echouer ClosedXML. On distingue
-            // les reliquats COM sans fenetre (les « fantomes ») des vrais classeurs ouverts.
+            // Un Excel externe (hors notre instance COM cachée) peut verrouiller le .xlsx de la mesure et
+            // faire échouer ClosedXML : on distingue les « fantômes » (reliquats COM sans fenêtre)
+            // des vrais classeurs ouverts.
             var (_, excelsFantomes) = ExcelInteropHost.Instance.ListerExcelsExternesClasses();
 
-            // 1. Fantomes (pas de fenetre = reliquat de pilotage COM, jamais un document de
-            //    l'utilisateur) : on les ferme discretement pour liberer un eventuel verrou.
+            // 1. Fantômes (sans fenêtre, jamais un document utilisateur) : fermés discrètement pour libérer un verrou.
             if (excelsFantomes.Count > 0)
             {
                 int nbFantomes = ExcelInteropHost.Instance.FermerExcels(excelsFantomes);
@@ -895,11 +861,9 @@ namespace Metrologo.ViewModels
                   + "automatiquement avant la mesure.");
             }
 
-            // 2. Classeurs VRAIMENT ouverts par l'utilisateur : on ne tue PLUS l'instance Excel
-            //    (ca fermait aussi ses fichiers persos non sauvegardes). On ferme SEULEMENT les
-            //    classeurs de mesure — ils portent toujours le nom freq/stab — par leur nom, via
-            //    la Running Object Table. Tout autre fichier ouvert par l'utilisateur reste intact.
-            //    Ca suffit a liberer le verrou sur le rapport de la FI.
+            // 2. Classeurs VRAIMENT ouverts par l'utilisateur : on ne tue pas l'instance Excel (ses fichiers
+            //    perso non sauvegardés seraient perdus) ; on ferme seulement les classeurs de mesure
+            //    (nom freq/stab) via la Running Object Table, ce qui libère le verrou sur le rapport.
             int nbMesureFermes = ExcelInteropHost.Instance.FermerClasseursMesureOuvertsExternes();
             if (nbMesureFermes > 0)
             {
@@ -938,11 +902,8 @@ namespace Metrologo.ViewModels
             else
                 SuiviFinStab.Arreter();
 
-            // On affiche la fenetre flottante « ARRETER LA MESURE » sur un THREAD UI A PART
-            // (STA + Dispatcher.Run). Comme ca le clic/raccourci est pris en compte tout de
-            // suite, meme quand le thread principal est sature par les Interop Excel COM. Le
-            // callback onStop repasse sur le Dispatcher principal pour derouler la sequence
-            // d'arret (annulation CTS, abort GPIB, fermeture Excel).
+            // Fenêtre flottante « ARRÊTER LA MESURE » sur un THREAD UI À PART (STA + Dispatcher.Run) : le clic
+            // est pris en compte même quand le thread principal est saturé par les Interop Excel COM.
             StopMesureFloatingWindow? winStop = null;
             Thread? threadStop = null;
             var winReady = new System.Threading.ManualResetEventSlim(false);
@@ -957,18 +918,13 @@ namespace Metrologo.ViewModels
                         winStop.Configurer(() =>
                         {
                             // === ACTIONS VITALES EXÉCUTÉES DIRECTEMENT SUR CE THREAD ===
-                            // CRUCIAL : ne PAS marshaler ces appels vers le main dispatcher
-                            // car celui-ci est probablement bloqué par les COM Interop Excel
-                            // en cours (Workbooks.Open, Cell.Value2 = ..., etc.) — le
-                            // BeginInvoke ne s'exécuterait jamais.
-                            //   • CancellationTokenSource.Cancel() = thread-safe par design.
-                            //   • Orchestrator.AborterMesureEnCours() envoie un Device Clear
-                            //     GPIB qui utilise son propre driver IEEE indépendant.
-                            //   • TuerProcessExcelAsync() = nucléaire : kill EXCEL.EXE par PID
-                            //     SANS prendre le lock _sync → libère instantanément tous les
-                            //     COM calls bloqués (cas typique : utilisateur a fermé Excel
-                            //     manuellement pendant l'écriture d'une cellule, le RPC reste
-                            //     bloqué ~60 s sinon).
+                            // CRUCIAL : ne PAS marshaler vers le main dispatcher, probablement bloqué par les
+                            // Interop Excel COM en cours (le BeginInvoke ne s'exécuterait jamais).
+                            //   • CancellationTokenSource.Cancel() : thread-safe.
+                            //   • AborterMesureEnCours() : Device Clear GPIB via son propre driver IEEE.
+                            //   • TuerProcessExcelAsync() : kill EXCEL.EXE par PID SANS prendre le lock _sync,
+                            //     ce qui libère les COM calls bloqués (Excel fermé à la main pendant une
+                            //     écriture : le RPC resterait bloqué ~60 s).
                             try { _cts?.Cancel(); } catch { /* swallow */ }
                             try { _orchestrator.AborterMesureEnCours(); }
                             catch (Exception ex)
@@ -976,23 +932,18 @@ namespace Metrologo.ViewModels
                                 Journal.Warn(CategorieLog.Mesure, "MESURE_STOP_SDC_ERR",
                                     $"Device Clear d'arrêt échoué : {ex.Message} — annulation continue malgré tout.");
                             }
-                            // Tue Excel directement — pas de FermerClasseurActifAsync qui prendrait
-                            // le lock potentiellement bloqué. Le kill libère les COM hangs.
+                            // Pas de FermerClasseurActifAsync : il prendrait le lock potentiellement bloqué.
                             try { _ = ExcelInteropHost.Instance.TuerProcessExcelAsync(); }
                             catch { /* swallow */ }
 
-                            // SIGNAL D'ABANDON : déclenche Task.WhenAny dans LancerMesureAsync
-                            // pour que l'UI reprenne la main IMMÉDIATEMENT, sans attendre que
-                            // la tâche orchestration finisse (qui peut être bloquée 60 s par
-                            // un COM Excel mort). Critique pour ne pas avoir à relancer l'app.
+                            // SIGNAL D'ABANDON : débloque le Task.WhenAny de LancerMesureAsync pour que l'UI
+                            // reprenne la main sans attendre l'orchestration (bloquée ~60 s par un COM mort).
                             try { _abandonCts?.Cancel(); } catch { /* swallow */ }
 
                             Journal.Warn(CategorieLog.Mesure, "MESURE_STOP_FLOATING",
                                 "Arrêt demandé via le bouton flottant (thread flottant indépendant).");
 
-                            // === Side-effects UI best-effort (peuvent rater si main thread bloqué) ===
-                            // BeginInvoke ne bloque pas — si le main dispatcher répond plus tard,
-                            // ces mises à jour s'afficheront ; sinon tant pis, l'essentiel est fait.
+                            // Effets UI best-effort : BeginInvoke ne bloque pas, affichés si le main dispatcher répond.
                             try
                             {
                                 Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
@@ -1020,8 +971,7 @@ namespace Metrologo.ViewModels
                 threadStop.SetApartmentState(System.Threading.ApartmentState.STA);
                 threadStop.IsBackground = true;
                 threadStop.Start();
-                // Bloque max 1 s pour la création de la fenêtre — si plus, on continue,
-                // la mesure ne doit pas être pénalisée.
+                // Attend la fenêtre 1 s max : la mesure ne doit pas être pénalisée.
                 winReady.Wait(TimeSpan.FromSeconds(1));
             }
             catch (Exception ex)
@@ -1030,17 +980,10 @@ namespace Metrologo.ViewModels
                     $"Thread STOP flottant non démarré : {ex.Message}");
             }
 
-            // OPTION A v2 : on NE FERME PLUS systématiquement le classeur Excel ici.
-            //
-            // C'était la cause profonde du bug "fenêtre grise" : à chaque clic sur Relancer
-            // (ou Lancer la mesure), on faisait FermerClasseurActifAsync, ce qui mettait
-            // _classeurActif à null → MesureOrchestrator évaluait AClasseurActif=False
-            // → la voie COM v2 (qui ajoute une feuille sans fermer le classeur) n'était
-            // JAMAIS empruntée → fallback ClosedXML → moment 0-Workbook = shell SDI grise.
-            //
-            // MesureOrchestrator.ExecuterAsync ferme déjà le classeur lui-même si la voie
-            // ClosedXML est sélectionnée (cas mesure 1, ou changement de FI). En voie COM
-            // (mesure 2+ même FI), on garde le classeur ouvert.
+            // Le classeur Excel n'est volontairement PAS fermé ici : le fermer rendrait AClasseurActif faux, la
+            // voie COM (ajout d'une feuille sans fermer) ne serait jamais empruntée et le fallback ClosedXML
+            // provoquerait la fenêtre grise SDI. MesureOrchestrator.ExecuterAsync le ferme lui-même en voie
+            // ClosedXML (mesure 1, changement de FI) ; en voie COM (mesure 2+, même FI) il reste ouvert.
 
             string nomAppareilLog = ResolvedNomAppareil(config);
             Log("═══════════════════════════════════════════");
@@ -1064,11 +1007,9 @@ namespace Metrologo.ViewModels
                     gps = rubi.AvecGPS
                 });
 
-            // S'assure que le journal FI est ouvert ET rattaché à l'OPÉRATEUR COURANT avant
-            // d'écrire. Couvre la reprise sans reconfiguration (bouton « Relancer », qui ne
-            // repasse pas par la fenêtre de config) et le changement d'utilisateur en cours de
-            // session : si l'opérateur a changé depuis le dernier bloc, DemarrerSession clôt
-            // l'ancien bloc et en ouvre un nouveau à son nom ; sinon c'est un no-op.
+            // Journal FI ouvert et rattaché à l'OPÉRATEUR COURANT avant d'écrire (couvre « Relancer » sans
+            // reconfiguration et un changement d'utilisateur en cours de session : DemarrerSession
+            // clôt l'ancien bloc et en ouvre un nouveau si l'opérateur a changé, sinon no-op).
             string utilisateurCourant = EtatApplication.UtilisateurConnecte?.NomComplet
                 ?? EtatApplication.UtilisateurConnecte?.Login
                 ?? "(inconnu)";
@@ -1091,13 +1032,9 @@ namespace Metrologo.ViewModels
 
             try
             {
-                // On lance la mesure mais on ne l'attend pas directement — on l'attend
-                // dans un Task.WhenAny avec :
-                //   - taskAbandon : signal manuel via le bouton STOP flottant
-                //   - taskWatchdog : surveillance auto qui détecte si Excel meurt
-                // Ainsi, si Excel est fermé brutalement (ou si l'utilisateur force STOP),
-                // l'UI reprend la main IMMÉDIATEMENT sans attendre que les COM hangs
-                // se résolvent (~60 s sinon).
+                // La mesure est attendue via Task.WhenAny avec taskAbandon (bouton STOP flottant) et un
+                // watchdog Excel : si Excel meurt ou si STOP est forcé, l'UI reprend la main immédiatement
+                // sans attendre la fin des COM hangs (~60 s).
                 var taskMesure = _orchestrator.ExecuterAsync(
                     config, rubi, fNominale, progress, _cts.Token);
 
@@ -1107,21 +1044,17 @@ namespace Metrologo.ViewModels
                     catch (OperationCanceledException) { /* abandonné, c'est normal */ }
                 });
 
-                // Watchdog : poll Excel toutes les secondes. Si Excel meurt pendant la
-                // mesure (utilisateur a fermé la fenêtre Excel, crash, etc.), on annule
-                // tout automatiquement + on affiche un message d'erreur.
+                // Watchdog : poll Excel chaque seconde ; s'il meurt pendant la mesure (fenêtre fermée,
+                // crash…), annule tout et signale l'erreur.
                 bool excelMortDetecte = false;
                 var taskWatchdogExcel = Task.Run(async () =>
                 {
-                    // Capture des Token (struct value-type) en local : ils restent valides
-                    // même si le finally a mis _abandonCts/_cts à null après Dispose pendant
-                    // qu'on était dans l'await Task.Delay ci-dessous. Sans cette copie, on
-                    // crashait en NullReferenceException sur _abandonCts.IsCancellationRequested.
+                    // Tokens copiés en local (struct) : restent valides si le finally met _abandonCts/_cts
+                    // à null après Dispose (sinon NullReferenceException).
                     var abandonToken = _abandonCts!.Token;
                     var mesureToken = _cts!.Token;
 
-                    // Petit délai initial pour laisser le temps à Excel d'être démarré
-                    // par la première écriture (cas où _excelPid n'est pas encore connu).
+                    // Délai initial : laisse Excel démarrer à la 1re écriture (_excelPid pas encore connu).
                     await Task.Delay(2000, abandonToken).ContinueWith(_ => { });
 
                     // Il faut 3 constats « mort » consécutifs (≈ 3 s) avant d'abandonner : un
@@ -1159,11 +1092,8 @@ namespace Metrologo.ViewModels
                 {
                     if (excelMortDetecte)
                     {
-                        // Excel fermé brutalement : on log dans le panneau + journal.
-                        // Pas de MessageBox bloquante — l'utilisateur voit juste l'UI
-                        // revenir en état "prêt" (boutons réactivés) avec un message
-                        // d'info dans le panneau, exactement comme une fin de mesure
-                        // normale mais avec un texte différent.
+                        // Excel fermé brutalement : log panneau + journal, sans MessageBox bloquante
+                        // (l'UI revient simplement à l'état « prêt »).
                         Log("═══════════════════════════════════════════");
                         Log("⚠ Excel a été fermé pendant la mesure.");
                         Log("✖ Mesure interrompue — rapport non valide.");
@@ -1193,8 +1123,7 @@ namespace Metrologo.ViewModels
                     Log($"✅ Moyenne : {result.Moyenne:F6} Hz");
                     Log($"✅ Écart-type : {result.EcartType:E3} Hz");
 
-                    // Si le fichier principal était verrouillé par un Excel ouvert, on a créé
-                    // un fichier timestampé en parallèle — on le signale à l'utilisateur.
+                    // Fichier principal verrouillé par un Excel ouvert : un fichier timestampé a été créé, on le signale.
                     if (_excelService.FallbackTimestampUtilise)
                     {
                         Log($"⚠ Le fichier principal était ouvert dans Excel — résultats sauvegardés dans :");
@@ -1213,9 +1142,8 @@ namespace Metrologo.ViewModels
                     // Journal FI : qui a fait quoi et quand ; les valeurs, elles, sont dans le rapport Excel.
                     JournalFIService.NoterResultat(true, $"{result.Valeurs.Count} mesures");
 
-                    // Si le transfert du dossier FI vers le réseau a échoué : prévenir l'utilisateur.
-                    // Le dossier reste en local et sera retransféré automatiquement au prochain
-                    // démarrage de Metrologo (cf. TransfertReseauService).
+                    // Transfert du dossier FI vers le réseau échoué : le dossier reste en local et sera
+                    // retransféré au prochain démarrage (cf. TransfertReseauService).
                     if (result.TransfertReseauOk == false)
                     {
                         Log("⚠ Réseau injoignable — la FI est enregistrée en local (Bureau\\Metrologo).");
@@ -1260,9 +1188,7 @@ namespace Metrologo.ViewModels
                     Log($"✖ Échec : {result.Erreur}");
                     Journal.Erreur(CategorieLog.Mesure, "MESURE_ECHEC", result.Erreur ?? "Échec inconnu.");
                     JournalFIService.NoterResultat(false, result.Erreur ?? "Échec inconnu");
-                    // Premier plan forcé : Excel est souvent devant (ex. valeur hors du
-                    // module d'incertitude) — la pop-up doit passer PAR-DESSUS le rapport
-                    // pour que l'utilisateur comprenne que la mesure n'est pas passée.
+                    // Premier plan forcé : Excel est souvent devant, la pop-up doit passer PAR-DESSUS le rapport.
                     MessageBoxPremierPlan.Afficher(result.Erreur ?? "Erreur inconnue.",
                         "Mesure interrompue", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
@@ -1285,8 +1211,7 @@ namespace Metrologo.ViewModels
                 _abandonCts?.Dispose();
                 _abandonCts = null;
 
-                // Ferme la fenêtre flottante STOP via SON Dispatcher (elle vit sur un thread
-                // séparé, donc on doit lui demander gentiment de se fermer depuis là-bas).
+                // Fermeture de la fenêtre flottante STOP via SON Dispatcher (thread séparé).
                 try
                 {
                     if (winStop != null)
@@ -1327,13 +1252,9 @@ namespace Metrologo.ViewModels
                 return;
             }
 
-            // Intervalle de temps : pas de saisie post-mesure, mais on SAUVEGARDE le rapport
-            // comme le fait la fréquence. Sans ça le classeur reste "modifié" (Saved=false) :
-            // au lancement de la mesure suivante, sa fermeture (FermerClasseurActifInterne →
-            // Workbook.Close(SaveChanges=true), ExcelInteropHost.cs:3458) doit le sauver à ce
-            // moment-là — ce qui provoque la transition grise entre deux mesures et peut figer
-            // sur un dialogue Excel caché. En sauvant ici, la fermeture suivante est immédiate
-            // et propre (mêmes procédures qu'en fréquence).
+            // Intervalle de temps : pas de saisie, mais le rapport est SAUVEGARDÉ comme en fréquence. Sinon le
+            // classeur reste modifié (Saved=false) et sa fermeture à la mesure suivante (Workbook.Close
+            // SaveChanges=true) doit le sauver : transition grise, risque de gel sur un dialogue Excel caché.
             if (config.TypeMesure == TypeMesure.Interval)
             {
                 await ExcelInteropHost.Instance.SauvegarderAsync();
@@ -1357,11 +1278,9 @@ namespace Metrologo.ViewModels
 
             Log($"📝 Post-mesure : FLue={vm.FrequenceLue:F6} Hz · Résolution={vm.Resolution:E3} · IncertSupRel={vm.IncertSupp:E3}");
 
-            // La fréquence saisie est une valeur d'affichage : elle va UNIQUEMENT dans la
-            // colonne 5 « fréquence indiquée » du récap (même emplacement que « Géné. » en
-            // mode Générateur). On ne l'écrit PLUS dans la feuille de mesure : la cellule
-            // « Valeur de réf. (Hz) = » (ZNFreqRef) reste à la valeur du rubidium et n'est
-            // donc plus polluée, et la fréquence corrigée (ZNFreqCorr) n'en dépend plus.
+            // La fréquence saisie est une valeur d'affichage : colonne 5 « fréquence indiquée » du récap
+            // uniquement (comme « Géné. » en mode Générateur), pas dans la feuille de mesure. ZNFreqRef
+            // reste à la valeur du rubidium et ZNFreqCorr n'en dépend pas.
             await ExcelInteropHost.Instance.EcrireFreqIndiqueeRecapAsync(vm.FrequenceLue);
 
             // Les incertitudes restent des zones nommées de la feuille (formules du récap).
@@ -1372,12 +1291,8 @@ namespace Metrologo.ViewModels
 
         private async Task SaisiePostMesureTachyAsync(Mesure config)
         {
-            // Pour le tachy, l'utilisateur saisit la résolution en tr/min (unité naturelle
-            // de l'appareil). On écrit deux zones :
-            //   - ZNIncertResolRpm (cellule I25) : valeur brute saisie en tr/min, visible
-            //     dans le bloc stats RPM du template tachy.
-            //   - ZNIncertResol (cellule F25, Hz) : valeur convertie pour rester cohérente
-            //     avec les formules historiques en Hz (incert. globale, etc.).
+            // Résolution saisie en tr/min, écrite dans deux zones : ZNIncertResolRpm (I25, brute, bloc stats
+            // RPM du template tachy) et ZNIncertResol (F25, convertie en Hz pour les formules historiques).
             double initialeRpm = config.Resolution * 60.0;
             var vm = new SaisiePostMesureTachyViewModel(initialeRpm);
 
@@ -1389,8 +1304,7 @@ namespace Metrologo.ViewModels
             }
 
             config.Resolution = vm.ResolutionHz;
-            // IncertSupp non saisie pour tachy : la dégradation est portée par les coeffs
-            // C/D du module RPM, pas par une saisie manuelle.
+            // Pas d'IncertSupp en tachy : dégradation portée par les coeffs C/D du module RPM.
             config.IncertSupp = 0.0;
 
             Log($"📝 Post-mesure tachy : Résolution={vm.ResolutionRpm:F4} tr/min ({vm.ResolutionHz:E3} Hz)");
@@ -1406,8 +1320,7 @@ namespace Metrologo.ViewModels
         {
             if (_cts != null && !_cts.IsCancellationRequested)
             {
-                // Feedback visuel instantané : le bouton bascule en "Arrêt en cours…"
-                // dès le clic, sans attendre que le compteur libère son :FETCh?.
+                // Retour visuel immédiat, sans attendre que le compteur libère son :FETCh?.
                 ArretEnCours = true;
 
                 _cts.Cancel();
@@ -1426,10 +1339,9 @@ namespace Metrologo.ViewModels
         private bool PeutStopper() => MesureEnCours && !ArretEnCours;
 
         /// <summary>
-        /// La config telle qu'elle figure dans le journal FI (le type est dans le séparateur qui la
-        /// précède) : nombre de mesures, appareil et gate(s). Pour une stabilité, ce sont les gates balayées (« toutes les gates » si elles y
-        /// sont toutes) ; mode et source n'y ont pas de sens. Ailleurs, le mode n'apparaît que s'il
-        /// est indirect.
+        /// Config telle qu'écrite dans le journal FI (le type est dans le séparateur qui la précède) :
+        /// nombre de mesures, appareil et gate(s) (en stabilité : gates balayées ; mode et source sans
+        /// sens). Ailleurs, le mode n'apparaît que s'il est indirect.
         /// </summary>
         private static string ResumeConfigJournalFI(Mesure config, string nomAppareil)
         {
@@ -1446,10 +1358,8 @@ namespace Metrologo.ViewModels
 
         // -------- Utilitaires --------
 
-        // Plafond du nombre de lignes gardées dans InformationsGenerales pour éviter
-        // que la string ne grossisse à plusieurs Ko, ce qui ralentit le re-render WPF
-        // de la TextBox liée (chaque update prend alors 200-500 ms et bloque visuellement
-        // l'UI — y compris le bouton Arrêter pendant une mesure longue).
+        // Plafond de lignes de InformationsGenerales : une string trop grosse ralentit le re-render de la
+        // TextBox liée (200-500 ms par update, jusqu'à bloquer le bouton Arrêter).
         private const int LOG_MAX_LIGNES = 200;
 
         private void Log(string message)
@@ -1457,8 +1367,7 @@ namespace Metrologo.ViewModels
             string nouvelle = $"\n[{DateTime.Now:HH:mm:ss}] {message}";
             string courant = InformationsGenerales + nouvelle;
 
-            // Trim au-delà du plafond : on garde la queue (les lignes les plus récentes).
-            // Coût : O(n) une fois par overflow, négligeable face au gain UI.
+            // Au-delà du plafond, on garde la queue (lignes les plus récentes).
             int nbLignes = courant.Count(c => c == '\n');
             if (nbLignes > LOG_MAX_LIGNES)
             {
