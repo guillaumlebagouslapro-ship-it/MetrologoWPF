@@ -163,7 +163,8 @@ namespace Metrologo.ViewModels
             {
                 NumModule = num,
                 NomAffichage = nom,
-                UtiliseTempsDeMesure = !dlg.SansTempsDeMesure
+                UtiliseTempsDeMesure = !dlg.SansTempsDeMesure,
+                Degrade = dlg.Degrade
             };
             ModulesIncertitudeService.Sauvegarder(nouveau, TypeMesureSelectionne);
             Modules.Add(nouveau);

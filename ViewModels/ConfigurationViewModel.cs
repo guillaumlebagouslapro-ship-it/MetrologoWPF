@@ -29,7 +29,15 @@ namespace Metrologo.ViewModels
         {
             OnPropertyChanged(nameof(ModeAdressesFixes));
             RebuildAppareils();
+            // Paillasse : seuls les modules dégradés sont proposés.
+            RebuildModulesIncertitude();
         }
+
+        /// <summary>Message quand la liste des modules est vide (le filtre Paillasse peut en être la cause).</summary>
+        public string MessageAucunModule => EstSurBaie
+            ? "Aucun module d'incertitude défini pour ce type de mesure — coefficients par défaut utilisés."
+            : "Aucun module dégradé pour ce type de mesure (en mode Paillasse, seuls les modules dégradés sont proposés). "
+              + "Un administrateur peut en marquer un comme « dégradé » dans Admin → Incertitudes.";
 
         /// <summary>Vrai en poste Baie avec adresses fixes : affiche le champ d'adresse GPIB éditable.</summary>
         public bool ModeAdressesFixes => EstSurBaie && Metrologo.Models.EtatApplication.ModeAdressesFixes;
@@ -210,9 +218,10 @@ namespace Metrologo.ViewModels
         {
             ModulesDisponibles.Clear();
 
+            // Baie : tous les modules. Paillasse : uniquement les modules dégradés.
             foreach (var m in ModulesIncertitudeService.Lister(MesureConfig.TypeMesure))
             {
-                ModulesDisponibles.Add(m);
+                if (EstSurBaie || m.Degrade) ModulesDisponibles.Add(m);
             }
 
             // restaure la sélection précédente si elle est toujours dans la liste
@@ -229,7 +238,7 @@ namespace Metrologo.ViewModels
             if (ModuleFreqRequis)
             {
                 foreach (var m in ModulesIncertitudeService.Lister(TypeMesure.Frequence))
-                    ModulesFreqDisponibles.Add(m);
+                    if (EstSurBaie || m.Degrade) ModulesFreqDisponibles.Add(m);
             }
             string numFreqPersist = MesureConfig?.NumModuleIncertitudeFreq ?? string.Empty;
             _moduleFreqSelectionne = ModulesFreqDisponibles.FirstOrDefault(m =>
@@ -241,6 +250,7 @@ namespace Metrologo.ViewModels
 
             OnPropertyChanged(nameof(ModuleSelectionne));
             OnPropertyChanged(nameof(AModulesIncertitude));
+            OnPropertyChanged(nameof(MessageAucunModule));
             OnPropertyChanged(nameof(ModuleFreqSelectionne));
             OnPropertyChanged(nameof(ModuleFreqRequis));
         }

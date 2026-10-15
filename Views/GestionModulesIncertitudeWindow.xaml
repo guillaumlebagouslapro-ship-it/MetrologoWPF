@@ -95,6 +95,10 @@
                                 <Run Text=" lignes"/>
                             </TextBlock>
                         </Border>
+                        <Border Background="#FFFDE3CF" CornerRadius="6" Padding="6,1" Margin="0,0,4,0"
+                                Visibility="{Binding Degrade, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="dégradé" FontSize="10" FontWeight="Bold" Foreground="#FF8A3A00"/>
+                        </Border>
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -276,9 +280,13 @@
                                                 PlaceholderText="ex. Compteur de fréquence ou Tachymètre"/>
                                 </StackPanel>
                             </Grid>
+                            <CheckBox Margin="0,8,0,0"
+                                      IsEnabled="{Binding AModuleSelectionne}"
+                                      IsChecked="{Binding ModuleSelectionne.Degrade, Mode=TwoWay}"
+                                      Content="Module dégradé (seul type proposé en mode Paillasse ; en Baie, tous les modules restent proposés)"/>
                             <TextBlock FontSize="10" Margin="0,4,0,0"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                       Text="Modifie le N° ou la désignation puis clique « Enregistrer » (le renommage renomme le fichier CSV)."/>
+                                       Text="Modifie le N°, la désignation ou « dégradé » puis clique « Enregistrer » (le renommage renomme le fichier CSV)."/>
                         </StackPanel>
                     </Grid>
                     <TextBlock Grid.Row="1" Text="{Binding InfosFonctions}"

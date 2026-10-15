@@ -166,7 +166,7 @@ namespace Metrologo.Services.Incertitude
                 if (string.IsNullOrEmpty(l)) continue;
                 if (l.StartsWith("#"))
                 {
-                    // Métadonnées : "# Nom: xxx" et "# SansTemps: true"
+                    // Métadonnées : "# Nom: xxx", "# SansTemps: true" et "# Degrade: true"
                     var mNom = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*Nom\s*:\s*(.+)$",
                         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (mNom.Success) module.NomAffichage = mNom.Groups[1].Value.Trim();
@@ -174,6 +174,10 @@ namespace Metrologo.Services.Incertitude
                     var mSansTemps = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*SansTemps\s*:\s*(true|1|oui)\s*$",
                         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (mSansTemps.Success) module.UtiliseTempsDeMesure = false;
+
+                    var mDegrade = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*Degrade\s*:\s*(true|1|oui)\s*$",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (mDegrade.Success) module.Degrade = true;
                     continue;
                 }
 
@@ -247,6 +251,8 @@ namespace Metrologo.Services.Incertitude
                 sb.AppendLine("# Nom: " + module.NomAffichage);
             if (!module.UtiliseTempsDeMesure)
                 sb.AppendLine("# SansTemps: true");
+            if (module.Degrade)
+                sb.AppendLine("# Degrade: true");
             // Format 9 colonnes : Fonction ; Temps ; Condition2 ; BB1 ; BH1 ; BB2 ; BH2 ; IncRel ; IncAbs
             sb.AppendLine("Fonction;TempsDeMesure;Condition2;BorneBasse1;BorneHaute1;BorneBasse2;BorneHaute2;IncertRelative;IncertAbsolue");
             foreach (var lg in module.Lignes)

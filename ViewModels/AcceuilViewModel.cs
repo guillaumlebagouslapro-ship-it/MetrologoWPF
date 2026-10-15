@@ -775,6 +775,24 @@ namespace Metrologo.ViewModels
         /// éventuelle instance hôte qui le tiendrait). Renvoie false si la suppression échoue
         /// (fichier verrouillé) — un message a alors été montré à l'utilisateur.
         /// </summary>
+        /// <summary>Premier module de la config (principal, puis Fréquence auxiliaire en tachy) qui
+        /// n'est pas marqué « dégradé », ou null si tous le sont (ou si aucun n'est choisi).</summary>
+        private static string? ModuleNonDegrade(Mesure config)
+        {
+            static bool EstDegrade(TypeMesure type, string num) =>
+                Metrologo.Services.Incertitude.ModulesIncertitudeService.Lister(type).Any(m =>
+                    m.Degrade && string.Equals(m.NumModule, num, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(config.NumModuleIncertitude)
+                && !EstDegrade(config.TypeMesure, config.NumModuleIncertitude))
+                return config.NumModuleIncertitude;
+            if (EnTetesMesureHelper.EstTachymetre(config.TypeMesure)
+                && !string.IsNullOrWhiteSpace(config.NumModuleIncertitudeFreq)
+                && !EstDegrade(TypeMesure.Frequence, config.NumModuleIncertitudeFreq))
+                return config.NumModuleIncertitudeFreq;
+            return null;
+        }
+
         /// <summary>Supprime le rapport sous ses deux formats possibles (.xlsx de travail, .xls de
         /// sortie). Lève une exception si un fichier existant ne peut pas être supprimé.</summary>
         private static void SupprimerRapportTousFormats(string cheminXlsx)
@@ -850,6 +868,18 @@ namespace Metrologo.ViewModels
         private async Task<bool> LancerMesureAsync(Mesure config, Rubidium rubi, double? fNominale, string preambule)
         {
             bool succes = false;
+
+            // Paillasse : modules dégradés uniquement. La fenêtre de configuration filtre déjà ;
+            // ce garde-fou couvre « Relancer », qui réutilise la config sans la rouvrir.
+            if (!EstSurBaie && ModuleNonDegrade(config) is string moduleRefuse)
+            {
+                Log($"✖ Mesure non lancée : le module {moduleRefuse} n'est pas dégradé (mode Paillasse).");
+                MessageBox.Show(
+                    $"En mode Paillasse, seuls les modules d'incertitude dégradés sont autorisés.\n\n"
+                  + $"Le module « {moduleRefuse} » ne l'est pas : choisis un module dégradé dans la configuration.",
+                    "Module non autorisé en Paillasse", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
             // FI passée en local (réseau absent ou lent au départ) : retour sur le réseau dès qu'il
             // répond (rapatriement du dossier local, puis suppression).
             await CheminsMetrologo.ReevaluerDossierFIAsync(config.NumFI ?? string.Empty);

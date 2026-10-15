@@ -244,7 +244,7 @@
                                   DisplayMemberPath="LibelleAffiche"
                                   Padding="10,6"
                                   Visibility="{Binding AModulesIncertitude, Converter={StaticResource BoolToVis}}"/>
-                        <TextBlock Text="Aucun module d'incertitude défini pour ce type de mesure — coefficients par défaut utilisés."
+                        <TextBlock Text="{Binding MessageAucunModule}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
                                    FontStyle="Italic"

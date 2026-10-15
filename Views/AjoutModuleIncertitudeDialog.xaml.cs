@@ -9,6 +9,7 @@ namespace Metrologo.Views
         public string NumModuleSaisi => TbNumModule.Text.Trim();
         public string NomAffichageSaisi => TbNomAffichage.Text.Trim();
         public bool SansTempsDeMesure => CbSansTemps.IsChecked == true;
+        public bool Degrade => CbDegrade.IsChecked == true;
 
         public AjoutModuleIncertitudeDialog() : this(null) { }
 

@@ -20,8 +20,15 @@ namespace Metrologo.Services.Incertitude
         /// <summary>Libellé affiché dans les listes UI. Optionnel — fallback sur NumModule.</summary>
         [ObservableProperty] private string _nomAffichage = string.Empty;
 
+        /// <summary>
+        /// Module « dégradé » : le seul type proposé en mode Paillasse (en Baie, tous les modules
+        /// le sont). Métadonnée <c># Degrade: true</c> en tête du CSV ; absente = non dégradé.
+        /// </summary>
+        [ObservableProperty] private bool _degrade;
+
         partial void OnNumModuleChanged(string value) => OnPropertyChanged(nameof(LibelleAffiche));
         partial void OnNomAffichageChanged(string value) => OnPropertyChanged(nameof(LibelleAffiche));
+        partial void OnDegradeChanged(bool value) => OnPropertyChanged(nameof(LibelleAffiche));
 
         /// <summary>
         /// Faux pour les modules sans porte temporelle (tachy contact, stroboscope) —
@@ -58,6 +65,7 @@ namespace Metrologo.Services.Incertitude
         }
 
         public string LibelleAffiche =>
-            string.IsNullOrWhiteSpace(NomAffichage) ? NumModule : $"{NumModule} — {NomAffichage}";
+            (string.IsNullOrWhiteSpace(NomAffichage) ? NumModule : $"{NumModule} — {NomAffichage}")
+            + (Degrade ? " (dégradé)" : string.Empty);
     }
 }

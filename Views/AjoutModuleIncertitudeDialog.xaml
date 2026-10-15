@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Nouveau module d'incertitude"
-        Height="430" Width="480"
+        Height="470" Width="480"
         WindowStartupLocation="CenterOwner"
         WindowBackdropType="Mica"
         ResizeMode="NoResize"
@@ -34,6 +34,9 @@
 
             <CheckBox x:Name="CbSansTemps" Content="Sans temps de mesure (tachymètre, stroboscope…)"
                       ToolTip="Coche cette case pour les modules dont l'incertitude ne dépend pas d'une porte temporelle. La colonne Temps disparaît du tableau."/>
+
+            <CheckBox x:Name="CbDegrade" Content="Module dégradé (seul type proposé en mode Paillasse)" Margin="0,10,0,0"
+                      ToolTip="En mode Paillasse, seuls les modules dégradés sont proposés. En mode Baie, tous les modules restent disponibles."/>
         </StackPanel>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,24,16">
