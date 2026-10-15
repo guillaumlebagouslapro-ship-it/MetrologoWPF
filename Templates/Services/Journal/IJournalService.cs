@@ -14,16 +14,11 @@
         /// <summary>Referme les sessions restées ouvertes suite à un arrêt brutal.</summary>
         Task NettoyerSessionsZombiesAsync();
 
-        Task LogAsync(CategorieLog categorie, string action, string message, object? details = null, SeveriteLog severite = SeveriteLog.Info);
-
         /// <summary>Tire et oublie : on n'attend pas que l'écriture soit faite.</summary>
         void Log(CategorieLog categorie, string action, string message, object? details = null, SeveriteLog severite = SeveriteLog.Info);
-
-        Task<List<SessionJournal>> ChargerSessionsAsync(FiltreJournal? filtre = null);
 
         /// <summary>Toutes les entrées (y compris celles écrites hors session, au démarrage par
         /// ex.), les plus récentes d'abord, avec utilisateur et machine renseignés.</summary>
         Task<List<LogEntry>> ChargerEntreesAsync(FiltreJournal? filtre = null);
-        Task<List<string>> ChargerListeUtilisateursAsync();
     }
 }

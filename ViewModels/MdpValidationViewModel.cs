@@ -7,7 +7,6 @@ namespace Metrologo.ViewModels
     {
         // Mots de passe repris tels quels de l'ancienne version
         public const string MdpValidation = "METROL";
-        public const string MdpIncertitudes = "1135";
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(HasError))]

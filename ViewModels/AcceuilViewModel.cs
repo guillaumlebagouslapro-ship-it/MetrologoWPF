@@ -980,10 +980,8 @@ namespace Metrologo.ViewModels
                     $"Thread STOP flottant non démarré : {ex.Message}");
             }
 
-            // Le classeur Excel n'est volontairement PAS fermé ici : le fermer rendrait AClasseurActif faux, la
-            // voie COM (ajout d'une feuille sans fermer) ne serait jamais empruntée et le fallback ClosedXML
-            // provoquerait la fenêtre grise SDI. MesureOrchestrator.ExecuterAsync le ferme lui-même en voie
-            // ClosedXML (mesure 1, changement de FI) ; en voie COM (mesure 2+, même FI) il reste ouvert.
+            // Le classeur Excel n'est pas fermé ici : MesureOrchestrator.ExecuterAsync le ferme lui-même
+            // avant de préparer la nouvelle feuille avec ClosedXML.
 
             string nomAppareilLog = ResolvedNomAppareil(config);
             Log("═══════════════════════════════════════════");

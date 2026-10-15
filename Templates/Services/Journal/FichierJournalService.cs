@@ -127,10 +127,6 @@ namespace Metrologo.Services.Journal
         // Entries
         // -------------------------------------------------------------------------
 
-        public Task LogAsync(CategorieLog categorie, string action, string message,
-                              object? details = null, SeveriteLog severite = SeveriteLog.Info)
-            => EcrireEntreeAsync(categorie, action, message, details, severite);
-
         public void Log(CategorieLog categorie, string action, string message,
                          object? details = null, SeveriteLog severite = SeveriteLog.Info)
         {
@@ -243,44 +239,6 @@ namespace Metrologo.Services.Journal
         // Lecture pour JournalViewer
         // -------------------------------------------------------------------------
 
-        public async Task<List<SessionJournal>> ChargerSessionsAsync(FiltreJournal? filtre = null)
-        {
-            await _semaSessions.WaitAsync();
-            try
-            {
-                var sessions = LireFichierSessions();
-
-                // Filtre temporel + utilisateur
-                if (filtre != null)
-                {
-                    if (filtre.Depuis.HasValue)
-                        sessions = sessions.Where(s => s.Debut >= filtre.Depuis.Value).ToList();
-                    if (filtre.Jusqu_a.HasValue)
-                        sessions = sessions.Where(s => s.Debut <= filtre.Jusqu_a.Value).ToList();
-                    if (!string.IsNullOrWhiteSpace(filtre.Utilisateur))
-                        sessions = sessions.Where(s =>
-                            string.Equals(s.Utilisateur, filtre.Utilisateur, StringComparison.OrdinalIgnoreCase))
-                            .ToList();
-                }
-
-                // Entrées des mois pertinents
-                var sessionsParId = sessions.ToDictionary(s => s.SessionId);
-                foreach (var entry in LireToutesLesEntrees(filtre))
-                {
-                    if (sessionsParId.TryGetValue(entry.SessionId, out var s))
-                    {
-                        s.Entrees.Add(entry);
-                    }
-                }
-
-                return sessions.OrderByDescending(s => s.Debut).ToList();
-            }
-            finally
-            {
-                _semaSessions.Release();
-            }
-        }
-
         public Task<List<LogEntry>> ChargerEntreesAsync(FiltreJournal? filtre = null)
         {
             return Task.Run(() =>
@@ -308,18 +266,6 @@ namespace Metrologo.Services.Journal
                 }
                 return entrees.OrderByDescending(e => e.Timestamp).ToList();
             });
-        }
-
-        public Task<List<string>> ChargerListeUtilisateursAsync()
-        {
-            var sessions = LireFichierSessions();
-            var users = sessions
-                .Select(s => s.Utilisateur)
-                .Where(u => !string.IsNullOrWhiteSpace(u))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(u => u)
-                .ToList();
-            return Task.FromResult(users);
         }
 
         // -------------------------------------------------------------------------

@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
-using System.Text;
 
 namespace Metrologo.Services
 {
@@ -33,34 +31,8 @@ namespace Metrologo.Services
             _events.Add((_sw.ElapsedMilliseconds, label));
         }
 
-        /// <summary>Durée totale (ms) depuis la création du profiler.</summary>
-        public long TotalMs => _sw.ElapsedMilliseconds;
-
         /// <summary>Nombre de marqueurs.</summary>
         public int Count => _events.Count;
-
-        /// <summary>Sérialise en texte tabulé (sans I/O : l'appelant choisit où écrire).</summary>
-        public string FormaterTexte(string entete)
-        {
-            var sb = new StringBuilder(80 * (_events.Count + 5));
-            sb.AppendLine(entete);
-            sb.AppendLine($"Total : {TotalMs} ms");
-            sb.AppendLine();
-            sb.AppendLine("Time(ms)  Delta(ms)  Étape");
-            sb.AppendLine("----------------------------------------------------------");
-
-            long prev = 0;
-            foreach (var (ts, label) in _events)
-            {
-                sb.Append(ts.ToString("D8", CultureInfo.InvariantCulture));
-                sb.Append("  ");
-                sb.Append((ts - prev).ToString("D9", CultureInfo.InvariantCulture));
-                sb.Append("  ");
-                sb.AppendLine(label);
-                prev = ts;
-            }
-            return sb.ToString();
-        }
 
     }
 }

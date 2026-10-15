@@ -592,7 +592,6 @@ namespace Metrologo.Services
         // ---------- Fichiers ----------
 
         public static string FichierSettings        => Path.Combine(Configuration, "settings.json");
-        public static string FichierMesuresConfig   => Path.Combine(Configuration, "Mesures_Config.txt");
         public static string FichierDbCredentials   => Path.Combine(Configuration, "db.credentials");
 
         public static string FichierPresetsStabilite => Path.Combine(Presets, "PresetsStabilite.json");
@@ -635,7 +634,6 @@ namespace Metrologo.Services
 
                 // Ancien nom à plat → nouveau chemin.
                 DeplacerSiPresent("settings.json",         FichierSettings);
-                DeplacerSiPresent("Mesures_Config.txt",     FichierMesuresConfig);
                 DeplacerSiPresent("db.credentials",         FichierDbCredentials);
                 DeplacerSiPresent("PresetsStabilite.json",  FichierPresetsStabilite);
                 DeplacerSiPresent("journal.db",             FichierJournalDbLegacy);

@@ -249,9 +249,6 @@ namespace Metrologo.Services
 
         /// <summary>
         /// Vrai si un classeur de mesure est ouvert dans l'instance Excel.
-        /// <see cref="MesureOrchestrator"/> en déduit son chemin : false (1ère mesure) → ClosedXML
-        /// + OuvrirEtAfficher ; true → <see cref="AjouterFeuilleMesureAsync"/> en pur COM, sans
-        /// fermer le classeur (évite la fenêtre grise SDI).
         /// </summary>
         public bool AClasseurActif
         {
@@ -1240,367 +1237,6 @@ namespace Metrologo.Services
         });
 
         /// <summary>
-        /// Ajoute une feuille de mesure (copie de ModFeuille) au classeur ouvert, en pur COM et sans
-        /// le fermer : l'ancienne séquence fermer/ClosedXML/rouvrir laissait Excel visible sans
-        /// classeur pendant 1-3 s (shell SDI grise). Reproduit le travail de
-        /// <c>ExcelService.InitialiserRapportAsync</c> + <c>PreparerLignesMesureAsync</c> :
-        /// copie de la feuille, renommage/déprotection, <b>clonage des Names portée feuille</b>,
-        /// en-têtes, métadonnées en zones nommées, formules, Activate + Save.
-        /// </summary>
-        /// <returns>Nom de la nouvelle feuille (ex : <c>"freq2"</c>, <c>"stab3"</c>).</returns>
-        public Task<string> AjouterFeuilleMesureAsync(
-            Mesure config, Rubidium rubidium, int gateInscrite)
-            => Task.Run<string>(() =>
-            {
-                lock (_sync)
-                {
-                    if (_excel == null || _classeurActif == null)
-                    {
-                        throw new InvalidOperationException(
-                            "AjouterFeuilleMesureAsync appelé sans classeur actif. "
-                            + "Cette méthode ne doit être utilisée que pour les mesures 2+ "
-                            + "(quand Excel a déjà un Workbook ouvert). Pour la 1ère mesure, "
-                            + "utiliser ClosedXML.InitialiserRapportAsync + OuvrirEtAfficherAsync.");
-                    }
-
-                    dynamic? modFeuille = null;
-                    dynamic? nouvelleFeuille = null;
-
-                    // Rendu gelé pendant la séquence COM : ~6 s sans (33 Names.Add + 60 écritures de
-                    // formules avec redraw), ~1-2 s avec. ForcerRapportAuPremierPlanInterne rafraîchit à la fin.
-                    bool screenUpdatingOriginal = true, enableEventsOriginal = true;
-                    int calculationOriginal = -4105;
-                    try { screenUpdatingOriginal = (bool)_excel.ScreenUpdating; } catch { }
-                    try { enableEventsOriginal = (bool)_excel.EnableEvents; } catch { }
-                    try { calculationOriginal = (int)_excel.Calculation; } catch { }
-                    try { _excel.ScreenUpdating = false; } catch { }
-                    try { _excel.EnableEvents = false; } catch { }
-                    try { _excel.Calculation = -4135; /* xlCalculationManual */ } catch { }
-
-                    try
-                    {
-                        // --- 1. Récupère ModFeuille (présent dans tous les templates) ---
-                        try { modFeuille = _classeurActif.Worksheets.Item("ModFeuille"); }
-                        catch (Exception ex)
-                        {
-                            throw new InvalidOperationException(
-                                "ModFeuille introuvable dans le classeur actif — "
-                                + "le fichier semble corrompu. Détail : " + ex.Message);
-                        }
-
-                        // --- 2. Génère un nom de feuille unique (freq2, stab3, etc.) ---
-                        string nomNouvelleFeuille = TrouverNomFeuilleUniqueInterne(config.TypeMesure);
-
-                        // Feuilles à nom fixe (avinter / fqfinale) : à la relance sur la même FI le nom
-                        // existe déjà, on écrase l'ancienne feuille ET sa ligne Récap avant la copie
-                        // (sinon le rename lèverait et la Récap aurait deux lignes). No-op pour les
-                        // feuilles numérotées.
-                        SupprimerFeuilleEtRecapInterne(nomNouvelleFeuille);
-
-                        // --- 3. Copie ModFeuille à la fin du classeur ---
-                        // Piège Excel COM : sans Before ni After, Copy crée un NOUVEAU classeur. En
-                        // late-binding, Type.Missing pour Before était pris pour « non spécifié » (classeur
-                        // parasite à chaque appel) : on passe donc le paramètre nommé After:.
-                        dynamic derniereFeuille = _classeurActif.Worksheets
-                            [(int)_classeurActif.Worksheets.Count];
-                        try
-                        {
-                            modFeuille.Copy(After: derniereFeuille);
-                        }
-                        finally { try { Marshal.ReleaseComObject(derniereFeuille); } catch { } }
-
-                        // La copie devient ActiveSheet du classeur cible (on lit celui du classeur, pas
-                        // Application.ActiveSheet, qui peut pointer ailleurs).
-                        nouvelleFeuille = _classeurActif.ActiveSheet;
-
-                        // --- 4. Rename + Visible + Unprotect ---
-                        nouvelleFeuille.Name = nomNouvelleFeuille;
-                        nouvelleFeuille.Visible = -1;   // xlSheetVisible
-                        try { nouvelleFeuille.Unprotect("METROL"); }
-                        catch
-                        {
-                            try { nouvelleFeuille.Unprotect("metrol"); }
-                            catch { try { nouvelleFeuille.Unprotect(); } catch { } }
-                        }
-
-                        // Largeurs : le template a été décalé de 3 colonnes (E/F/H = ancien B/C/E).
-                        try
-                        {
-                            ((dynamic)nouvelleFeuille.Columns["E"]).ColumnWidth = 30;
-                            ((dynamic)nouvelleFeuille.Columns["F"]).ColumnWidth = 28;
-                            ((dynamic)nouvelleFeuille.Columns["H"]).ColumnWidth = 30;
-                        }
-                        catch { /* best-effort */ }
-
-                        // --- 5. Clonage des Names portée feuille (critique) ---
-                        // Les Names des templates sont portée classeur et pointent vers ModFeuille!
-                        // (33 sur METROLOGO.xlsx, idem Stab/Tachy) ; Worksheet.Copy ne les clone pas.
-                        // On les recrée portée feuille, sinon ZNFreqMoyReel, ZNVariance, ZNEcartType...
-                        // résoudraient vers ModFeuille (vide) au lieu de la feuille de mesure.
-                        int nbNamesClones = 0, nbNamesIgnores = 0;
-                        var nomsAClones = new List<(string Nom, string RefersTo)>();
-                        foreach (dynamic name in (dynamic)_classeurActif.Names)
-                        {
-                            try
-                            {
-                                string nomZone = (string)name.Name;
-                                string refersTo = (string)name.RefersTo;
-                                if (string.IsNullOrEmpty(refersTo)) continue;
-                                if (!refersTo.Contains("ModFeuille!", StringComparison.OrdinalIgnoreCase))
-                                    continue;
-                                string newRefersTo = System.Text.RegularExpressions.Regex.Replace(
-                                    refersTo, "ModFeuille!",
-                                    $"'{nomNouvelleFeuille}'!",
-                                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                                nomsAClones.Add((nomZone, newRefersTo));
-                            }
-                            catch { /* Name corrompu — skip silencieux */ }
-                            finally { try { Marshal.ReleaseComObject(name); } catch { } }
-                        }
-
-                        foreach (var (nomZone, newRefersTo) in nomsAClones)
-                        {
-                            try
-                            {
-                                // Worksheet.Names.Add (portée feuille), pas Workbook.Names.Add (conflit avec l'existant).
-                                ((dynamic)nouvelleFeuille.Names).Add(nomZone, newRefersTo);
-                                nbNamesClones++;
-                            }
-                            catch (Exception)
-                            {
-                                nbNamesIgnores++;
-                            }
-                        }
-
-                        JournalLog.Info(CategorieLog.Excel, "AJOUT_FEUILLE_NAMES_CLONES",
-                            $"Clonage Names sheet-scope vers {nomNouvelleFeuille} : "
-                            + $"{nbNamesClones} clonés, {nbNamesIgnores} ignorés "
-                            + $"(sur {nomsAClones.Count} candidats trouvés pointant vers ModFeuille!).");
-
-                        // --- 6. En-têtes adaptatifs col A/B/C/D + labels col B ---
-                        var entetes = EnTetesMesureHelper.Pour(config.TypeMesure);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "A7",  entetes.EnteteHeure);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "B7",  entetes.EnteteMesuree);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "C7",  entetes.EnteteReelle);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "D7",  entetes.EnteteDelta);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "B13", entetes.LabelMoyenne);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "B21", entetes.LabelFreqRef);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "B23", entetes.LabelFreqCorr);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "B25", entetes.LabelIncertResol);
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "B31", entetes.LabelIncertGlob);
-
-                        // --- 7. Module d'incertitude sélectionné (config.NumModuleIncertitude), écrit une
-                        // seule fois à côté du label « Module = » : F10 (standard) ou G10 (tachy, 1 colonne de plus).
-                        bool estTachy = EnTetesMesureHelper.EstTachymetre(config.TypeMesure);
-                        string moduleSelectionne = config.NumModuleIncertitude ?? string.Empty;
-                        string celluleModule = estTachy ? "G10" : "F10";
-                        if (!string.IsNullOrEmpty(moduleSelectionne))
-                            EcrireValeurCelluleInterne(nouvelleFeuille, celluleModule, moduleSelectionne);
-
-                        // --- 8. Tachymétrie : col K (conversion Hz → tr/min) ---
-                        if (estTachy)
-                        {
-                            EcrireValeurCelluleInterne(nouvelleFeuille, "K7", "Vitesse (tr/min)");
-                            try { ((dynamic)nouvelleFeuille.Columns["K"]).ColumnWidth = 18; } catch { }
-                            EcrireFormuleCelluleInterne(nouvelleFeuille, "K9",  "=B9*60");
-                            EcrireFormuleCelluleInterne(nouvelleFeuille, "K10", "=B10*60");
-                        }
-
-                        // --- 9. Métadonnées via zones nommées sheet-scope (clonées plus haut) ---
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNNoFiche", config.NumFI);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNDate",
-                            DateTime.Now.ToString("dd/MM/yyyy"));
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNTypeMesure",
-                            EnTetesMesureHelper.LibelleType(config.TypeMesure));
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqUtilise",
-                            NomAppareilDepuisCatalogueLocal(config.IdModeleCatalogue));
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNRubidium",
-                            rubidium.DesignationAvecRaccord);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNGate",
-                            EnTetesMesureHelper.LibelleGate(gateInscrite));
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNLibGate",
-                            EnTetesMesureHelper.LibelleGate(gateInscrite));
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNValGateSecondes",
-                            EnTetesMesureHelper.SecondesGate(gateInscrite));
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNModeMesure",
-                            config.ModeMesure == ModeMesure.Direct ? "Direct" : "Indirect");
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNCoeffMult",
-                            (double)config.IndexMultiplicateur);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNValFNominale",
-                            config.FNominale);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNNbMesures",
-                            (double)config.NbMesures);
-                        // Résolution et incertitude relative à 0 : seule la saisie post-mesure les renseigne.
-                        // Ne PAS seeder ZNIncertSup depuis config.IncertSupp (config est réutilisé entre
-                        // relances sur une même FI : la valeur saisie au fréquencemètre réapparaîtrait sans
-                        // popup sur la mesure suivante). Cf. ExcelService.InitialiserRapportAsync.
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertResol", 0.0);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertSup", 0.0);
-                        // Fréquence de référence (rubidium actif) écrite DIRECTEMENT en C21 (ZNFreqRef pointe
-                        // dessus) : la résolution par zone nommée pouvait retomber sur la cellule de
-                        // ModFeuille (cachée) et laisser C21 vide sur la feuille visible.
-                        EcrireValeurCelluleInterne(nouvelleFeuille, "C21", rubidium.FrequenceMoyenne);
-                        // 7 décimales : maximum fidèle à ~10 MHz (Excel garde 15 chiffres significatifs =
-                        // 8 entiers + 7 décimales) ; au-delà, des « 00 » parasites apparaissent.
-                        try
-                        {
-                            dynamic cFmt = nouvelleFeuille.Range["C21"];
-                            try { cFmt.NumberFormat = "#,##0.0000000"; }
-                            finally { try { Marshal.ReleaseComObject(cFmt); } catch { } }
-                        }
-                        catch { /* best-effort */ }
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqRef",
-                            rubidium.FrequenceMoyenne);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNCoeffA", 1e-10);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNCoeffB", 5e-13);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNNbMesAccredite", 30.0);
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNTempsMesureAccredite", 10.0);
-
-                        // --- 10. Lignes additionnelles (PreparerLignesMesure) ---
-                        // Le template a 2 lignes (9 et 10) : pour nbMesures > 2, on insère
-                        // (nbMesures - 2) rangées avant ZNPointInsertion (défaut : ligne 11).
-                        int nbMesures = config.NbMesures;
-                        if (nbMesures > 2)
-                        {
-                            int pointInsertionRow = 11;
-                            try
-                            {
-                                dynamic nameIns = nouvelleFeuille.Names.Item("ZNPointInsertion");
-                                try
-                                {
-                                    dynamic refRange = nameIns.RefersToRange;
-                                    try { pointInsertionRow = (int)refRange.Row; }
-                                    finally { try { Marshal.ReleaseComObject(refRange); } catch { } }
-                                }
-                                finally { try { Marshal.ReleaseComObject(nameIns); } catch { } }
-                            }
-                            catch { /* défaut 11 */ }
-
-                            int nbInsert = nbMesures - 2;
-                            try
-                            {
-                                string plage = $"{pointInsertionRow}:{pointInsertionRow + nbInsert - 1}";
-                                dynamic rowsRange = nouvelleFeuille.Rows[plage];
-                                try { rowsRange.Insert(-4121); }   // xlShiftDown
-                                finally { try { Marshal.ReleaseComObject(rowsRange); } catch { } }
-                            }
-                            catch (Exception ex)
-                            {
-                                JournalLog.Warn(CategorieLog.Excel, "AJOUT_FEUILLE_INSERTROWS_KO",
-                                    $"InsertRowsAbove COM échoué : {ex.Message} — "
-                                    + $"fallback sur insertion ligne par ligne.");
-                                for (int k = 0; k < nbInsert; k++)
-                                {
-                                    try
-                                    {
-                                        dynamic r = nouvelleFeuille.Rows[pointInsertionRow];
-                                        try { r.Insert(-4121); }
-                                        finally { try { Marshal.ReleaseComObject(r); } catch { } }
-                                    }
-                                    catch { /* best-effort */ }
-                                }
-                            }
-                        }
-
-                        // --- 11. Formules C (conversion), D (delta) et K (tr/min, tachy) des lignes 11..N ---
-                        // Identique à ExcelService.PreparerLignesMesureAsync mais en COM.
-                        bool conversionTrMin = estTachy;
-                        for (int i = 2; i < nbMesures; i++)
-                        {
-                            int row = 9 + i;
-                            string fC = $"=IF(ISBLANK(ZNCoeffMult),B{row},"
-                                + $"(((B{row}-10000000)/(POWER(10,ZNCoeffMult)*10000000))+1)*ZNValFNominale)";
-                            EcrireFormuleCelluleInterne(nouvelleFeuille, $"C{row}", fC);
-                            EcrireFormuleCelluleInterne(nouvelleFeuille, $"D{row}", $"=C{row - 1}-C{row}");
-                            if (conversionTrMin)
-                                EcrireFormuleCelluleInterne(nouvelleFeuille, $"K{row}", $"=B{row}*60");
-                        }
-
-                        // --- 12. Formules métier (ZNFreqMoyReel, ZNVariance, ZNEcartType, …) ---
-                        // Posées via Names → RefersToRange.Formula (Names portée feuille de l'étape 5 ;
-                        // F13 = moyenne, F18 = variance, F19 = écart-type... selon le layout ModFeuille).
-                        int ligneDeb = 9;
-                        int ligneFin = 9 + nbMesures - 1;
-                        EcrireFormuleZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqMoyReel",
-                            $"=IF(ISBLANK(ZNNbMesures),,AVERAGE(C{ligneDeb}:C{ligneFin}))");
-
-                        // Piège Excel COM : `=[1]!Cal_variance(SUMSQ(...),...)` est rejetée (0x800A03EC)
-                        // par .Formula/.Formula2/.FormulaLocal en COM dynamic (elle passe via ClosedXML),
-                        // et les formules `=IF(ISBLANK(ZNVariance),...)` sont rejetées si ZNVariance
-                        // pointe sur une cellule totalement vide. D'où un placeholder 0 AVANT de poser
-                        // les formules qui en dépendent ; la variance réelle le remplace ensuite.
-                        EcrireValeurZoneNommeeInterne(nomNouvelleFeuille, "ZNVariance", 0.0);
-
-                        EcrireFormuleZoneNommeeInterne(nomNouvelleFeuille, "ZNEcartType",
-                            "=IF(ISBLANK(ZNVariance),,[1]!Cal_ecart_type(ZNVariance))");
-                        EcrireFormuleZoneNommeeInterne(nomNouvelleFeuille, "ZNIncertEcartType",
-                            "=IF(ISBLANK(ZNNbMesures),,[1]!Cal_incert_ecart_type(ZNVariance,ZNNbMesures))");
-                        EcrireFormuleZoneNommeeInterne(nomNouvelleFeuille, "ZNFreqCorr",
-                            "=IF(ISBLANK(ZNFreqMoyReel),,[1]!Cal_freq_corrigee(ZNFreqMoyReel,ZNFreqRef))");
-
-                        // --- 13. Format General sur les cellules de formules : en format Texte hérité,
-                        // Excel garderait la formule littérale (cf. EcrireFormuleRecapInterne).
-                        try
-                        {
-                            dynamic rangeFormules = nouvelleFeuille.Range[$"C{ligneDeb}:D{ligneFin}"];
-                            try { rangeFormules.NumberFormat = "General"; }
-                            finally { try { Marshal.ReleaseComObject(rangeFormules); } catch { } }
-                        }
-                        catch { }
-
-                        // --- 14. Active la feuille ---
-                        nouvelleFeuille.Activate();
-
-                        // Activate peut réveiller le window manager Excel : on re-masque les shells.
-                        MasquerFenetresShellExcelInterne();
-                        DemarrerTimerMasquageShellInterne();
-
-                        // Feuille de mesure courante
-                        if (_feuilleMesure != null)
-                        {
-                            try { Marshal.ReleaseComObject(_feuilleMesure); } catch { }
-                        }
-                        _feuilleMesure = nouvelleFeuille;
-
-                        // --- 15. Save ---
-                        try { _classeurActif.Save(); }
-                        catch (Exception ex)
-                        {
-                            JournalLog.Warn(CategorieLog.Excel, "AJOUT_FEUILLE_SAVE_KO",
-                                $"Save COM après ajout feuille échoué : {ex.Message}");
-                        }
-
-                        JournalLog.Info(CategorieLog.Excel, "AJOUT_FEUILLE_OK",
-                            $"Nouvelle feuille « {nomNouvelleFeuille} » créée via COM "
-                            + $"(Workbook reste ouvert — pas de shell SDI).");
-
-                        return nomNouvelleFeuille;
-                    }
-                    finally
-                    {
-                        // nouvelleFeuille reste dans _feuilleMesure → on ne release PAS ici.
-                        try { if (modFeuille != null) Marshal.ReleaseComObject(modFeuille); } catch { }
-
-                        // Ceinture et bretelles : ferme les classeurs parasites qu'un Copy aurait créés
-                        // malgré After: (no-op en pratique).
-                        try { FermerClasseursParasitesInterne(); } catch { }
-
-                        // Restauration des flags : Calculation d'abord (recalcule les formules posées),
-                        // ScreenUpdating en dernier (rendu final d'un coup, sans flash).
-                        try { _excel.Calculation = calculationOriginal; } catch { }
-                        try { _excel.EnableEvents = enableEventsOriginal; } catch { }
-                        try { _excel.ScreenUpdating = screenUpdatingOriginal; } catch { }
-
-                        try { MasquerFenetresShellExcelInterne(); } catch { }
-
-                        // Indispensable : sans cela, Excel SDI peut laisser une fenêtre grise TopMost
-                        // par-dessus le rapport (elle disparaît au clic sur l'autre Excel).
-                        try { ForcerRapportAuPremierPlanInterne(); } catch { }
-                    }
-                }
-            });
-
-        /// <summary>
         /// Réinitialise le classeur ouvert (« fichier vierge ») en supprimant toutes les feuilles de
         /// mesure (freq*, stab*, inter*, topti*, tcont*, strob*, avinter, fqfinale) sauf ModFeuille et
         /// Récap., SANS fermer le classeur : évite la shell SDI de « Relancer » → « Oui = écraser ».
@@ -1618,7 +1254,7 @@ namespace Metrologo.Services
                         return;
                     }
 
-                    // Freeze léger (cf. AjouterFeuilleMesureAsync) : pas de ScreenUpdating=false,
+                    // Freeze léger : pas de ScreenUpdating=false,
                     // qui donnerait un « écran gris » pendant la suppression des feuilles.
                     bool enableEventsOriginal = true;
                     int calculationOriginal = -4105;
@@ -1716,7 +1352,7 @@ namespace Metrologo.Services
                         }
 
                         // _feuilleMesure pointait sur une feuille supprimée : la prochaine
-                        // AjouterFeuilleMesureAsync recréera freq1.
+                        // mesure recréera freq1.
                         if (_feuilleMesure != null)
                         {
                             try { Marshal.ReleaseComObject(_feuilleMesure); } catch { }
@@ -1891,281 +1527,14 @@ namespace Metrologo.Services
         }
 
         /// <summary>
-        /// Nom de feuille unique (freq2, stab3, inter1, …) d'après les feuilles du classeur actif.
-        /// Reproduit <c>ExcelService.TrouverNomFeuilleUnique</c>.
-        /// </summary>
-        private string TrouverNomFeuilleUniqueInterne(TypeMesure type)
-        {
-            if (_classeurActif == null) return "1";
-            if (type == TypeMesure.FreqAvantInterv) return "F_avant_interv";
-            if (type == TypeMesure.FreqFinale) return "F_finale";
-
-            string prefixe = type switch
-            {
-                TypeMesure.Frequence    => "",   // numéros seuls (1, 2, 3, …)
-                TypeMesure.Stabilite    => "",   // 1 feuille par temps de porte (1, 2, 3, …)
-                TypeMesure.Interval     => "inter",
-                TypeMesure.TachyOptique => "topti",
-                TypeMesure.TachyContact => "tcont",
-                TypeMesure.Stroboscope  => "strob",
-                _ => "Mesure"
-            };
-
-            var existants = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            try
-            {
-                int nb = (int)_classeurActif.Worksheets.Count;
-                for (int i = 1; i <= nb; i++)
-                {
-                    try
-                    {
-                        dynamic ws = _classeurActif.Worksheets[i];
-                        try { existants.Add((string)ws.Name); }
-                        finally { try { Marshal.ReleaseComObject(ws); } catch { } }
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-
-            int idx = 1;
-            while (existants.Contains($"{prefixe}{idx}")) idx++;
-            return $"{prefixe}{idx}";
-        }
-
-        /// <summary>
-        /// Écrit une valeur dans une cellule (<c>Range["A1"].Value2</c>) : en-têtes et labels de
-        /// <see cref="AjouterFeuilleMesureAsync"/>.
-        /// </summary>
-        private static void EcrireValeurCelluleInterne(dynamic feuille, string adresseA1, object valeur)
-        {
-            try
-            {
-                dynamic c = feuille.Range[adresseA1];
-                try { c.Value2 = valeur; }
-                finally { try { Marshal.ReleaseComObject(c); } catch { } }
-            }
-            catch { /* best-effort */ }
-        }
-
-        /// <summary>Écrit une formule dans une cellule via <c>Range["A1"].Formula</c>.</summary>
-        private static void EcrireFormuleCelluleInterne(dynamic feuille, string adresseA1, string formule)
-        {
-            try
-            {
-                dynamic c = feuille.Range[adresseA1];
-                try
-                {
-                    try { c.NumberFormat = "General"; } catch { }
-                    c.Formula = formule;
-                }
-                finally { try { Marshal.ReleaseComObject(c); } catch { } }
-            }
-            catch { /* best-effort */ }
-        }
-
-        /// <summary>
-        /// Écrit une formule dans la cellule d'une zone nommée portée feuille (équivalent de
-        /// <see cref="EcrireValeurZoneNommeeInterne"/> pour <c>RefersToRange.Formula</c>). Excel
-        /// rejette parfois <c>.Formula</c> (lien <c>[1]!</c> non résolu, syntaxe) alors que
-        /// <c>.Formula2</c>/<c>.FormulaLocal</c> passent : on tente les variantes en cascade et
-        /// on journalise chaque échec pour éviter un échec silencieux.
-        /// </summary>
-        private void EcrireFormuleZoneNommeeInterne(string nomFeuille, string nomZone, string formule)
-        {
-            if (_classeurActif == null) return;
-            string echecsAccumules = "";
-            try
-            {
-                dynamic ws = _classeurActif.Worksheets.Item(nomFeuille);
-                try
-                {
-                    dynamic? nom = null;
-                    try { nom = ws.Names.Item(nomZone); }
-                    catch (Exception exNom)
-                    {
-                        echecsAccumules += $"Names.Item KO: {exNom.Message}; ";
-                    }
-
-                    bool succes = false;
-                    if (nom != null)
-                    {
-                        try
-                        {
-                            dynamic refRange = nom.RefersToRange;
-                            try
-                            {
-                                try { refRange.NumberFormat = "General"; } catch { }
-                                // Essai 1 : .Formula (US, virgules).
-                                try
-                                {
-                                    refRange.Formula = formule;
-                                    succes = true;
-                                }
-                                catch (Exception ex1)
-                                {
-                                    echecsAccumules += $".Formula KO: {ex1.Message}; ";
-                                    // Essai 2 : .Formula2 (Excel 365+).
-                                    try
-                                    {
-                                        refRange.Formula2 = formule;
-                                        succes = true;
-                                    }
-                                    catch (Exception ex2)
-                                    {
-                                        echecsAccumules += $".Formula2 KO: {ex2.Message}; ";
-                                        // Essai 3 : .FormulaLocal (séparateurs FR : point-virgule).
-                                        try
-                                        {
-                                            string formuleLocal = formule.Replace(",", ";");
-                                            refRange.FormulaLocal = formuleLocal;
-                                            succes = true;
-                                            JournalLog.Info(CategorieLog.Excel, "FORMULE_VIA_FORMULALOCAL",
-                                                $"Pose formule {nomZone} via FormulaLocal (séparateurs FR) "
-                                                + $"après échec Formula/Formula2.");
-                                        }
-                                        catch (Exception ex3)
-                                        {
-                                            echecsAccumules += $".FormulaLocal KO: {ex3.Message}; ";
-                                        }
-                                    }
-                                }
-                            }
-                            finally { try { Marshal.ReleaseComObject(refRange); } catch { } }
-                        }
-                        finally { try { Marshal.ReleaseComObject(nom); } catch { } }
-                    }
-
-                    if (!succes)
-                    {
-                        // Repli : Name portée classeur
-                        try
-                        {
-                            dynamic nomWb = _classeurActif.Names.Item(nomZone);
-                            try
-                            {
-                                dynamic refRangeWb = nomWb.RefersToRange;
-                                try
-                                {
-                                    try { refRangeWb.NumberFormat = "General"; } catch { }
-                                    try { refRangeWb.Formula = formule; succes = true; }
-                                    catch (Exception exWb)
-                                    {
-                                        echecsAccumules += $"WB.Formula KO: {exWb.Message}; ";
-                                    }
-                                }
-                                finally { try { Marshal.ReleaseComObject(refRangeWb); } catch { } }
-                            }
-                            finally { try { Marshal.ReleaseComObject(nomWb); } catch { } }
-                        }
-                        catch (Exception exWbName) { echecsAccumules += $"WB.Names KO: {exWbName.Message}; "; }
-                    }
-
-                    if (!succes)
-                    {
-                        JournalLog.Warn(CategorieLog.Excel, "FORMULE_POSE_KO",
-                            $"Échec pose formule '{nomZone}' = \"{formule}\" sur '{nomFeuille}'. "
-                            + $"Tentatives : {echecsAccumules}");
-                    }
-                }
-                finally { try { Marshal.ReleaseComObject(ws); } catch { } }
-            }
-            catch (Exception ex)
-            {
-                JournalLog.Warn(CategorieLog.Excel, "FORMULE_POSE_ERREUR_GLOBALE",
-                    $"Pose formule '{nomZone}' = \"{formule}\" sur '{nomFeuille}' : "
-                    + $"erreur globale {ex.GetType().Name}: {ex.Message}");
-            }
-        }
-
-        /// <summary>Reproduit <c>ExcelService.NomAppareilDepuisCatalogue</c> en local.</summary>
-        private static string NomAppareilDepuisCatalogueLocal(string? idModele)
-        {
-            if (string.IsNullOrEmpty(idModele)) return string.Empty;
-            var modele = Metrologo.Services.Catalogue.CatalogueAppareilsService.Instance.Modeles
-                .FirstOrDefault(m => m.Id == idModele);
-            return modele?.Nom ?? idModele;
-        }
-
-        /// <summary>
-        /// Calcule la variance via la macro VBA <c>Cal_variance</c> du Metrologo.xla
-        /// (<c>Application.Run</c>) et l'écrit comme valeur dans <c>ZNVariance</c> : contournement
-        /// du rejet 0x800A03EC de <c>=[1]!Cal_variance(...)</c> par <c>.Formula</c> en COM dynamic.
-        /// Les arguments reproduisent la formule du rapport (SUMSQ des deltas de fréquence réelle,
-        /// nombre de mesures, moyenne). Si <c>Run</c> échoue : repli C# <c>sumSq / (2*(N-1))</c>
-        /// (variance d'Allan). Actuellement non appelée.
-        /// </summary>
-        private void CalculerEtEcrireVarianceViaComInterne(Mesure mesure, List<double> resultats,
-            string nomFeuille)
-        {
-            if (_excel == null || _classeurActif == null) return;
-            if (resultats == null || resultats.Count < 2) return;
-
-            try
-            {
-                // 1. Fréquence réelle en C#, comme la formule
-                //    `=IF(ISBLANK(ZNCoeffMult),E,(((E-1e7)/(POWER(10,Mult)*1e7))+1)*FNominale)`.
-                var corriges = new List<double>(resultats.Count);
-                foreach (var v in resultats) corriges.Add(ConvertirEnFreqReelleLocal(v, mesure));
-
-                // 2. SUMSQ des carrés des différences consécutives (F_i - F_{i+1}).
-                double sumSq = 0;
-                for (int i = 1; i < corriges.Count; i++)
-                {
-                    double delta = corriges[i - 1] - corriges[i];
-                    sumSq += delta * delta;
-                }
-
-                double moyenne = 0;
-                foreach (var v in corriges) moyenne += v;
-                moyenne /= corriges.Count;
-                int nbMesures = corriges.Count;
-
-                // 3. Macro VBA Cal_variance via Application.Run (repli C# pur si indisponible).
-                double? variance = null;
-                try
-                {
-                    dynamic res = _excel.Run("Metrologo.xla!Cal_variance",
-                        sumSq, (double)nbMesures, moyenne);
-                    variance = Convert.ToDouble(res);
-                    JournalLog.Info(CategorieLog.Excel, "VARIANCE_VIA_RUN_OK",
-                        $"Cal_variance({sumSq:G6}, {nbMesures}, {moyenne:G6}) = {variance:G6} "
-                        + $"(via Application.Run)");
-                }
-                catch (Exception exRun)
-                {
-                    // Repli : variance d'Allan σ²(τ) = sumSq / (2 * (N-1))
-                    if (nbMesures >= 2)
-                    {
-                        variance = sumSq / (2.0 * (nbMesures - 1));
-                        JournalLog.Warn(CategorieLog.Excel, "VARIANCE_VIA_RUN_FALLBACK",
-                            $"Application.Run KO ({exRun.Message}) — fallback C# Allan : "
-                            + $"variance = sumSq/(2*(N-1)) = {variance:G6}");
-                    }
-                }
-
-                if (variance.HasValue)
-                {
-                    EcrireValeurZoneNommeeInterne(nomFeuille, "ZNVariance", variance.Value);
-                }
-            }
-            catch (Exception ex)
-            {
-                JournalLog.Warn(CategorieLog.Excel, "VARIANCE_CALCUL_KO",
-                    $"Calcul variance échoué : {ex.Message}");
-            }
-        }
-
-        /// <summary>
         /// Résout les coefficients d'incertitude du module sélectionné et les écrit dans
-        /// <c>ZNCoeffA/B</c> (<c>C/D</c> pour les tachymètres) via COM, comme
-        /// <c>ExcelService.EcrireStatsAsync</c>.
+        /// <c>ZNCoeffA/B</c> (<c>C/D</c> pour les tachymètres) via COM.
         /// </summary>
         private void EcrireCoeffsIncertitudeViaComInterne(Mesure mesure, List<double> resultats,
             string nomFeuille, double tempsGateSecondes)
         {
             // Stabilité : sigma relatif (n-1) mémorisé par gate pour calibrer l'axe Y log du graphe
-            // à la dernière gate (comme ExcelService.EcrireStatsAsync, C# pur, sans écriture Excel).
+            // à la dernière gate (calcul C# pur, sans écriture Excel).
             if (mesure.TypeMesure == TypeMesure.Stabilite && resultats.Count >= 2)
             {
                 int i = nomFeuille.Length;
@@ -2229,7 +1598,7 @@ namespace Metrologo.Services
             }
         }
 
-        /// <summary>Reproduit ExcelService.ConvertirEnFreqReelle en local pour le COM path.</summary>
+        /// <summary>Convertit une mesure brute en fréquence réelle (même formule que la colonne C du template).</summary>
         private static double ConvertirEnFreqReelleLocal(double brute, Mesure mesure)
         {
             if (mesure.ModeMesure == ModeMesure.Direct) return brute;
@@ -2488,7 +1857,7 @@ namespace Metrologo.Services
             finally { if (sheets != null) { try { Marshal.ReleaseComObject(sheets); } catch { } } }
         }
 
-        /// <summary>Ajoute la ligne Récap Fréquence via COM (équivalent MettreAJourRecapFreqAsync).</summary>
+        /// <summary>Ajoute la ligne Récap Fréquence via COM.</summary>
         private void AjouterLigneRecapFreqViaComInterne(Mesure mesure, string nomFeuille)
         {
             if (_classeurActif == null) return;
@@ -2620,7 +1989,7 @@ namespace Metrologo.Services
             }
         });
 
-        /// <summary>Ajoute la ligne Récap Stabilité via COM (équivalent MettreAJourRecapStabAsync).</summary>
+        /// <summary>Ajoute la ligne Récap Stabilité via COM.</summary>
         private void AjouterLigneRecapStabViaComInterne(Mesure mesure, string nomFeuille)
         {
             if (_classeurActif == null) return;
@@ -3057,8 +2426,7 @@ namespace Metrologo.Services
         /// Ne PAS y appeler <see cref="FermerClasseursParasitesInterne"/> : il itère sur les Workbooks
         /// (~100-300 ms) sous le lock <c>_sync</c> partagé avec <see cref="EcrireValeurLiveAsync"/> et
         /// gèlerait l'affichage live des mesures du compteur GPIB. Ce nettoyage est déjà fait dans
-        /// <c>OuvrirEtAfficherAsync</c> et <c>AjouterFeuilleMesureAsync</c>, seuls moments où une
-        /// shell peut apparaître.
+        /// <c>OuvrirEtAfficherAsync</c>, seul moment où une shell peut apparaître.
         /// </summary>
         private void DemarrerTimerMasquageShellInterne()
         {

@@ -5,8 +5,7 @@ namespace Metrologo.Services.Incertitude
     /// <summary>
     /// Vérifie qu'une série de mesures tombe dans le domaine du module d'incertitude sélectionné
     /// (conversion « mesure brute → freq réelle → valeur de lookup en Hz ou tr/min »). Même
-    /// conversion affine que <c>ExcelService.ConvertirEnFreqReelle</c> et
-    /// <c>ExcelInteropHost.ConvertirEnFreqReelleLocal</c> : à garder identiques.
+    /// conversion affine que <c>ExcelInteropHost.ConvertirEnFreqReelleLocal</c> : à garder identiques.
     /// </summary>
     public static class IncertitudeCouverture
     {

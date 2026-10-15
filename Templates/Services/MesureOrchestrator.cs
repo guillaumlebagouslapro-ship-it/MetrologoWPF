@@ -157,11 +157,6 @@ namespace Metrologo.Services
 
                 bool bulkDejaEchoue = false;
 
-                // Mode Excel invisible (ancien chemin de la Stabilité : tout en mémoire via ClosedXML, Excel ouvert
-                // seulement en fin de balayage, ~4 à 5 s gagnées sur 8 gates). Désormais désactivé : tous les types
-                // passent en mode visible avec finalisation 100 % COM (plus de fenêtre Frame grise en fin de mesure),
-                // et le graphe Stab est patché via le Chart Object Model COM.
-                bool excelInvisible = false;
                 if (mesure.TypeMesure == TypeMesure.Stabilite)
                 {
                     // Remise à zéro des sigmas accumulés (calibration de l'axe Y du graphe Stab à la dernière gate).
@@ -181,55 +176,6 @@ namespace Metrologo.Services
                         EstimationDureeStab.EnregistrerInit(swInit.Elapsed);
                     var swGate = Stopwatch.StartNew();
 
-                    // --- Choix entre la voie COM pure (option A v2) et la voie ClosedXML (historique). ---
-                    // La voie COM ajoute la feuille dans le classeur déjà ouvert de CETTE FI, sans fermer/rouvrir
-                    // (la fermeture fait apparaître la shell SDI grise 1 à 3 s entre deux mesures). Conditions :
-                    //   1. mode visible (excelInvisible=false) ;
-                    //   2. un classeur déjà ouvert dans Excel COM (mesure 2+ ou multi-gates) ;
-                    //   3. ce classeur correspond à la mesure en cours :
-                    //      - Stab : la 1ère gate (g=0) peut créer un nouveau fichier si une session précédente existait,
-                    //        donc ClosedXML ; les gates suivantes restent dans le même classeur ;
-                    //      - autres types : chemin du classeur actif comparé au chemin attendu (l'utilisateur a pu changer de FI).
-                    bool memeMesureEnCours = false;
-                    if (ExcelInteropHost.Instance.AClasseurActif)
-                    {
-                        if (mesure.TypeMesure == TypeMesure.Stabilite)
-                        {
-                            memeMesureEnCours = (g > 0);
-                        }
-                        else
-                        {
-                            string cheminAttendu = _excel.CalculerCheminFichierAttendu(mesure);
-                            string cheminActif = ExcelInteropHost.Instance.CheminClasseurActif;
-                            // Garde-fou : Path.GetFullPath lève sur un chemin vide, et à la 1ère mesure de la session
-                            // AClasseurActif peut être true alors que _cheminClasseurActif n'est pas encore rempli.
-                            if (!string.IsNullOrEmpty(cheminActif) && !string.IsNullOrEmpty(cheminAttendu))
-                            {
-                                try
-                                {
-                                    memeMesureEnCours = string.Equals(
-                                        Path.GetFullPath(cheminActif),
-                                        Path.GetFullPath(cheminAttendu),
-                                        StringComparison.OrdinalIgnoreCase);
-                                }
-                                catch { /* chemin invalide : on retombe sur la voie ClosedXML */ }
-                            }
-                        }
-                    }
-                    // Voie COM v2 DÉSACTIVÉE : ClosedXML pour toutes les mesures, plus robuste (pas d'erreur 0x800A03EC
-                    // sur les formules métier, pas de barré conditionnel visible, perfs équivalentes). La shell SDI grise est
-                    // évitée par _excel.Visible=false dans FermerClasseurActifInterne, puis Visible=true en fin d'OuvrirEtAfficherAsync.
-                    bool voieCom = false;
-
-                    // Diagnostic : chemin (COM ou ClosedXML) pris pour la mesure 2+ sur la même FI (journal Admin, mode debug).
-                    JournalLog.Info(CategorieLog.Excel, "BRANCHEMENT_OPTION_A_V2",
-                        $"Décision branchement : voieCom={voieCom} "
-                        + $"(excelInvisible={excelInvisible}, "
-                        + $"AClasseurActif={ExcelInteropHost.Instance.AClasseurActif}, "
-                        + $"memeMesureEnCours={memeMesureEnCours}, "
-                        + $"cheminActif='{ExcelInteropHost.Instance.CheminClasseurActif}', "
-                        + $"typeMesure={mesure.TypeMesure}, gate={g})");
-
                     progress?.Report(new ProgressionMesure
                     {
                         Message = nbIterations > 1
@@ -239,52 +185,32 @@ namespace Metrologo.Services
                         EtapesTotales = totalEtapes
                     });
 
-                    string nomFeuille;
-                    if (voieCom)
-                    {
-                        // Voie COM pure : le Workbook reste ouvert.
-                        nomFeuille = await ExcelInteropHost.Instance.AjouterFeuilleMesureAsync(
-                            mesure, rubidium, gateIdx);
-                        Perf("Interop.AjouterFeuilleMesureAsync (COM pur, Workbook gardé ouvert)");
-                        cheminFichier = ExcelInteropHost.Instance.CheminClasseurActif;
-                        derniereFeuille = nomFeuille;
-                    }
-                    else
-                    {
-                        // Chemin historique : init ClosedXML, sauvegarde, puis ouverture dans Excel.
-                        if (!excelInvisible)
-                        {
-                            await ExcelInteropHost.Instance.FermerClasseurActifAsync();
-                            Perf("Interop.FermerClasseurActif (avant init ClosedXML)");
-                            // Excel COM relâche son handle de fichier de façon asynchrone : sans cette attente,
-                            // FichierEstVerrouille (InitialiserRapportAsync) renvoie true à cause du cache MRU d'Excel.
-                            await Task.Delay(500);
-                        }
+                    // Le classeur est préparé avec ClosedXML (plus robuste que l'ajout de feuille en COM : pas
+                    // d'erreur 0x800A03EC sur les formules métier), puis rouvert dans Excel pour l'utilisateur.
+                    await ExcelInteropHost.Instance.FermerClasseurActifAsync();
+                    Perf("Interop.FermerClasseurActif (avant init ClosedXML)");
+                    // Excel COM relâche son handle de fichier de façon asynchrone : sans cette attente,
+                    // FichierEstVerrouille (InitialiserRapportAsync) renvoie true à cause du cache MRU d'Excel.
+                    await Task.Delay(500);
 
-                        // 3.a Nouvelle feuille de mesure (1, 2, 3… en stab, selon le slot dispo). À la 1ère gate d'une
-                        // session Stab, "nouvelle session" fait passer à un nouveau fichier (stab1, stab2…) si le précédent
-                        // existe, pour que le graphe Stab ne reprenne pas les valeurs de la mesure précédente sur la même FI.
-                        bool nouvelleSession = (g == 0 && mesure.TypeMesure == TypeMesure.Stabilite);
-                        await _excel.InitialiserRapportAsync(mesure.NumFI, mesure, rubidium, gateIdx, nouvelleSession);
-                        Perf("ClosedXML.InitialiserRapportAsync");
-                        await _excel.PreparerLignesMesureAsync(mesure.NbMesures);
-                        Perf("ClosedXML.PreparerLignesMesureAsync");
+                    // 3.a Nouvelle feuille de mesure (1, 2, 3… en stab, selon le slot dispo). À la 1ère gate d'une
+                    // session Stab, "nouvelle session" fait passer à un nouveau fichier (stab1, stab2…) si le précédent
+                    // existe, pour que le graphe Stab ne reprenne pas les valeurs de la mesure précédente sur la même FI.
+                    bool nouvelleSession = (g == 0 && mesure.TypeMesure == TypeMesure.Stabilite);
+                    await _excel.InitialiserRapportAsync(mesure.NumFI, mesure, rubidium, gateIdx, nouvelleSession);
+                    Perf("ClosedXML.InitialiserRapportAsync");
+                    await _excel.PreparerLignesMesureAsync(mesure.NbMesures);
+                    Perf("ClosedXML.PreparerLignesMesureAsync");
 
-                        cheminFichier = await _excel.SauvegarderSurDisqueAsync();
-                        Perf("ClosedXML.SauvegarderSurDisqueAsync (.xlsx)");
-                        nomFeuille = _excel.NomFeuilleMesure;
-                        derniereFeuille = nomFeuille;
+                    cheminFichier = await _excel.SauvegarderSurDisqueAsync();
+                    Perf("ClosedXML.SauvegarderSurDisqueAsync (.xlsx)");
+                    string nomFeuille = _excel.NomFeuilleMesure;
+                    derniereFeuille = nomFeuille;
 
-                        // Mode visible : ClosedXML fermé, Excel ouvert pour l'utilisateur. Mode invisible : ClosedXML
-                        // reste en mémoire et reçoit les mesures sans toucher à Excel.
-                        if (!excelInvisible)
-                        {
-                            _excel.FermerExcel();
-                            Perf("ClosedXML.FermerExcel");
-                            await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuille);
-                            Perf("Interop.OuvrirEtAfficherAsync");
-                        }
-                    }
+                    _excel.FermerExcel();
+                    Perf("ClosedXML.FermerExcel");
+                    await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuille);
+                    Perf("Interop.OuvrirEtAfficherAsync");
 
                     // Feuille créée, valeurs pas encore acquises : un stop maintenant la supprime (cf. catch
                     // OperationCanceledException). Repassé à false en fin de gate.
@@ -794,21 +720,12 @@ namespace Metrologo.Services
                         }
                     }
 
-                    // Flush batch des N valeurs accumulées : via ClosedXML en mémoire en mode invisible,
-                    // via Interop (Range.Value2 = matrice) en mode visible.
+                    // Flush batch des N valeurs accumulées via Interop (Range.Value2 = matrice).
                     if (ecritureBatch && bufferBatch!.Count > 0)
                     {
-                        if (excelInvisible)
-                        {
-                            await _excel.EcrireValeursBatchClosedXMLAsync(LIGNE_DEBUT_MESURES, bufferBatch);
-                            Perf("ClosedXML.EcrireValeursBatch (mode invisible)");
-                        }
-                        else
-                        {
-                            await ExcelInteropHost.Instance
-                                .EcrireValeursEnBlocAsync(LIGNE_DEBUT_MESURES, bufferBatch);
-                            Perf("Interop.EcrireValeursEnBlocAsync (bulk write)");
-                        }
+                        await ExcelInteropHost.Instance
+                            .EcrireValeursEnBlocAsync(LIGNE_DEBUT_MESURES, bufferBatch);
+                        Perf("Interop.EcrireValeursEnBlocAsync (bulk write)");
                     }
 
                     // 3.d SRQ off uniquement à la dernière itération, pour ne pas le désactiver/réactiver entre
@@ -819,10 +736,8 @@ namespace Metrologo.Services
                         Perf("DesactiverSrqAsync");
                     }
 
-                    // 3.e Stats + ligne Récap pour cette gate
-                    //   - Mode visible : tout via COM dans le Workbook ouvert (pas de cycle ferme/rouvre, donc pas de
-                    //     fenêtre Frame grise en fin de mesure).
-                    //   - Mode invisible : chemin historique ClosedXML (le graphe Stab y patche ses numCache).
+                    // 3.e Stats + ligne Récap pour cette gate, tout via COM dans le Workbook ouvert (pas de cycle
+                    //     ferme/rouvre, donc pas de fenêtre Frame grise en fin de mesure).
                     progress?.Report(new ProgressionMesure
                     {
                         Message = nbIterations > 1
@@ -849,41 +764,13 @@ namespace Metrologo.Services
                         throw new MesureHorsModuleException(msgUtilisateur, msgLog);
                     }
 
-                    if (!excelInvisible)
-                    {
-                        // Tout en COM, sans fermeture/réouverture. Stab : à la dernière gate le graphe est aussi patché
-                        // via COM (plages des séries + bornes de l'axe Y log).
-                        int nbGatesStab = mesure.TypeMesure == TypeMesure.Stabilite ? (g + 1) : 0;
-                        await ExcelInteropHost.Instance.FinaliserMesureViaComAsync(
-                            mesure, valeurs, nomFeuille, gateSecondes, isDernier, nbGatesStab);
-                        Perf("Interop.FinaliserMesureViaComAsync");
-
-                        // Pas de duplication fichier par fichier : le dossier FI est transféré en bloc en fin de mesure
-                        // (TransfertReseauService.TransfererDossierFIAsync).
-                    }
-                    else
-                    {
-                        // Mode invisible : chemin ClosedXML historique.
-                        await _excel.EcrireStatsAsync(valeurs);
-                        Perf("ClosedXML.EcrireStatsAsync");
-
-                        if (mesure.TypeMesure == TypeMesure.Stabilite)
-                        {
-                            await _excel.MettreAJourRecapStabAsync(mesure);
-                            Perf("ClosedXML.MettreAJourRecapStabAsync");
-                        }
-
-                        await _excel.SauvegarderFinalAsync();
-                        Perf("ClosedXML.SauvegarderFinalAsync");
-
-                        if (isDernier)
-                        {
-                            _excel.FermerExcel();
-                            Perf("ClosedXML.FermerExcel (final)");
-                            await ExcelInteropHost.Instance.OuvrirEtAfficherAsync(cheminFichier, nomFeuille);
-                            Perf("Interop.OuvrirEtAfficherAsync (1 seule fois à la fin du balayage)");
-                        }
-                    }
+                    // Stab : à la dernière gate le graphe est aussi patché via COM (plages des séries + bornes
+                    // de l'axe Y log). Le dossier FI est transféré en bloc en fin de mesure
+                    // (TransfertReseauService.TransfererDossierFIAsync).
+                    int nbGatesStab = mesure.TypeMesure == TypeMesure.Stabilite ? (g + 1) : 0;
+                    await ExcelInteropHost.Instance.FinaliserMesureViaComAsync(
+                        mesure, valeurs, nomFeuille, gateSecondes, isDernier, nbGatesStab);
+                    Perf("Interop.FinaliserMesureViaComAsync");
 
                     // Le graphe de stabilité (Écart type / Maxi / Mini en fonction du temps de porte) est embarqué dans le
                     // template METROLOGO_Stab.xlsx, extrait de Stab1.xls avec ses propriétés exactes (HiLoLines, Y log,

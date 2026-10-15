@@ -67,19 +67,6 @@ namespace Metrologo.Services.Catalogue
         }
 
         /// <summary>
-        /// Ajoute un modèle en mémoire seulement (sans écriture réseau) s'il n'existe pas (même Id) :
-        /// sert à semer les profils legacy sans polluer le catalogue partagé ni exiger M:\.
-        /// Renvoie false s'il y était déjà.
-        /// </summary>
-        public bool AjouterEnMemoireSiAbsent(ModeleAppareil modele)
-        {
-            if (Modeles.Any(m => m.Id == modele.Id)) return false;
-            Modeles.Add(modele);
-            NotifierChange();
-            return true;
-        }
-
-        /// <summary>
         /// Pose un profil en mémoire (sans toucher au réseau) : remplace l'entrée de même Id, sinon
         /// l'ajoute. Permet de resemer les profils legacy au démarrage en écrasant une copie
         /// dégradée d'appareils.json (ex. EIP sauvegardé dans l'éditeur générique, qui perd Legacy /

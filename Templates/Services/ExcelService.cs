@@ -1,7 +1,6 @@
 using ClosedXML.Excel;
 using Metrologo.Models;
 using Metrologo.Services.Catalogue;
-using Metrologo.Services.Incertitude;
 using Metrologo.Services.Journal;
 using JournalLog = Metrologo.Services.Journal.Journal;
 using System.IO;
@@ -34,29 +33,12 @@ namespace Metrologo.Services
         /// Utilisé après un STOP, quand Excel a été tué. Best-effort : réessaie et ne lève jamais.</summary>
         void SupprimerFeuilleSurDisque(string cheminFichier, string nomFeuille);
 
-        /// <summary>Inscrit la moyenne et la variance dans les zones nommées en fin de boucle (le Récap. en dépend).</summary>
-        Task EcrireStatsAsync(List<double> resultats);
-
-        /// <summary>Écrit les N mesures (HEURE + valeur) via ClosedXML, sans Interop. Mode invisible de la Stabilité :
-        /// Excel n'est jamais ouvert, le fichier n'apparaît qu'à la fin du balayage.</summary>
-        Task EcrireValeursBatchClosedXMLAsync(int ligneDebut, IList<(DateTime ts, double valeur)> mesures);
-
-        Task MettreAJourRecapFreqAsync(Mesure mesure);
-        Task MettreAJourRecapStabAsync(Mesure mesure);
-
         /// <summary>Recopie le fichier de mesure vers le chemin réseau configuré (CheminsMetrologo.MesuresLocal),
-        /// sans workbook ClosedXML ouvert. Appelé après la finalisation COM quand SauvegarderFinalAsync ne l'est pas.</summary>
+        /// sans workbook ClosedXML ouvert. Appelé après la finalisation COM.</summary>
         Task DupliquerSurReseauAsync();
 
-        /// <summary>Idem avec le chemin source explicite : indispensable pour la voie COM pure, où _cheminFichier n'est jamais initialisé.</summary>
+        /// <summary>Idem avec un chemin source explicite.</summary>
         Task DupliquerSurReseauAsync(string cheminSourceExplicite);
-
-        /// <summary>Rouvre depuis le disque le classeur rempli en live par l'Interop. Ne crée aucune feuille :
-        /// récupère celle nommée NomFeuilleMesure.</summary>
-        Task RouvrirClasseurAsync();
-
-        /// <summary>Sauvegarde finale une fois le Récap et les stats posés. Le fichier reste ouvert côté ExcelInteropHost.</summary>
-        Task SauvegarderFinalAsync();
 
         void FermerExcel();
     }
@@ -77,26 +59,6 @@ namespace Metrologo.Services
         private string _cheminFichierStabSession = string.Empty;
         private string _nomFeuilleMesure = string.Empty;
         private TypeMesure _typeMesureCourant;  // pour PreparerLignesMesureAsync (col K Tachy)
-
-        // Module d'incertitude retenu à l'init : EcrireStatsAsync y cherche CoeffA/CoeffB
-        // (ModulesIncertitudeService) selon la moyenne. Vide : valeurs codées en dur de l'init.
-        private string _numModuleIncertitudeCourant = string.Empty;
-
-        // Module Fréquence auxiliaire (tachymètre) : remplit ZNCoeffA/B (côté Hz), le module
-        // principal remplit ZNCoeffC/D (côté RPM). Vide : A/B gardent les valeurs du template.
-        private string _numModuleIncertitudeFreqCourant = string.Empty;
-        private double _tempsGateSecondesCourant;
-
-        // Permettent de refaire en C# la conversion Indirect de la formule de la colonne C (Fréq. Réelle),
-        // pour que la moyenne passée à ObtenirCoefficients colle à l'AVERAGE(C) d'Excel.
-        private int _indexMultiplicateurCourant;
-        private double _fNominaleCourant;
-        private ModeMesure _modeMesureCourant;
-
-        // Sigmas relatifs par gate (clé = nom de feuille en int). Remplis par EcrireStatsAsync, relus par
-        // SauvegarderSurDisqueAsync pour calibrer l'axe Y log du graphe Stab (Excel auto-scale sur 1E-9..1E0
-        // alors que les données sont vers 1E-8..1E-6).
-        private readonly Dictionary<int, double> _sigmasRelatifsParGate = new();
 
         /// <summary>Colonne de conversion Hz → tr/min (tachy/strobo), à droite du bloc A-D pour ne pas gêner
         /// la Récap, qui lit via les zones nommées.</summary>
@@ -241,8 +203,6 @@ namespace Metrologo.Services
                 if (partirDuTemplate && estStab)
                 {
                     NettoyerFeuillesNumeriquesResiduellesEtRecap();
-                    // Nouvelle session Stab : on repart de zéro sur les sigmas (calibration de l'axe Y).
-                    _sigmasRelatifsParGate.Clear();
                 }
 
                 var modFeuille = _workbook.Worksheet(NOM_MODELE);
@@ -298,15 +258,6 @@ namespace Metrologo.Services
                 // Mémorisé pour PreparerLignesMesureAsync (col K conversion tr/min).
                 _typeMesureCourant = config.TypeMesure;
 
-                // Mémorisé pour EcrireStatsAsync, qui appelle ObtenirCoefficients (fonction, temps de gate,
-                // fréquence moyenne) une fois la moyenne connue en fin de boucle.
-                _numModuleIncertitudeCourant = config.NumModuleIncertitude ?? string.Empty;
-                _numModuleIncertitudeFreqCourant = config.NumModuleIncertitudeFreq ?? string.Empty;
-                _tempsGateSecondesCourant = EnTetesMesureHelper.SecondesGate(gateInscrite);
-                _indexMultiplicateurCourant = config.IndexMultiplicateur;
-                _fNominaleCourant = config.FNominale;
-                _modeMesureCourant = config.ModeMesure;
-
                 // --- 5c. Tachymétrie : colonne K dédiée à la conversion Hz → tr/min ---
                 // Le compteur GPIB donne des Hz (mesure brute en col B). tr/min = Hz × 60 (1 imp/tour)
                 // est calculé par Excel pour rester visible de l'utilisateur.
@@ -351,7 +302,7 @@ namespace Metrologo.Services
                 SetNamed("ZNFreqRef", rubidium.FrequenceMoyenne);
 
                 // Valeurs par défaut, conservées si aucun module d'incertitude n'est sélectionné ou si la moyenne
-                // sort de ses plages. Sinon EcrireStatsAsync les surcharge en fin de boucle.
+                // sort de ses plages. Sinon la finalisation COM (ExcelInteropHost) les surcharge en fin de boucle.
                 SetNamed("ZNCoeffA", 1e-10);
                 SetNamed("ZNCoeffB", 5e-13);
                 SetNamed("ZNNbMesAccredite", 30);
@@ -359,7 +310,7 @@ namespace Metrologo.Services
 
                 // --- 7. Nettoyage anticipé des lignes « fantômes » du Récap. ---
                 // Le template contient des lignes pré-remplies pointant vers ModFeuille (=[0]!ZNxxx, évaluées à 0).
-                // On les purge dès l'init (et non à l'écriture du récap final, cf. EcrireLigneRecap) pour ne pas
+                // On les purge dès l'init (et non à l'écriture du récap final) pour ne pas
                 // montrer ~10 lignes à zéro à qui ouvre le fichier pendant la mesure.
                 if (_workbook.Worksheets.Any(w => w.Name == NOM_RECAP))
                 {
@@ -446,146 +397,6 @@ namespace Metrologo.Services
                 "IF(ISBLANK(ZNFreqMoyReel),,[1]!Cal_freq_corrigee(ZNFreqMoyReel,ZNFreqRef))");
         }
 
-        public Task EcrireValeursBatchClosedXMLAsync(int ligneDebut, IList<(DateTime ts, double valeur)> mesures)
-        {
-            if (_feuilleMesure == null || mesures.Count == 0) return Task.CompletedTask;
-            return Task.Run(() =>
-            {
-                for (int i = 0; i < mesures.Count; i++)
-                {
-                    int row = ligneDebut + i;
-                    // A = HEURE, B = mesure brute.
-                    _feuilleMesure.Cell(row, 1).SetValue(mesures[i].ts.ToString("HH:mm:ss"));
-                    _feuilleMesure.Cell(row, 2).SetValue(mesures[i].valeur);
-                }
-            });
-        }
-
-        public async Task EcrireStatsAsync(List<double> resultats)
-        {
-            if (_feuilleMesure == null || _workbook == null || resultats.Count == 0) return;
-
-            await Task.Run(() =>
-            {
-                if (resultats.Count == 0) return;
-
-                // ZNFreqMoyReel et ZNVariance ne sont pas écrits depuis C# : leurs formules (AVERAGE / Cal_variance VBA)
-                // sont posées par EcrireFormulesStatsMetier et calculées par Excel à l'ouverture
-                // (fullCalcOnLoad="1", cf. ForcerRecalculAuOuverture).
-
-                // Sigma relatif (n-1 classique, pas la formule métier Cal_variance) : seul l'ordre de grandeur compte,
-                // pour fixer min/max de l'axe Y log du graphe Stab à ±0.5 décade autour des données.
-                if (_typeMesureCourant == TypeMesure.Stabilite
-                    && resultats.Count >= 2
-                    && TryExtraireNumeroGate(_nomFeuilleMesure, out int numGate))
-                {
-                    double moy = resultats.Average();
-                    double sumSq = 0;
-                    foreach (var v in resultats) sumSq += (v - moy) * (v - moy);
-                    double sigma = Math.Sqrt(sumSq / (resultats.Count - 1));
-                    if (moy > 0 && sigma > 0)
-                    {
-                        _sigmasRelatifsParGate[numGate] = sigma / moy;
-                    }
-                }
-
-                // --- Coefficients d'incertitude depuis le module sélectionné ---
-                // Le choix de la ligne du module CSV exige la fréquence moyenne RÉELLE. ClosedXML ne calcule pas
-                // les formules : on la recalcule en C# (ConvertirEnFreqReelle), la conversion affine commutant avec la moyenne.
-                // Sans module sélectionné, les valeurs par défaut posées à l'init restent en place.
-                if (!string.IsNullOrEmpty(_numModuleIncertitudeCourant))
-                {
-                    double moyenneBrute = resultats.Average();
-                    double moyenneReelle = ConvertirEnFreqReelle(moyenneBrute);
-
-                    // Types en tr/min (tachy contact/optique + strobo) : bornes du CSV saisies en tr/min côté admin,
-                    // donc moyenne Hz × 60 avant le lookup. Les autres types restent en Hz.
-                    bool uniteRpm = EnTetesMesureHelper.EstUniteRpm(_typeMesureCourant);
-                    double valeurLookup = uniteRpm ? moyenneReelle * 60.0 : moyenneReelle;
-
-                    string fonction = IncertitudeFonctionHelper.NomFonction(_typeMesureCourant);
-                    var (coeffA, coeffB) = ModulesIncertitudeService.ObtenirCoefficients(
-                        _numModuleIncertitudeCourant, _typeMesureCourant, fonction,
-                        _tempsGateSecondesCourant, valeurLookup);
-
-                    if (coeffA > 0 || coeffB > 0)
-                    {
-                        // Tachymètres : les coeffs A/B du CSV sont les coeffs C/D du template tachy
-                        // (formule I29 = Vitesse_RPM × C + D), injectés dans ZNCoeffC/ZNCoeffD.
-                        if (EnTetesMesureHelper.EstTachymetre(_typeMesureCourant))
-                        {
-                            SetNamed("ZNCoeffC", coeffA);
-                            SetNamed("ZNCoeffD", coeffB);
-                            JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_RESOLUS_TACHY",
-                                $"Module {_numModuleIncertitudeCourant} : CoeffC={coeffA:G6} CoeffD={coeffB:G6} "
-                              + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, valeurLookup={valeurLookup:G6} tr/min) "
-                              + "[A/B du CSV → C/D du template tachy, lookup en tr/min]");
-                        }
-                        else
-                        {
-                            SetNamed("ZNCoeffA", coeffA);
-                            SetNamed("ZNCoeffB", coeffB);
-                            string uniteLookup = uniteRpm ? "tr/min" : "Hz";
-                            JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_RESOLUS",
-                                $"Module {_numModuleIncertitudeCourant} : CoeffA={coeffA:G6} CoeffB={coeffB:G6} "
-                              + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, valeurLookup={valeurLookup:G6} {uniteLookup})");
-                        }
-                    }
-                    else
-                    {
-                        string uniteLookup = uniteRpm ? "tr/min" : "Hz";
-                        JournalLog.Warn(CategorieLog.Mesure, "INCERT_NO_MATCH",
-                            $"Module {_numModuleIncertitudeCourant} : aucune ligne ne couvre "
-                          + $"(fonction={fonction}, gate={_tempsGateSecondesCourant}s, valeurLookup={valeurLookup:G6} {uniteLookup}) "
-                          + "— coefficients par défaut utilisés.");
-                    }
-                }
-
-                // Tachymétrie : ZNCoeffA/B viennent aussi du module Fréquence auxiliaire (fréquencemètre support) ;
-                // le module tachy a déjà rempli ZNCoeffC/D ci-dessus.
-                if (EnTetesMesureHelper.EstTachymetre(_typeMesureCourant)
-                    && !string.IsNullOrEmpty(_numModuleIncertitudeFreqCourant))
-                {
-                    double moyenneBrute = resultats.Average();
-                    double moyenneReelle = ConvertirEnFreqReelle(moyenneBrute);
-                    string fonctionFreq = IncertitudeFonctionHelper.NomFonction(TypeMesure.Frequence);
-                    var (coeffAFreq, coeffBFreq) = ModulesIncertitudeService.ObtenirCoefficients(
-                        _numModuleIncertitudeFreqCourant, TypeMesure.Frequence, fonctionFreq,
-                        _tempsGateSecondesCourant, moyenneReelle);
-
-                    if (coeffAFreq > 0 || coeffBFreq > 0)
-                    {
-                        SetNamed("ZNCoeffA", coeffAFreq);
-                        SetNamed("ZNCoeffB", coeffBFreq);
-                        JournalLog.Info(CategorieLog.Mesure, "INCERT_COEFFS_AB_FREQ",
-                            $"Module Freq {_numModuleIncertitudeFreqCourant} : CoeffA={coeffAFreq:G6} CoeffB={coeffBFreq:G6} "
-                          + $"(gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz) "
-                          + "[module Fréquence auxiliaire pour tachymètre]");
-                    }
-                    else
-                    {
-                        JournalLog.Warn(CategorieLog.Mesure, "INCERT_NO_MATCH_FREQ",
-                            $"Module Freq {_numModuleIncertitudeFreqCourant} : aucune ligne ne couvre "
-                          + $"(gate={_tempsGateSecondesCourant}s, freq={moyenneReelle:G6} Hz) "
-                          + "— ZNCoeffA/B restent aux valeurs par défaut.");
-                    }
-                }
-            });
-        }
-
-        /// <summary>Reproduit en C# la conversion de la formule Fréq. Réelle (col C). Affine, donc commutative avec la moyenne :
-        /// convertir la moyenne brute donne la moyenne d'Excel.</summary>
-        private double ConvertirEnFreqReelle(double mesureBrute)
-        {
-            // Mode Direct = pas de conversion (Excel : ZNCoeffMult vide). Côté C# ZNCoeffMult est toujours
-            // posé, d'où ce court-circuit.
-            if (_modeMesureCourant == ModeMesure.Direct) return mesureBrute;
-
-            return (((mesureBrute - 10_000_000.0)
-                    / (Math.Pow(10, _indexMultiplicateurCourant) * 10_000_000.0)) + 1.0)
-                   * _fNominaleCourant;
-        }
-
         public async Task<string> SauvegarderSurDisqueAsync()
         {
             if (_workbook == null) return string.Empty;
@@ -621,72 +432,12 @@ namespace Metrologo.Services
                 // pour calibrer l'axe Y log (échelle énorme et vide). Avec fullCalcOnLoad, force un vrai recalcul.
                 try { ViderCachesGraphe(_cheminFichier); }
                 catch { /* best-effort */ }
-
-                // Axe Y log : sans cache ni bornes Excel auto-scale vers 1E-9..1E0 ; on force min/max
-                // à ~0.5 décade autour des sigmas relatifs estimés.
-                if (nbGatesStab > 0 && _sigmasRelatifsParGate.Count > 0)
-                {
-                    try { CalibrerAxeYGrapheStab(_cheminFichier, _sigmasRelatifsParGate.Values); }
-                    catch { /* best-effort */ }
-                }
             });
             return _cheminFichier;
         }
 
-        public async Task RouvrirClasseurAsync()
-        {
-            if (string.IsNullOrEmpty(_cheminFichier) || string.IsNullOrEmpty(_nomFeuilleMesure))
-                throw new InvalidOperationException(
-                    "RouvrirClasseurAsync appelée avant InitialiserRapportAsync — pas de classeur à rouvrir.");
-
-            await Task.Run(() =>
-            {
-                _workbook?.Dispose();
-                _workbook = new XLWorkbook(_cheminFichier);
-
-                _feuilleMesure = _workbook.Worksheets
-                    .FirstOrDefault(w => string.Equals(w.Name, _nomFeuilleMesure, StringComparison.OrdinalIgnoreCase));
-
-                if (_feuilleMesure == null)
-                    throw new InvalidOperationException(
-                        $"Feuille « {_nomFeuilleMesure} » introuvable après réouverture de « {Path.GetFileName(_cheminFichier)} ».");
-            });
-        }
-
-        public async Task SauvegarderFinalAsync()
-        {
-            if (_workbook == null) return;
-            await Task.Run(() =>
-            {
-                int nbGatesStab = CompterGatesStabPourGraphe();
-
-                try { _workbook.SaveAs(_cheminFichier); }
-                catch (IOException)
-                {
-                    throw new InvalidOperationException(
-                        $"Impossible de sauvegarder « {Path.GetFileName(_cheminFichier)} » : "
-                        + "le fichier est verrouillé. Fermez-le dans Excel et relancez la mesure.");
-                }
-
-                try { PatcherLienMacroXLA(_cheminFichier, Preferences.CheminMacroXLA); }
-                catch { /* best-effort */ }
-
-                try { ForcerRecalculAuOuverture(_cheminFichier); }
-                catch { /* best-effort */ }
-
-                if (nbGatesStab > 0)
-                {
-                    try { RendreGrapheStabDynamique(_cheminFichier, nbGatesStab); }
-                    catch { /* best-effort */ }
-                }
-
-                // Duplication best-effort vers le chemin local de sauvegarde si configuré.
-                DupliquerVersCheminLocal(_cheminFichier);
-            });
-        }
-
-        /// <summary>Appelle <see cref="DupliquerVersCheminLocal"/> depuis MesureOrchestrator après la voie COM
-        /// (où SauvegarderFinalAsync n'est plus invoquée). Best-effort : ne lève jamais.</summary>
+        /// <summary>Appelle <see cref="DupliquerVersCheminLocal"/> depuis MesureOrchestrator après la
+        /// finalisation COM. Best-effort : ne lève jamais.</summary>
         public Task DupliquerSurReseauAsync() => Task.Run(() => DupliquerVersCheminLocal(_cheminFichier));
 
         public Task DupliquerSurReseauAsync(string cheminSourceExplicite)
@@ -723,165 +474,8 @@ namespace Metrologo.Services
             }
         }
 
-        /// <summary>Ajoute une ligne de récapitulatif Fréquence dans la feuille <c>Récap.</c>
-        /// (portage de <c>TfrmMain.MajRecapFreq</c>, F_Main.pas:2421).</summary>
-        public async Task MettreAJourRecapFreqAsync(Mesure mesure)
-        {
-            if (_workbook == null || _feuilleMesure == null) return;
-            string nomFeuille = _feuilleMesure.Name;
-            string celluleModule = EnTetesMesureHelper.EstTachymetre(mesure.TypeMesure) ? "G10" : "F10";
-
-            await Task.Run(() => EcrireLigneRecap(
-                new[]
-                {
-                    $"='{nomFeuille}'!ZNFreqMoyReel",       // Col 1 : fréquence moyenne
-                    $"='{nomFeuille}'!ZNLibGate",           // Col 2 : temps de mesure (libellé gate)
-                    $"='{nomFeuille}'!ZNFreqCorr",          // Col 3 : fréquence corrigée
-                    $"='{nomFeuille}'!ZNEcartType",         // Col 4 : écart-type
-                    // Col 5 : fréquence indiquée, vide ici. Générateur : « Géné. » via valeurDirecte. Fréquencemètre :
-                    // la valeur de la pop-up post-mesure est écrite directement par ExcelInteropHost.EcrireFreqIndiqueeRecapAsync.
-                    null,
-                    $"='{nomFeuille}'!ZNIncertResol",       // Col 6 : incertitude de résolution
-                    $"='{nomFeuille}'!ZNIncertSup",         // Col 7 : incertitude supplémentaire
-                    $"='{nomFeuille}'!ZNIncertAccreditee",  // Col 8 : incertitude accréditée
-                    $"='{nomFeuille}'!ZNIncertGlobale",     // Col 9 : incertitude globale
-                    // Col 10 : fréquence finale (formule historique du Delphi) : si la fréquence indiquée (col E) est
-                    // saisie, la corrigée (col C) est projetée selon E/C*A, sinon C est gardée. {N} = n° de ligne (EcrireLigneRecap).
-                    "=IF(ISNUMBER(E{N}),(E{N}/C{N})*A{N},C{N})",
-                    $"='{nomFeuille}'!{celluleModule}"      // Col 11 : n°Module (cellule « Module = » de la feuille)
-                },
-                colValeurDirecte: 5,
-                valeurDirecte: mesure.SourceMesure == SourceMesure.Generateur
-                    ? (object)"Géné."
-                    : null,   // Fréquencemètre : col 5 remplie par la pop-up
-                entetesColonne: new[]
-                {
-                    null, null, null, null, null, null, null, null, null, null,
-                    "n°Module"    // Col 11 : en-tête ajouté s'il manque
-                }));
-        }
-
-        /// <summary>Ajoute une ligne dans la <c>Récap.</c> du fichier Stabilité, selon la structure historique (Stab1.xls) :
-        /// 8 colonnes (Temps, Fréq Moyenne, Écart type, Incertitude, Incert accréditée, Incert globale, Maxi, Mini),
-        /// une ligne par gate (gate 1 → L6, gate 2 → L7…), cols 7-8 = moyenne ± incert. globale, NumFI + date en L1.</summary>
-        public async Task MettreAJourRecapStabAsync(Mesure mesure)
-        {
-            if (_workbook == null || _feuilleMesure == null) return;
-            string nomFeuille = _feuilleMesure.Name;
-
-            await Task.Run(() =>
-            {
-                if (!_workbook.Worksheets.Any(w => w.Name == NOM_RECAP)) return;
-                var recap = _workbook.Worksheet(NOM_RECAP);
-                DeprotegerFeuille(recap);
-
-                // Colonne D (date) élargie pour éviter « #### ».
-                recap.Column(4).Width = 13;
-
-                // En-tête fiche : NumFI + date (idempotent à chaque gate).
-                recap.Cell("B1").SetValue(mesure.NumFI);
-                recap.Cell("D1").SetValue(DateTime.Now.ToString("dd/MM/yyyy"));
-
-                // N° de la gate : les feuilles Stab sont numériques, on parse le nom ; sinon on compte les lignes remplies.
-                int numero;
-                if (!int.TryParse(nomFeuille, out numero))
-                {
-                    numero = CompterLignesStabRemplies(recap) + 1;
-                }
-
-                int ligne = 5 + numero;  // L6 = 1ère gate balayée, L7 = 2ème, etc.
-
-                recap.Cell(ligne, 1).FormulaA1 = $"='{nomFeuille}'!ZNValGateSecondes";
-                recap.Cell(ligne, 2).FormulaA1 = $"='{nomFeuille}'!ZNFreqMoyReel";
-                recap.Cell(ligne, 3).FormulaA1 = $"='{nomFeuille}'!ZNEcartType";
-                recap.Cell(ligne, 4).FormulaA1 = $"='{nomFeuille}'!ZNIncertEcartType";
-                recap.Cell(ligne, 5).FormulaA1 = $"='{nomFeuille}'!ZNIncertAccreditee";
-                recap.Cell(ligne, 6).FormulaA1 = $"='{nomFeuille}'!ZNIncertGlobale";
-                recap.Cell(ligne, 7).FormulaA1 = $"=C{ligne}+F{ligne}";
-                // Valeurs Mini : formule d'origine de Stab1.xls, plancher 1E-12 quand sigma ≤ incertitude
-                // (« * » en col I) : un 0 rendrait le point invisible sur l'axe log.
-                recap.Cell(ligne, 8).FormulaA1 =
-                    $"=IF(ISBLANK(C{ligne}),,IF((C{ligne}-F{ligne})<=0,0.000000000001,MAX(0.000000000001,C{ligne}-F{ligne})))";
-
-                // Col K : n°Module, lu dans la cellule « Module = » de la feuille de mesure (F10 en stabilité).
-                recap.Cell(ligne, 11).FormulaA1 = $"='{nomFeuille}'!F10";
-                // En-tête en ligne 5, posé seulement s'il manque.
-                if (recap.Cell(5, 11).IsEmpty()) recap.Cell(5, 11).SetValue("n°Module");
-            });
-        }
-
-        /// <summary>Nombre de lignes de données remplies dans la zone Stab (L6+), colonne A (Temps) non vide.</summary>
-        private static int CompterLignesStabRemplies(IXLWorksheet recap)
-        {
-            int compteur = 0;
-            for (int row = 6; row <= 18; row++)
-            {
-                var cell = recap.Cell(row, 1);
-                if (!cell.IsEmpty()) compteur++;
-            }
-            return compteur;
-        }
-
         // Ligne d'en-tête des colonnes dans le template Récap. (METROLOGO.xlsx).
         private const int LIGNE_ENTETE_RECAP = 5;
-
-        /// <summary>Ajoute à la suite des lignes existantes de la Récap. une ligne de formules cross-sheet
-        /// vers la feuille de mesure.</summary>
-        private void EcrireLigneRecap(
-            string?[] formulesParColonne,
-            int colValeurDirecte = -1,
-            object? valeurDirecte = null,
-            string?[]? entetesColonne = null)
-        {
-            if (_workbook == null) return;
-            if (!_workbook.Worksheets.Any(w => w.Name == NOM_RECAP)) return;
-
-            var recap = _workbook.Worksheet(NOM_RECAP);
-
-            DeprotegerFeuille(recap);
-
-            // Colonne D (date) élargie pour éviter « #### ».
-            recap.Column(4).Width = 13;
-
-            // 1. Retrait des lignes « fantômes » du template (=[0]!ZNxxx vers ModFeuille, plage de zéros sous l'en-tête).
-            NettoyerLignesGhost(recap);
-
-            // 2. Nouvelle ligne sous la dernière non vide (la plus récente en bas).
-            int nouvelleLigne = LIGNE_ENTETE_RECAP + 1;
-            while (!recap.Row(nouvelleLigne).IsEmpty()) nouvelleLigne++;
-
-            // 3. Remplissage des colonnes
-            for (int i = 0; i < formulesParColonne.Length; i++)
-            {
-                int col = i + 1;
-                if (col == colValeurDirecte && valeurDirecte != null)
-                {
-                    recap.Cell(nouvelleLigne, col).SetValue(XLCellValue.FromObject(valeurDirecte));
-                    continue;
-                }
-                var formule = formulesParColonne[i];
-                if (!string.IsNullOrEmpty(formule))
-                {
-                    // {N} = n° de la ligne courante, pour les formules qui référencent la même ligne.
-                    formule = formule.Replace("{N}", nouvelleLigne.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                    recap.Cell(nouvelleLigne, col).FormulaA1 = formule;
-                }
-            }
-
-            // 4. En-têtes des colonnes ajoutées au-delà du template (ex: n°Module), posés seulement s'ils manquent :
-            //    évite de modifier le template Excel.
-            if (entetesColonne != null)
-            {
-                for (int i = 0; i < entetesColonne.Length; i++)
-                {
-                    string? entete = entetesColonne[i];
-                    if (string.IsNullOrEmpty(entete)) continue;
-                    int col = i + 1;
-                    var cellEntete = recap.Cell(LIGNE_ENTETE_RECAP, col);
-                    if (cellEntete.IsEmpty()) cellEntete.SetValue(entete);
-                }
-            }
-        }
 
         /// <summary>Supprime les lignes « fantômes » de la Récap. : formules <c>=[0]!ZNxxx</c> du template pointant vers ModFeuille
         /// (le <c>[0]!</c> les identifie sans ambiguïté). Parcours descendant pour ne pas décaler les indices.</summary>
@@ -1038,66 +632,6 @@ namespace Metrologo.Services
             using (var w = new StreamWriter(s))
             {
                 w.Write(contenu);
-            }
-        }
-
-        /// <summary>Force les bornes min/max de l'axe Y log du graphe Stab d'après les sigmas relatifs estimés par gate :
-        /// min = 10^floor(log10(min_sigma) - 0.5), max = 10^ceil(log10(max_sigma) + 0.5) (~3× de marge, arrondi à la décade).</summary>
-        private static void CalibrerAxeYGrapheStab(string xlsmPath, IEnumerable<double> sigmas)
-        {
-            var positifs = sigmas.Where(s => s > 0).ToList();
-            if (positifs.Count == 0) return;
-
-            double minS = positifs.Min();
-            double maxS = positifs.Max();
-            double minBorne = Math.Pow(10, Math.Floor(Math.Log10(minS) - 0.5));
-            double maxBorne = Math.Pow(10, Math.Ceiling(Math.Log10(maxS) + 0.5));
-
-            // Au moins 1 décade d'écart pour un graphe lisible.
-            if (maxBorne / minBorne < 10) maxBorne = minBorne * 10;
-
-            string minXml = $"<c:min val=\"{minBorne.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}\"/>";
-            string maxXml = $"<c:max val=\"{maxBorne.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}\"/>";
-
-            using var zip = ZipFile.Open(xlsmPath, ZipArchiveMode.Update);
-            var entries = zip.Entries
-                .Where(e => e.FullName.StartsWith("xl/charts/chart") && e.FullName.EndsWith(".xml"))
-                .ToList();
-
-            foreach (var entry in entries)
-            {
-                string contenu;
-                using (var s = entry.Open())
-                using (var r = new StreamReader(s))
-                {
-                    contenu = r.ReadToEnd();
-                }
-
-                // Réinjecte min/max dans le <c:scaling> de <c:valAx> (les éventuels existants sont remplacés).
-                string nouveau = System.Text.RegularExpressions.Regex.Replace(
-                    contenu,
-                    "(<c:valAx>.*?<c:scaling>)(.*?)(</c:scaling>.*?</c:valAx>)",
-                    m =>
-                    {
-                        string scaling = m.Groups[2].Value;
-                        scaling = System.Text.RegularExpressions.Regex.Replace(
-                            scaling, @"<c:min\s+val=""[^""]*""\s*/>", "");
-                        scaling = System.Text.RegularExpressions.Regex.Replace(
-                            scaling, @"<c:max\s+val=""[^""]*""\s*/>", "");
-                        return m.Groups[1].Value + scaling + minXml + maxXml + m.Groups[3].Value;
-                    },
-                    System.Text.RegularExpressions.RegexOptions.Singleline);
-
-                if (nouveau == contenu) continue;
-
-                string fullName = entry.FullName;
-                entry.Delete();
-                var nouvelle = zip.CreateEntry(fullName);
-                using (var s = nouvelle.Open())
-                using (var w = new StreamWriter(s))
-                {
-                    w.Write(nouveau);
-                }
             }
         }
 
@@ -1272,7 +806,7 @@ namespace Metrologo.Services
             }
 
             // 2. Formules pré-remplies de la Récap. (A6:H15) pointant vers ces feuilles : effacées, sinon #REF! ou 0 fantômes.
-            //    Repeuplée à chaque gate par MettreAJourRecapStabAsync.
+            //    Repeuplée à chaque gate par la finalisation COM.
             if (_workbook.Worksheets.Any(w => w.Name == NOM_RECAP))
             {
                 var recap = _workbook.Worksheet(NOM_RECAP);
@@ -1416,19 +950,6 @@ namespace Metrologo.Services
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             while (existants.Contains($"{prefixe}{idx}")) idx++;
             return $"{prefixe}{idx}";
-        }
-
-        /// <summary>Extrait le numéro de gate d'un nom de feuille Stab (« 1 » → 1). Tolère l'ancien format préfixé
-        /// (« stab1 » → 1) pour les classeurs générés avant le renommage.</summary>
-        private static bool TryExtraireNumeroGate(string nomFeuille, out int numGate)
-        {
-            numGate = 0;
-            if (string.IsNullOrEmpty(nomFeuille)) return false;
-            // Chiffres en fin de nom, quel que soit le préfixe.
-            int i = nomFeuille.Length;
-            while (i > 0 && char.IsDigit(nomFeuille[i - 1])) i--;
-            string chiffres = nomFeuille.Substring(i);
-            return int.TryParse(chiffres, out numGate);
         }
 
         private void ClonerZonesNommeesPourNouvelleFeuille(IXLWorksheet source, IXLWorksheet dest)
