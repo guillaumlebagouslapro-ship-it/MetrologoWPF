@@ -886,7 +886,17 @@ namespace Metrologo.Services
                     }
                     catch { /* best-effort : la suppression de la feuille reste prioritaire */ }
 
-                    // 2. Supprime la feuille et sauvegarde le fichier.
+                    // 2. Récap. active (le fichier se rouvre dessus), puis suppression de la feuille et sauvegarde.
+                    if (wb.Worksheets.Any(w => w.Name == NOM_RECAP))
+                    {
+                        var recap = wb.Worksheet(NOM_RECAP);
+                        if (recap.Visibility == XLWorksheetVisibility.Visible)
+                        {
+                            foreach (var ws in wb.Worksheets) ws.TabSelected = false;
+                            recap.SetTabActive();
+                            recap.TabSelected = true;
+                        }
+                    }
                     feuille.Delete();
                     wb.Save();
 

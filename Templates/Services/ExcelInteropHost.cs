@@ -1177,7 +1177,16 @@ namespace Metrologo.Services
                     if (isDerniereGate)
                         ProtegerToutesFeuillesActifInterne();
 
-                    // 5. Save
+                    // 5. Active la feuille Récap. en fin de mesure, AVANT le Save : la feuille active
+                    //    est enregistrée dans le fichier, qui se rouvre donc sur la Récap. (et non sur
+                    //    la dernière feuille stab). Pour Stab, seulement à la dernière gate (sinon on ne
+                    //    verrait pas la feuille en cours entre deux gates).
+                    bool peutBasculerRecap = mesure.TypeMesure != TypeMesure.Stabilite
+                                              || isDerniereGate;
+                    if (peutBasculerRecap)
+                        ActiverRecapInterne();
+
+                    // 6. Save
                     try { _classeurActif.Save(); }
                     catch (Exception ex)
                     {
@@ -1191,27 +1200,6 @@ namespace Metrologo.Services
                     // Classeur « non modifié » après le Save : évite le prompt « Voulez-vous enregistrer
                     // les modifications ? » en cas de recalcul interne d'Excel.
                     try { _classeurActif.Saved = true; } catch { }
-
-                    // 6. Active la feuille Récap. en fin de mesure ; pour Stab, seulement à la dernière
-                    //    gate (sinon on ne verrait pas la feuille en cours entre deux gates).
-                    bool peutBasculerRecap = mesure.TypeMesure != TypeMesure.Stabilite
-                                              || isDerniereGate;
-                    if (peutBasculerRecap)
-                    {
-                        try
-                        {
-                            dynamic recap = _classeurActif.Worksheets.Item("Récap.");
-                            try { recap.Activate(); }
-                            finally { try { Marshal.ReleaseComObject(recap); } catch { } }
-                            JournalLog.Info(CategorieLog.Excel, "EXCEL_RECAP_ACTIVE",
-                                "Feuille Récap. activée en fin de mesure (vue finale utilisateur).");
-                        }
-                        catch (Exception ex)
-                        {
-                            JournalLog.Warn(CategorieLog.Excel, "EXCEL_RECAP_ACTIVE_KO",
-                                $"Activation Récap. échouée : {ex.Message}");
-                        }
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -1235,6 +1223,41 @@ namespace Metrologo.Services
                 }
             }
         });
+
+        /// <summary>
+        /// Active la feuille Récap. du classeur actif, vue ramenée en haut à gauche : enregistrée
+        /// avec le fichier, c'est elle qui apparaît à la réouverture. Best-effort, sous lock.
+        /// </summary>
+        private void ActiverRecapInterne()
+        {
+            if (_classeurActif == null) return;
+            try
+            {
+                dynamic recap = _classeurActif.Worksheets.Item("Récap.");
+                try { recap.Activate(); }
+                finally { try { Marshal.ReleaseComObject(recap); } catch { } }
+
+                try
+                {
+                    dynamic fenetre = _classeurActif.Windows[1];
+                    try
+                    {
+                        fenetre.ScrollRow = 1;
+                        fenetre.ScrollColumn = 1;
+                    }
+                    finally { try { Marshal.ReleaseComObject(fenetre); } catch { } }
+                }
+                catch { /* défilement non bloquant */ }
+
+                JournalLog.Info(CategorieLog.Excel, "EXCEL_RECAP_ACTIVE",
+                    "Feuille Récap. activée (vue à la réouverture du fichier).");
+            }
+            catch (Exception ex)
+            {
+                JournalLog.Warn(CategorieLog.Excel, "EXCEL_RECAP_ACTIVE_KO",
+                    $"Activation Récap. échouée : {ex.Message}");
+            }
+        }
 
         /// <summary>
         /// Réinitialise le classeur ouvert (« fichier vierge ») en supprimant toutes les feuilles de
@@ -1395,6 +1418,9 @@ namespace Metrologo.Services
                         try { Marshal.ReleaseComObject(_feuilleMesure); } catch { }
                         _feuilleMesure = null;
                     }
+
+                    // Le fichier se rouvrira sur la Récap. plutôt que sur une feuille quelconque.
+                    ActiverRecapInterne();
 
                     try { _classeurActif.Save(); }
                     catch (Exception ex)
