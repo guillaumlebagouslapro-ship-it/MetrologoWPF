@@ -52,6 +52,13 @@ namespace Metrologo.Services
         // Ligne où commencent les mesures dans le template.
         private const int LIGNE_DEBUT_MESURES = 9;
 
+        // Nombre de mesures et temps de mesure (s) de l'accréditation, base des coefficients
+        // ZNCoeffNbMes = √(n / n_accr) et ZNCoeffTempsMesure = t_accr / gate de l'incertitude globale.
+        // Le Delphi les lisait dans SQL (T_METROLOGO_DATAS_INCERTITUDE : DAT_NBMES / DAT_TMPS_MESURE,
+        // F_Main.pas:413) ; valeurs relevées sur un fichier produit par l'ancien logiciel : 100 / 100.
+        private const int NB_MESURES_ACCREDITE = 100;
+        private const int TEMPS_MESURE_ACCREDITE_S = 100;
+
         private XLWorkbook? _workbook;
         private IXLWorksheet? _feuilleMesure;   // la feuille créée pour cette mesure
         private string _cheminFichier = string.Empty;
@@ -280,8 +287,17 @@ namespace Metrologo.Services
                 SetNamed("ZNLibGate", EnTetesMesureHelper.LibelleGate(gateInscrite));
                 SetNamed("ZNValGateSecondes", EnTetesMesureHelper.SecondesGate(gateInscrite));
                 SetNamed("ZNModeMesure", config.ModeMesure == ModeMesure.Direct ? "Direct" : "Indirect");
-                SetNamed("ZNCoeffMult", config.IndexMultiplicateur);
-                SetNamed("ZNValFNominale", config.FNominale);
+                // Multiplicateur et fréquence nominale : mode Indirect uniquement, comme le Delphi
+                // (F_Main.pas:1827). En Direct, D4 doit rester VIDE : la formule de la colonne C
+                // teste ISBLANK(ZNCoeffMult). Un 0 activerait le calcul « Indirect » sur une mesure
+                // directe : -10 MHz puis +10 MHz sur ~0,1 Hz détruit la précision (toutes les lignes
+                // identiques, variance nulle, moyenne décalée).
+                if (config.ModeMesure == ModeMesure.Indirect)
+                {
+                    SetNamed("ZNFNominale", "Fréquence nominale : ");
+                    SetNamed("ZNCoeffMult", config.IndexMultiplicateur);
+                    SetNamed("ZNValFNominale", config.FNominale);
+                }
                 SetNamed("ZNNbMesures", config.NbMesures);
                 // Résolution et incertitude relative = 0 à l'init. Les vraies valeurs viennent des popups post-mesure
                 // (AcceuilViewModel.SaisiePostMesureFrequenceAsync / SaisiePostMesureTachyAsync) via EcrireZoneNommeeAsync ;
@@ -305,8 +321,8 @@ namespace Metrologo.Services
                 // sort de ses plages. Sinon la finalisation COM (ExcelInteropHost) les surcharge en fin de boucle.
                 SetNamed("ZNCoeffA", 1e-10);
                 SetNamed("ZNCoeffB", 5e-13);
-                SetNamed("ZNNbMesAccredite", 30);
-                SetNamed("ZNTempsMesureAccredite", 10);
+                SetNamed("ZNNbMesAccredite", NB_MESURES_ACCREDITE);
+                SetNamed("ZNTempsMesureAccredite", TEMPS_MESURE_ACCREDITE_S);
 
                 // --- 7. Nettoyage anticipé des lignes « fantômes » du Récap. ---
                 // Le template contient des lignes pré-remplies pointant vers ModFeuille (=[0]!ZNxxx, évaluées à 0).
