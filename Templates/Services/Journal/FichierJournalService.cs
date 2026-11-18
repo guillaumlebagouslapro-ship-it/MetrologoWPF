@@ -82,45 +82,55 @@ namespace Metrologo.Services.Journal
             // Machine locale + seule instance : toute session sans Fin est zombie (crash).
             // Autres machines : seuil 24h (impossible de savoir si l'app tourne encore).
             // Fin d'un zombie = dernier Timestamp d'entrée, ou Debut si aucune entrée.
-
-            string maMachine = Environment.MachineName;
-            int monPid = System.Diagnostics.Process.GetCurrentProcess().Id;
-            bool seuleInstanceLocale = System.Diagnostics.Process
-                .GetProcessesByName("Metrologo")
-                .All(p => p.Id == monPid);
-
-            var seuilZombieAutresMachines = DateTime.Now.AddHours(-24);
-            var dernierTimestampParSession = await CalculerDerniersTimestampsAsync();
-
-            await ModifierSessionsAsync(sessions =>
+            // Lancé en arrière-plan au démarrage : la session ouverte entre-temps par ce
+            // poste (SessionActuelleId) n'est jamais un zombie.
+            try
             {
-                foreach (var s in sessions)
+                string maMachine = Environment.MachineName;
+                int monPid = Environment.ProcessId;
+                bool seuleInstanceLocale = System.Diagnostics.Process
+                    .GetProcessesByName("Metrologo")
+                    .All(p => p.Id == monPid);
+                var seuilZombieAutresMachines = DateTime.Now.AddHours(-24);
+
+                bool EstZombie(SessionJournal s)
                 {
-                    if (s.Fin != null) continue;
+                    if (s.Fin != null) return false;
+                    if (s.SessionId == SessionActuelleId) return false;
+                    bool estCetteMachine = string.Equals(s.Machine, maMachine, StringComparison.OrdinalIgnoreCase);
+                    return estCetteMachine && seuleInstanceLocale
+                        ? true                                     // seule instance locale : zombie
+                        : s.Debut < seuilZombieAutresMachines;     // sinon seuil 24h
+                }
 
-                    bool estCetteMachine = string.Equals(s.Machine, maMachine,
-                        StringComparison.OrdinalIgnoreCase);
+                // 1) sessions.json seul (petit). Cas courant : aucun zombie, rien d'autre à lire.
+                //    Avant, tout le journal (tous postes, toutes archives) était relu à chaque
+                //    démarrage : 8 minutes sur M: une fois le journal bien rempli.
+                var zombies = await Task.Run(() => LireFichierSessions().Where(EstZombie).ToList());
+                if (zombies.Count == 0) return;
 
-                    bool aFermer;
-                    if (estCetteMachine && seuleInstanceLocale)
-                    {
-                        // Seule instance locale → toute session encore "en cours" est zombie.
-                        aFermer = true;
-                    }
-                    else
-                    {
-                        // Autres machines (ou instances actives sur cette machine) : seuil 24h.
-                        aFermer = s.Debut < seuilZombieAutresMachines;
-                    }
+                // 2) Dernière activité de CES sessions, dans les seuls mois concernés.
+                var ids = new HashSet<string>(zombies.Select(z => z.SessionId ?? string.Empty));
+                DateTime depuis = zombies.Min(z => z.Debut);
+                var dernierTimestampParSession = await Task.Run(() =>
+                    DerniersTimestamps(CheminsMetrologo.Logs, ids, depuis));
 
-                    if (aFermer)
+                // 3) Écriture (sessions.json relu sous sémaphore : un autre poste a pu écrire).
+                await ModifierSessionsAsync(sessions =>
+                {
+                    foreach (var s in sessions)
                     {
-                        s.Fin = dernierTimestampParSession.TryGetValue(s.SessionId, out var t)
+                        if (!ids.Contains(s.SessionId ?? string.Empty) || !EstZombie(s)) continue;
+                        s.Fin = dernierTimestampParSession.TryGetValue(s.SessionId ?? string.Empty, out var t)
                             ? t
                             : s.Debut;
                     }
-                }
-            });
+                });
+            }
+            catch
+            {
+                // Best-effort : partage HS → les zombies seront fermés à un prochain démarrage.
+            }
         }
 
         // -------------------------------------------------------------------------
@@ -429,19 +439,55 @@ namespace Metrologo.Services.Journal
             return true;
         }
 
-        private async Task<Dictionary<string, DateTime>> CalculerDerniersTimestampsAsync()
+        /// <summary>
+        /// Dernier Timestamp des sessions <paramref name="ids"/>, pour dater la fermeture des
+        /// zombies. Ne lit que les fichiers des mois &gt;= <paramref name="depuis"/> (une session
+        /// n'écrit pas avant son début) et ne désérialise que les lignes qui contiennent l'un
+        /// des identifiants cherchés.
+        /// </summary>
+        internal static Dictionary<string, DateTime> DerniersTimestamps(
+            string dossierLogs, ISet<string> ids, DateTime depuis)
         {
-            // Dernier Timestamp par session — utilisé pour dater la fermeture des zombies.
             var result = new Dictionary<string, DateTime>();
-            await Task.Run(() =>
+            var cherches = ids.Where(i => !string.IsNullOrEmpty(i)).ToList();
+            if (cherches.Count == 0 || !Directory.Exists(dossierLogs)) return result;
+
+            var fichiers = new List<string>(Directory.EnumerateFiles(dossierLogs, "entries-*.jsonl"));
+            string dossierArchives = Path.Combine(dossierLogs, "Archives");
+            if (Directory.Exists(dossierArchives))
+                foreach (var sd in Directory.EnumerateDirectories(dossierArchives))
+                    fichiers.AddRange(Directory.EnumerateFiles(sd, "entries-*.jsonl"));
+
+            var premierMois = new DateTime(depuis.Year, depuis.Month, 1);
+            foreach (var fichier in fichiers)
             {
-                foreach (var e in LireToutesLesEntrees(null))
+                if (TryExtraireMois(Path.GetFileName(fichier), out var mois) && mois < premierMois)
+                    continue;
+
+                IEnumerable<string> lignes;
+                try { lignes = File.ReadLines(fichier); }
+                catch { continue; }
+
+                try
                 {
-                    if (string.IsNullOrEmpty(e.SessionId)) continue;
-                    if (!result.TryGetValue(e.SessionId, out var existant) || e.Timestamp > existant)
-                        result[e.SessionId] = e.Timestamp;
+                    foreach (var ligne in lignes)
+                    {
+                        if (string.IsNullOrWhiteSpace(ligne)) continue;
+                        bool concernee = false;
+                        foreach (var id in cherches)
+                            if (ligne.Contains(id, StringComparison.Ordinal)) { concernee = true; break; }
+                        if (!concernee) continue;
+
+                        LogEntry? e;
+                        try { e = JsonSerializer.Deserialize<LogEntry>(ligne, _jsonOpts); }
+                        catch { continue; }
+                        if (e == null || string.IsNullOrEmpty(e.SessionId) || !ids.Contains(e.SessionId)) continue;
+                        if (!result.TryGetValue(e.SessionId, out var existant) || e.Timestamp > existant)
+                            result[e.SessionId] = e.Timestamp;
+                    }
                 }
-            });
+                catch { /* fichier devenu illisible en cours de lecture : on passe au suivant */ }
+            }
             return result;
         }
     }

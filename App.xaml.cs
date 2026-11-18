@@ -168,8 +168,10 @@ namespace Metrologo
 
             // Sessions zombies (crash, taskkill, debug brutal) : sans ce nettoyage elles
             // s'accumulent et restent « En cours » dans le journal indéfiniment.
-            await Journal.NettoyerSessionsZombiesAsync();
-            StartupLap("NettoyerSessionsZombiesAsync (I/O M:\\)");
+            // En arrière-plan : il lit sessions.json (et parfois le journal) sur M:, ce qui
+            // ne doit jamais retarder l'ouverture de la fenêtre (8 min observées).
+            _ = Journal.NettoyerSessionsZombiesAsync();
+            StartupLap("NettoyerSessionsZombiesAsync (lancé en arrière-plan)");
 
             // Archive le mois précédent si besoin (sans risque en multi-postes). Fire-and-forget.
             _ = ArchivesLogsService.ArchiverMoisPrecedentSiNecessaireAsync();
