@@ -10,7 +10,7 @@
         ShowInTaskbar="False"
         Topmost="True"
         SizeToContent="Manual"
-        Width="460" Height="270">
+        Width="480" Height="300">
 
     <Border Background="White" CornerRadius="12" Margin="16">
         <Border.Effect>
@@ -39,7 +39,12 @@
                 <TextBlock x:Name="StatusText"
                            Text="Recherche en cours..."
                            FontSize="13" Margin="0,4,0,0"
+                           TextWrapping="Wrap"
                            Foreground="#6B7280"/>
+                <TextBlock x:Name="DetailText"
+                           Text=""
+                           FontSize="12" Margin="0,2,0,0"
+                           Foreground="#9CA3AF"/>
             </StackPanel>
 
             <!-- Barre de progression -->

@@ -18,7 +18,13 @@ set APP_ID=Metrologo
 set MAIN_EXE=Metrologo.exe
 set PROJET=Metrologo.csproj
 set "SORTIE_RESEAU=M:\exe_spe\Data_Metrologo\SUITE ASERTI Guillaume\Metrologo"
-set SPLASH=Resources\splash.gif
+REM Image fixe affichee par Velopack pendant l'installation (pas de fausse barre animee).
+set SPLASH=Resources\splash-installation.png
+REM Pas de delta : le flux est sur le reseau local, copier le paquet complet prend
+REM quelques secondes avec une vraie progression. Un delta oblige chaque poste a
+REM reconstruire le paquet version par version, sans progression (plusieurs minutes
+REM quand des versions ont ete sautees). Cote appli : UpdateService.CreerManager.
+set DELTA=None
 REM Icone (raccourci bureau, installateur, Applications installees) = celle de l'exe
 set ICONE=Resources\logo.ico
 REM Dossier de travail : surtout PAS nomme TMP (TMP = dossier temporaire de Windows :
@@ -74,7 +80,7 @@ vpk download local --path "%SORTIE_RESEAU%" --outputDir "%RELDIR%"
 if errorlevel 1 echo    (aucune version sur le reseau : pas de delta, normal a la 1re publication)
 echo.
 echo == Empaquetage (local) ==
-vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%RELDIR%" --splashImage "%SPLASH%" --icon "%ICONE%" %NOTES%
+vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%RELDIR%" --splashImage "%SPLASH%" --splashProgressColor "#E89B2F" --icon "%ICONE%" --delta %DELTA% %NOTES%
 if errorlevel 1 goto ECHEC_PACK
 echo.
 echo == Depot sur %SORTIE_RESEAU% (garde les %GARDER% dernieres versions) ==

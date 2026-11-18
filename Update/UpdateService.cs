@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
 using Metrologo.Views;
 using Velopack;
 using Velopack.Locators;
@@ -57,7 +59,7 @@ public static class UpdateService
         try
         {
             Log("---- Demarrage, exe : " + Environment.ProcessPath);
-            var mgr = new UpdateManager(FeedPath);
+            var mgr = CreerManager();
 
             // Non installe via Velopack (dev / Visual Studio) : rien a faire.
             if (!mgr.IsInstalled || mgr.CurrentVersion is null)
@@ -116,21 +118,22 @@ public static class UpdateService
             }
 
             var win = new UpdateWindow();
+            win.SetTitre($"Mise à jour de Metrologo {HistoriqueMaj.Affichage(actuelle)} → {HistoriqueMaj.Affichage(cible)}");
             win.Show();
-            win.SetStatus("Sauvegarde de la version actuelle...");
-            win.SetIndeterminate();
+            var afficher = Afficheur(win);
+            var chrono = Stopwatch.StartNew();
 
-            await SauvegarderVersionActuelleAsync(etat, actuelle);
+            win.SetEtape(1, 3, "sauvegarde de la version actuelle (pour un retour arrière)");
+            await SauvegarderVersionActuelleAsync(etat, actuelle, afficher);
+            Log($"Etape 1/3 (sauvegarde) : {chrono.Elapsed.TotalSeconds:F1} s");
 
-            win.SetStatus("Telechargement de la mise a jour...");
-            win.SetProgress(0);
+            chrono.Restart();
+            win.SetEtape(2, 3, $"téléchargement de la version {HistoriqueMaj.Affichage(cible)}");
+            await TelechargerPaquetCompletAsync(mgr, updateInfo, afficher);
+            Log($"Etape 2/3 (telechargement) : {chrono.Elapsed.TotalSeconds:F1} s");
 
-            await mgr.DownloadUpdatesAsync(
-                updateInfo,
-                percent => win.Dispatcher.Invoke(() => win.SetProgress(percent)));
-
-            win.SetStatus("Installation et redemarrage...");
-            win.SetIndeterminate();
+            win.SetEtape(3, 3, "installation");
+            win.SetIndeterminate("Metrologo va se fermer puis se rouvrir tout seul. Ne pas éteindre le poste.");
 
             // Note AVANT de redemarrer ce qu'on s'apprete a installer (historique + anti-boucle).
             etat.EnAttente = new OperationMajEnAttente
@@ -142,10 +145,12 @@ public static class UpdateService
             HistoriqueMaj.Sauver(etat);
 
             // Laisse le message visible un court instant.
-            await Task.Delay(700);
+            await Task.Delay(1500);
 
-            // Relance l'application sur la nouvelle version (ne revient pas).
-            Log($"Telechargement termine : installation de {cible} et redemarrage.");
+            // Relance l'application sur la nouvelle version (ne revient pas). La duree de
+            // l'installation se lit dans ce journal : ecart entre cette ligne et le
+            // « ---- Demarrage » suivant.
+            Log($"Etape 3/3 : installation de {cible} par Velopack et redemarrage.");
             mgr.ApplyUpdatesAndRestart(updateInfo);
         }
         catch (Exception ex)
@@ -161,7 +166,7 @@ public static class UpdateService
     {
         try
         {
-            var mgr = new UpdateManager(FeedPath);
+            var mgr = CreerManager();
             return mgr.IsInstalled ? mgr.CurrentVersion?.ToString() : null;
         }
         catch { return null; }
@@ -175,7 +180,7 @@ public static class UpdateService
     /// </summary>
     public static void RetournerVersionPrecedente(Action nettoyerAvantArret)
     {
-        var mgr = new UpdateManager(FeedPath);
+        var mgr = CreerManager();
         if (!mgr.IsInstalled || mgr.CurrentVersion is null)
             throw new InvalidOperationException("Metrologo n'est pas lance depuis son installation : retour arriere impossible.");
 
@@ -226,7 +231,8 @@ public static class UpdateService
     /// local si present, sinon le dossier reseau. Sans copie, pas de retour arriere,
     /// mais la mise a jour se fait quand meme.
     /// </summary>
-    private static async Task SauvegarderVersionActuelleAsync(EtatMaj etat, string actuelle)
+    private static async Task SauvegarderVersionActuelleAsync(EtatMaj etat, string actuelle,
+        Action<int, string?> afficher)
     {
         try
         {
@@ -259,7 +265,7 @@ public static class UpdateService
             {
                 if (Directory.Exists(tmp)) Directory.Delete(tmp, recursive: true);
                 Directory.CreateDirectory(tmp);
-                File.Copy(source, Path.Combine(tmp, fichier));
+                CopierAvecProgression(source, Path.Combine(tmp, fichier), afficher);
                 if (Directory.Exists(HistoriqueMaj.DossierPrecedente))
                     Directory.Delete(HistoriqueMaj.DossierPrecedente, recursive: true);
                 Directory.Move(tmp, HistoriqueMaj.DossierPrecedente);
@@ -274,6 +280,144 @@ public static class UpdateService
             Log($"Sauvegarde de la version {actuelle} impossible : {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Gestionnaire Velopack SANS deltas. Le flux est sur le reseau local : copier le
+    /// paquet complet prend quelques secondes. Les deltas, eux, obligent Velopack a
+    /// reconstruire le paquet complet version par version, sans aucune progression
+    /// affichee (barre figee a 70 %) : plusieurs minutes quand des versions ont ete sautees.
+    /// Une valeur negative desactive les deltas (Velopack : deltasCount > Maximum).
+    /// </summary>
+    private static UpdateManager CreerManager() =>
+        new(FeedPath, new UpdateOptions { MaximumDeltasBeforeFallback = -1 });
+
+    /// <summary>
+    /// Met le paquet complet de la version cible dans le dossier packages de Velopack.
+    /// La copie est faite ici, par blocs, pour afficher une vraie progression : Velopack
+    /// copie un fichier du reseau d'un seul coup (0 % puis 100 %). Taille et empreinte
+    /// sont verifiees comme le fait Velopack, puisqu'il ne reverifie pas un paquet deja
+    /// present. En cas d'echec, Velopack fait le telechargement lui-meme.
+    /// </summary>
+    private static async Task TelechargerPaquetCompletAsync(UpdateManager mgr, UpdateInfo info,
+        Action<int, string?> afficher)
+    {
+        var cible = info.TargetFullRelease;
+        string source = Path.Combine(FeedPath, cible.FileName);
+        string dest = Path.Combine(DossierPackages(), cible.FileName);
+
+        if (!File.Exists(dest) && File.Exists(source))
+        {
+            try
+            {
+                await Task.Run(() => CopierAvecProgression(source, dest, afficher, cible));
+                Log($"Paquet {cible.FileName} copie et verifie ({cible.Size / 1048576.0:F0} Mo).");
+                NettoyerAnciensPaquets(dest);
+            }
+            catch (Exception ex)
+            {
+                Log($"Copie directe du paquet impossible ({ex.Message}) : telechargement par Velopack.");
+                try { File.Delete(dest); } catch { /* absent */ }
+                afficher(0, null);
+            }
+        }
+
+        // Paquet deja en place : Velopack le constate et rend la main aussitot.
+        // Sinon il le telecharge lui-meme (progression 0 puis 100 seulement).
+        await mgr.DownloadUpdatesAsync(info, p => afficher(p, null));
+    }
+
+    /// <summary>
+    /// Copie un fichier par blocs de 1 Mo en signalant la progression (pourcentage et
+    /// « x Mo sur y Mo »). Avec <paramref name="aVerifier"/> : controle taille + SHA256
+    /// (ou SHA1) du paquet, ecrit d'abord sous un nom temporaire puis renomme.
+    /// </summary>
+    private static void CopierAvecProgression(string source, string dest, Action<int, string?> afficher,
+        VelopackAsset? aVerifier = null)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+        string tmp = dest + ".copie";
+        using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        using var sha1 = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
+        long total, fait = 0;
+        int dernier = -1;
+
+        try
+        {
+            using (var lecture = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read,
+                       1 << 20, FileOptions.SequentialScan))
+            using (var ecriture = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
+            {
+                total = lecture.Length;
+                var bloc = new byte[1 << 20];
+                int n;
+                while ((n = lecture.Read(bloc, 0, bloc.Length)) > 0)
+                {
+                    ecriture.Write(bloc, 0, n);
+                    if (aVerifier != null)
+                    {
+                        sha256.AppendData(bloc, 0, n);
+                        sha1.AppendData(bloc, 0, n);
+                    }
+                    fait += n;
+                    int pct = total > 0 ? (int)(fait * 100 / total) : 100;
+                    if (pct != dernier)
+                    {
+                        dernier = pct;
+                        afficher(pct, $"{fait / 1048576.0:F0} Mo sur {total / 1048576.0:F0} Mo");
+                    }
+                }
+            }
+
+            if (aVerifier != null)
+            {
+                if (aVerifier.Size > 0 && total != aVerifier.Size)
+                    throw new InvalidDataException($"taille {total} au lieu de {aVerifier.Size}");
+                if (!string.IsNullOrEmpty(aVerifier.SHA256))
+                {
+                    string lu = Convert.ToHexString(sha256.GetHashAndReset());
+                    if (!lu.Equals(aVerifier.SHA256, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("empreinte SHA256 differente");
+                }
+                else if (!string.IsNullOrEmpty(aVerifier.SHA1))
+                {
+                    string lu = Convert.ToHexString(sha1.GetHashAndReset());
+                    if (!lu.Equals(aVerifier.SHA1, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("empreinte SHA1 differente");
+                }
+            }
+
+            File.Move(tmp, dest, overwrite: true);
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* sans importance */ }
+        }
+    }
+
+    /// <summary>
+    /// Ne garde que le paquet cible dans packages (comme CleanPackagesExcept de Velopack,
+    /// que Velopack saute quand le paquet est deja en place) : sinon chaque MAJ y
+    /// laisserait l'ancien paquet complet. La version actuelle est deja sauvegardee
+    /// dans MAJ\precedente a l'etape 1.
+    /// </summary>
+    private static void NettoyerAnciensPaquets(string paquetGarde)
+    {
+        try
+        {
+            string dossier = Path.GetDirectoryName(paquetGarde)!;
+            foreach (string f in Directory.EnumerateFiles(dossier, "*.nupkg")
+                         .Concat(Directory.EnumerateFiles(dossier, "*.partial")).ToList())
+            {
+                if (!string.Equals(Path.GetFullPath(f), Path.GetFullPath(paquetGarde), StringComparison.OrdinalIgnoreCase))
+                    try { File.Delete(f); } catch { /* utilise : au prochain coup */ }
+            }
+        }
+        catch { /* sans importance pour la MAJ */ }
+    }
+
+    /// <summary>Relaie la progression vers la fenetre (thread UI), sans bloquer la copie.</summary>
+    private static Action<int, string?> Afficheur(UpdateWindow win) =>
+        (pct, detail) => win.Dispatcher.BeginInvoke(() => win.SetProgress(pct, detail));
 
     /// <summary>Dossier "packages" de Velopack (la ou il cherche le paquet a appliquer).</summary>
     private static string DossierPackages()
