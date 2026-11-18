@@ -20,7 +20,7 @@ namespace Metrologo.Services.Besancon
         /// les réécritures inutiles (bien plus fin que les offsets hebdo ~1e-7 Hz).</summary>
         private const double SeuilHz = 1e-9;
 
-        /// <summary>Si la nouvelle valeur hebdo passe au-dessus de cette limite, on alerte l'opérateur par pop-up.</summary>
+        /// <summary>Si la nouvelle valeur hebdo dépasse cette limite en valeur absolue, on alerte l'opérateur par pop-up.</summary>
         private const double SeuilAlerteHebdo = 1e-13;
 
         /// <summary>Levé après chaque mise à jour du suivi Besançon ; l'écran principal s'y abonne
@@ -232,11 +232,12 @@ namespace Metrologo.Services.Besancon
                 {
                     bool valeurChangee = InjecterReferenceRubidiumActif(ecartHebdo.Value);
 
-                    // Alerte au-dessus de 1e-13, seulement si la valeur a changé (pas de répétition quotidienne).
-                    if (valeurChangee && ecartHebdo.Value > SeuilAlerteHebdo)
+                    // Alerte si |écart| dépasse 1e-13 (dans les deux sens), seulement si la valeur a
+                    // changé (pas de répétition quotidienne).
+                    if (valeurChangee && Math.Abs(ecartHebdo.Value) > SeuilAlerteHebdo)
                     {
-                        string detail = $"L'écart hebdomadaire Besançon ({ecartHebdo.Value:G6}) est passé "
-                                      + $"au-dessus de la limite de {SeuilAlerteHebdo:G1}.";
+                        string detail = $"L'écart hebdomadaire Besançon ({ecartHebdo.Value:G6}) dépasse "
+                                      + $"en valeur absolue la limite de {SeuilAlerteHebdo:G1}.";
                         // Journal d'audit Rubidium (notifie les autres postes) + pop-up ici.
                         Journal.Journal.Warn(CategorieLog.Rubidium, "RUBIDIUM_HEBDO_AU_DESSUS_SEUIL", detail);
                         NotifierPopupRubidium("⚠ Écart hebdo au-dessus de la limite",

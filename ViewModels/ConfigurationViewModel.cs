@@ -878,11 +878,41 @@ namespace Metrologo.ViewModels
             return c;
         }
 
+        /// <summary>Réglages d'intervalle en clair pour le journal de la FI (couplage, impédance, seuils, pentes).</summary>
+        private List<string> DescriptionIntervalle()
+        {
+            var c = MesureConfig;
+            string Coup(bool dc) => dc ? "DC" : "AC";
+            string Imp(bool cinquante) => cinquante ? "50 Ω" : "1 MΩ";
+            string Pente(bool montant) => montant ? "montant" : "descendant";
+            string Volts(double v) => v.ToString("0.###", CultureInfo.CurrentCulture) + " V";
+
+            var l = new List<string>();
+            if (!c.IntervDeuxVoies)
+            {
+                l.Add("1 voie");
+                l.Add($"Couplage : {Coup(c.IntervDc1)}");
+                l.Add($"Impédance : {Imp(c.IntervImp50_1)}");
+                l.Add($"Départ : {Volts(c.IntervSeuilStart)} {Pente(c.IntervStartMontant)}");
+                l.Add($"Arrêt : {Volts(c.IntervSeuilStop)} {Pente(c.IntervStopMontant)}");
+                if (c.IntervHoldoffNs > 0)
+                    l.Add($"Hold-off : {c.IntervHoldoffNs.ToString("0.###", CultureInfo.CurrentCulture)} ns");
+            }
+            else
+            {
+                l.Add("2 voies");
+                l.Add($"Voie 1 (départ) : {Coup(c.IntervDc1)}, {Imp(c.IntervImp50_1)}, {Volts(c.IntervSeuilStart)} {Pente(c.IntervStartMontant)}");
+                l.Add($"Voie 2 (arrêt) : {Coup(c.IntervDc2)}, {Imp(c.IntervImp50_2)}, {Volts(c.IntervSeuilStop)} {Pente(c.IntervStopMontant)}");
+            }
+            return l;
+        }
+
         /// <summary>Génère et envoie les commandes SCPI d'intervalle, puis les mémorise pour rejeu post-*RST.</summary>
         private async Task EnvoyerCommandesIntervalleAsync()
         {
             var commandes = ConstruireCommandesIntervalle();
             MesureConfig.CommandesScpiReglages = new List<string>(commandes);
+            MesureConfig.ReglagesLisibles = commandes.Count > 0 ? DescriptionIntervalle() : new List<string>();
             if (commandes.Count == 0) return;
 
             var modele = ModeleCatalogueSelectionne();
@@ -1086,6 +1116,7 @@ namespace Metrologo.ViewModels
             {
                 // Init manuelle : aucune commande envoyée, réglages vidés (pas de rejeu post-*RST).
                 MesureConfig.CommandesScpiReglages = new List<string>();
+                MesureConfig.ReglagesLisibles = new List<string>();
             }
             else if (MesureConfig.TypeMesure == TypeMesure.Interval)
             {
@@ -1184,6 +1215,7 @@ namespace Metrologo.ViewModels
         private async Task EnvoyerCommandesScpiAsync()
         {
             var modele = ModeleCatalogueSelectionne();
+            MesureConfig.ReglagesLisibles = new List<string>();
             if (modele == null || ReglagesDynamiques.Count == 0)
             {
                 MesureConfig.CommandesScpiReglages = new List<string>();
@@ -1246,6 +1278,23 @@ namespace Metrologo.ViewModels
 
             // Mémorisées dans Mesure : l'orchestrator les rejoue après *RST pendant la boucle.
             MesureConfig.CommandesScpiReglages = new List<string>(commandes);
+
+            // Les mêmes en clair pour le journal de la FI : voie, réglages choisis, puis réglages
+            // automatiques (mode, résolution) qui n'ont pas d'équivalent choisi par l'opérateur.
+            var lisibles = new List<string>();
+            if (reglagesApplicables.Count > 0 || ReglagesVoieA.Count + ReglagesVoieB.Count + ReglagesVoieC.Count > 0)
+                lisibles.Add("Voie " + MesureConfig.VoieActive);
+            lisibles.AddRange(reglagesApplicables.Select(r => r.DescriptionLisible)
+                .Where(d => !string.IsNullOrWhiteSpace(d))!);
+            foreach (var reglage in modele.Reglages.Where(r => r.Auto || EstReglageMode(r)))
+            {
+                if (reglagesApplicables.Any(r => string.Equals(r.Nom, reglage.Nom, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                var option = SelectionnerOptionAuto(reglage);
+                if (option != null && !string.IsNullOrWhiteSpace(option.Libelle))
+                    lisibles.Add($"{reglage.Nom} : {option.Libelle} (auto)");
+            }
+            MesureConfig.ReglagesLisibles = commandes.Count > 0 ? lisibles : new List<string>();
 
             if (commandes.Count == 0) return;
 

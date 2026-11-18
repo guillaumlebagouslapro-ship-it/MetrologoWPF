@@ -5,6 +5,7 @@ using Metrologo.Services;
 using Metrologo.Services.Besancon;
 using Metrologo.Services.Catalogue;
 using Metrologo.Services.Ieee;
+using Metrologo.Services.Incertitude;
 using Metrologo.Services.Journal;
 using Metrologo.Views;
 using System.Windows;
@@ -1017,7 +1018,7 @@ namespace Metrologo.ViewModels
             // Journal FI : la config (écrite ici, une fois les gates d'une stab choisies, et
             // seulement si elle a changé) ; la mesure elle-même part sur la ligne du résultat.
             JournalFIService.NoterConfiguration(EnTetesMesureHelper.LibelleType(config.TypeMesure),
-                ResumeConfigJournalFI(config, nomAppareilLog));
+                ResumeConfigJournalFI(config, nomAppareilLog), DetailsConfigJournalFI(config));
             JournalFIService.DebutMesure(preambule);
 
             var progress = new Progress<ProgressionMesure>(p =>
@@ -1352,6 +1353,52 @@ namespace Metrologo.ViewModels
             resume += $" · gate {EnTetesMesureHelper.LibelleGate(config.GateIndex)}";
             if (config.ModeMesure == ModeMesure.Indirect) resume += " · indirect";
             return resume;
+        }
+
+        /// <summary>
+        /// Lignes écrites sous « Config » dans le journal FI : module d'incertitude choisi (n°,
+        /// désignation, nombre de mesures prévu, dégradé), module fréquence des tachymètres, et
+        /// réglages envoyés à l'appareil (voie, impédance, couplage, seuils…).
+        /// </summary>
+        private static List<(string Libelle, string Texte)> DetailsConfigJournalFI(Mesure config)
+        {
+            var details = new List<(string, string)>
+            {
+                ("Module", DescriptionModuleJournalFI(config.NumModuleIncertitude, config.TypeMesure))
+            };
+            if (EnTetesMesureHelper.EstTachymetre(config.TypeMesure))
+                details.Add(("Mod. Hz", DescriptionModuleJournalFI(config.NumModuleIncertitudeFreq, TypeMesure.Frequence)));
+
+            string reglages;
+            if (config.InitManu)
+                reglages = "appareil réglé à la main (aucune commande envoyée)";
+            else if (config.ReglagesLisibles != null && config.ReglagesLisibles.Count > 0)
+                reglages = string.Join(" · ", config.ReglagesLisibles);
+            else
+                reglages = "aucun réglage envoyé (réglages de l'appareil après *RST)";
+            details.Add(("Réglages", reglages));
+            return details;
+        }
+
+        /// <summary>« MF51901A — Compteur de fréquence · prévu pour 30 mesures · dégradé », ou
+        /// « aucun (coefficients par défaut) ».</summary>
+        private static string DescriptionModuleJournalFI(string? numModule, TypeMesure type)
+        {
+            if (string.IsNullOrWhiteSpace(numModule)) return "aucun (coefficients par défaut)";
+            ModuleIncertitude? module = null;
+            try
+            {
+                module = ModulesIncertitudeService.Charger(
+                    System.IO.Path.Combine(ModulesIncertitudeService.DossierComplet(type), numModule + ".csv"));
+            }
+            catch { /* fichier illisible : on garde le n° seul */ }
+            if (module == null) return $"{numModule} (fichier du module introuvable)";
+
+            string texte = module.NumModule;
+            if (!string.IsNullOrWhiteSpace(module.NomAffichage)) texte += $" — {module.NomAffichage}";
+            if (type != TypeMesure.Interval) texte += $" · prévu pour {module.NbMesures} mesures";
+            if (module.Degrade) texte += " · dégradé";
+            return texte;
         }
 
         // -------- Utilitaires --------

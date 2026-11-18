@@ -16,6 +16,10 @@
         /// rejouées par l'orchestrator après le *RST avant la boucle de mesures.</summary>
         public List<string> CommandesScpiReglages { get; set; } = new();
 
+        /// <summary>Les mêmes réglages en clair (« Impédance : 50 Ω », « Couplage : AC »…), pour le
+        /// journal de la FI. Vide si rien n'a été envoyé (init manuelle, appareil injoignable).</summary>
+        public List<string> ReglagesLisibles { get; set; } = new();
+
         /// <summary>Voie active pour la mesure. Les réglages des autres voies ne sont pas envoyés à l'appareil.</summary>
         public VoieActive VoieActive { get; set; } = VoieActive.A;
         public TypeMesure TypeMesure { get; set; }

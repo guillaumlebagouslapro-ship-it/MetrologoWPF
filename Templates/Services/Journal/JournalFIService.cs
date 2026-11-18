@@ -16,6 +16,8 @@ namespace Metrologo.Services.Journal
     ///
     /// --- Fréquence -----------------------------------
     /// 09:00  Config    30 mesures · 53131A · gate 1 s
+    /// 09:00  Module    MF51901A — Compteur de fréquence · prévu pour 30 mesures
+    /// 09:00  Réglages  Voie A · Impédance : 50 Ω · Couplage : AC · Trigger : 0 V
     /// 09:01  ✔ Mesure  30 mesures
     /// 09:05  ✖ Relance (fichier neuf)  arrêtée par l'opérateur
     ///
@@ -139,14 +141,20 @@ namespace Metrologo.Services.Journal
         /// Note la configuration validée, seulement si elle diffère de la précédente de la session.
         /// Changement de type de mesure (Fréquence → Stabilité…) : un séparateur au nom du type la
         /// précède, et la ligne « Config » ne répète donc pas le type.
+        /// <paramref name="details"/> : lignes qui suivent la ligne « Config » (module d'incertitude,
+        /// réglages de l'appareil), écrites avec elle et comptées dans la détection de changement.
         /// </summary>
-        public static void NoterConfiguration(string typeMesure, string resume)
+        public static void NoterConfiguration(string typeMesure, string resume,
+            IReadOnlyList<(string Libelle, string Texte)>? details = null)
         {
             lock (_sync)
             {
                 if (string.IsNullOrEmpty(_cheminFichier)) return;
+                string cle = resume;
+                if (details != null)
+                    foreach (var (lib, txt) in details) cle += "\n" + lib + txt;
                 bool nouveauType = typeMesure != _dernierType;
-                if (!nouveauType && resume == _derniereConfig) return;
+                if (!nouveauType && cle == _derniereConfig) return;
 
                 if (nouveauType)
                 {
@@ -157,8 +165,11 @@ namespace Metrologo.Services.Journal
                         + Environment.NewLine);
                     _dernierType = typeMesure;
                 }
-                _derniereConfig = resume;
+                _derniereConfig = cle;
                 AjouterLigne("Config   ", resume);
+                if (details != null)
+                    foreach (var (lib, txt) in details)
+                        if (!string.IsNullOrWhiteSpace(txt)) AjouterLigne(lib.PadRight(9), txt);
             }
         }
 

@@ -210,10 +210,10 @@ namespace Metrologo.ViewModels
         // ---------- Déconnexion automatique après inactivité ----------
 
         /// <summary>Au-delà de ce délai sans clic, frappe ni mesure, on revient au choix de l'utilisateur.</summary>
-        private static readonly System.TimeSpan DelaiInactivite = System.TimeSpan.FromMinutes(30);
+        private static readonly System.TimeSpan DelaiInactivite = System.TimeSpan.FromMinutes(5);
 
         private readonly System.Windows.Threading.DispatcherTimer _timerInactivite =
-            new() { Interval = System.TimeSpan.FromSeconds(30) };
+            new() { Interval = System.TimeSpan.FromSeconds(10) };
         private System.DateTime _derniereActivite = System.DateTime.Now;
         private bool _deconnexionAutoEnCours;
 
@@ -249,9 +249,14 @@ namespace Metrologo.ViewModels
 
             if (System.DateTime.Now - _derniereActivite < DelaiInactivite) return;
 
-            // Une fenêtre modale (saisie post-mesure, message…) est ouverte : on ne la ferme pas d'autorité,
-            // la déconnexion aura lieu au tick suivant sa fermeture.
-            if (System.Windows.Interop.ComponentDispatcher.IsThreadModal) return;
+            // Fenêtre modale ouverte. Configuration commencée puis abandonnée : fermée comme « Annuler »,
+            // la déconnexion suit au tick suivant. Toute autre (saisie post-mesure, message…) n'est pas
+            // fermée d'autorité : la déconnexion attend qu'elle soit fermée.
+            if (System.Windows.Interop.ComponentDispatcher.IsThreadModal)
+            {
+                FermerConfigurationAbandonnee();
+                return;
+            }
 
             _deconnexionAutoEnCours = true;
             try
@@ -273,6 +278,37 @@ namespace Metrologo.ViewModels
             }
         }
 
+        /// <summary>
+        /// Ferme la fenêtre de configuration restée ouverte sans activité (résultat « Annuler »).
+        /// Rien n'est fermé si une autre fenêtre ou un message est ouvert par-dessus : Windows
+        /// désactive alors la configuration, signe qu'une saisie est en cours.
+        /// </summary>
+        private static void FermerConfigurationAbandonnee()
+        {
+            try
+            {
+                var config = System.Linq.Enumerable.FirstOrDefault(
+                    System.Linq.Enumerable.OfType<Views.ConfigurationWindow>(Application.Current.Windows),
+                    w => w.IsVisible);
+                if (config == null) return;
+
+                nint hwnd = new System.Windows.Interop.WindowInteropHelper(config).Handle;
+                if (hwnd == 0 || !IsWindowEnabled(hwnd)) return;
+
+                Journal.Info(CategorieLog.Session, "CONFIG_FERMEE_INACTIVITE",
+                    $"Fenêtre de configuration fermée après {DelaiInactivite.TotalMinutes:0} min sans activité.");
+                config.DialogResult = false;
+            }
+            catch
+            {
+                // Best-effort : la fenêtre reste ouverte, comme avant.
+            }
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool IsWindowEnabled(nint hWnd);
+
         public MainViewModel()
         {
             System.Windows.Input.InputManager.Current.PreProcessInput += OnEntreeUtilisateur;
@@ -285,7 +321,7 @@ namespace Metrologo.ViewModels
             _adminViewModel.MesureEnCours = () => _accueilViewModel.ActiviteMesureEnCours;
 
             // pop-up directe sur CE poste quand la valeur rubidium est mise à jour (écart hebdo
-            // Besançon) ou passe sous 1e-13. Le watcher ne couvre que les AUTRES postes,
+            // Besançon) ou dépasse 1e-13 en valeur absolue. Le watcher ne couvre que les AUTRES postes,
             // cet événement assure l'affichage sur le poste qui exécute la tâche
             BesanconScheduler.PopupRubidiumDemandee += OnPopupRubidiumDemandee;
 

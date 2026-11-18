@@ -106,6 +106,21 @@ namespace Metrologo.ViewModels
             }
         }
 
+        /// <summary>Réglage en clair pour le journal de la FI (« Impédance : 50 Ω », « Trigger : 0,5 V ») ;
+        /// null s'il n'y a rien à afficher.</summary>
+        public string? DescriptionLisible
+        {
+            get
+            {
+                if (EstNumerique)
+                {
+                    string v = string.IsNullOrWhiteSpace(Valeur) ? "0" : Valeur.Trim();
+                    return $"{Nom} : {v}{(string.IsNullOrWhiteSpace(Unite) ? string.Empty : " " + Unite)}";
+                }
+                return OptionSelectionnee == null ? null : $"{Nom} : {OptionSelectionnee.Libelle}";
+            }
+        }
+
         /// <summary>
         /// Restaure la sélection depuis les commandes SCPI mémorisées (<c>MesureConfig.CommandesScpiReglages</c>) :
         /// Choix = re-coche l'option dont la commande est présente ; Numérique = retrouve la commande
