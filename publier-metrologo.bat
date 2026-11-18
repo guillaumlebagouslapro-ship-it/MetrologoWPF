@@ -25,6 +25,9 @@ REM quelques secondes avec une vraie progression. Un delta oblige chaque poste a
 REM reconstruire le paquet version par version, sans progression (plusieurs minutes
 REM quand des versions ont ete sautees). Cote appli : UpdateService.CreerManager.
 set DELTA=None
+REM Runtime installe par Velopack sur les postes qui ne l'ont pas (droits admin
+REM demandes une seule fois). Doit suivre le TargetFramework de Metrologo.csproj.
+set FRAMEWORK=net10-x64-desktop
 REM Icone (raccourci bureau, installateur, Applications installees) = celle de l'exe
 set ICONE=Resources\logo.ico
 REM Dossier de travail : surtout PAS nomme TMP (TMP = dossier temporaire de Windows :
@@ -63,13 +66,15 @@ set FULLVER=%VER%.0
 set NOTES=
 if exist "%INFO%\notes.md" set NOTES=--releaseNotes "%INFO%\notes.md"
 
-REM 4) Compilation autonome (runtime .NET embarque -> aucun prerequis .NET sur les postes)
+REM 4) Compilation SANS le runtime .NET (~25 Mo au lieu de ~185 Mo) : le runtime
+REM    .NET 10 Desktop est installe UNE fois sur chaque poste par Velopack (voir
+REM    FRAMEWORK), a l'installation ou a la premiere MAJ qui le demande.
 echo.
-echo == Compilation self-contained win-x64 (version %FULLVER%) ==
+echo == Compilation win-x64 sans runtime embarque (version %FULLVER%) ==
 REM Libere les fichiers encore tenus par le serveur de compilation
 dotnet build-server shutdown >nul 2>&1
 if exist "%PUBDIR%" rmdir /s /q "%PUBDIR%"
-dotnet publish "%PROJET%" -c Release -r win-x64 --self-contained true -p:Version=%FULLVER% -o "%PUBDIR%"
+dotnet publish "%PROJET%" -c Release -r win-x64 --self-contained false -p:Version=%FULLVER% -o "%PUBDIR%"
 if errorlevel 1 goto ECHEC_BUILD
 
 REM 5) Empaquetage EN LOCAL (rapide), puis depot sur le reseau en une fois
@@ -80,7 +85,7 @@ vpk download local --path "%SORTIE_RESEAU%" --outputDir "%RELDIR%"
 if errorlevel 1 echo    (aucune version sur le reseau : pas de delta, normal a la 1re publication)
 echo.
 echo == Empaquetage (local) ==
-vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%RELDIR%" --splashImage "%SPLASH%" --splashProgressColor "#E89B2F" --icon "%ICONE%" --delta %DELTA% %NOTES%
+vpk pack --packId %APP_ID% --packVersion %FULLVER% --packDir "%PUBDIR%" --mainExe %MAIN_EXE% --outputDir "%RELDIR%" --splashImage "%SPLASH%" --splashProgressColor "#E89B2F" --icon "%ICONE%" --delta %DELTA% --framework %FRAMEWORK% %NOTES%
 if errorlevel 1 goto ECHEC_PACK
 echo.
 echo == Depot sur %SORTIE_RESEAU% (garde les %GARDER% dernieres versions) ==

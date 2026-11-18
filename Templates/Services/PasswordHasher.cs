@@ -53,10 +53,9 @@ namespace Metrologo.Services
             return CryptographicOperations.FixedTimeEquals(hashCalcule, hashAttendu);
         }
 
-        private static byte[] DeriverHash(string password, byte[] sel, int iterations)
-        {
-            using var pbkdf2 = new Rfc2898DeriveBytes(password, sel, iterations, HashAlgorithmName.SHA256);
-            return pbkdf2.GetBytes(TailleHashOctets);
-        }
+        // Méthode statique recommandée depuis .NET 10 : mêmes octets que l'ancien
+        // new Rfc2898DeriveBytes(...).GetBytes(32), les hash déjà stockés restent valides.
+        private static byte[] DeriverHash(string password, byte[] sel, int iterations) =>
+            Rfc2898DeriveBytes.Pbkdf2(password, sel, iterations, HashAlgorithmName.SHA256, TailleHashOctets);
     }
 }

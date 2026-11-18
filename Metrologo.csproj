@@ -2,7 +2,9 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- .NET 10 (LTS, supporte jusqu'en novembre 2028). Le runtime n'est PAS embarque :
+         Velopack l'installe une fois sur le poste (option framework de publier-metrologo.bat). -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
