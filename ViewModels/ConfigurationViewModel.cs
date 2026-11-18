@@ -174,9 +174,22 @@ namespace Metrologo.ViewModels
                 if (ReferenceEquals(_moduleSelectionne, value)) return;
                 _moduleSelectionne = value;
                 MesureConfig.NumModuleIncertitude = value?.NumModule ?? string.Empty;
+                AppliquerNbMesuresDuModule();
                 OnPropertyChanged();
                 NotifierEtapes();   // module sélectionné = passage à l'étape 3
             }
+        }
+
+        /// <summary>
+        /// Nombre de mesures dicté par le module choisi (30 ou 100, case de l'onglet Modules) ;
+        /// sans module : 30. Intervalle : inchangé (1 mesure). L'opérateur peut encore le
+        /// modifier à la main après coup.
+        /// </summary>
+        private void AppliquerNbMesuresDuModule()
+        {
+            if (MesureConfig == null || MesureConfig.TypeMesure == TypeMesure.Interval) return;
+            MesureConfig.NbMesures = ModuleSelectionne?.NbMesures ?? ModuleIncertitude.NbMesuresParDefaut;
+            OnPropertyChanged(nameof(MesureConfig));   // Mesure n'est pas observable : rafraîchit la liste « Nombre de mesures »
         }
 
         /// <summary>Vrai si au moins un module couvre le type de mesure courant.</summary>
@@ -999,6 +1012,8 @@ namespace Metrologo.ViewModels
 
             // Les modules d'incertitude dépendent de TypeMesure -> relister.
             RebuildModulesIncertitude();
+            // Module resté sélectionné dans le nouveau type : c'est lui qui fixe le nombre de mesures.
+            AppliquerNbMesuresDuModule();
 
             OnPropertyChanged(nameof(MesureConfig));
             RefreshAll();

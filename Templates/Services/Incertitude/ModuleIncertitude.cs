@@ -24,6 +24,26 @@ namespace Metrologo.Services.Incertitude
         /// </summary>
         [ObservableProperty] private bool _degrade;
 
+        /// <summary>Nombre de mesures prévu pour ce module (30 ou 100) : choisir le module dans la
+        /// Configuration règle le nombre de mesures (sauf Intervalle). Métadonnée
+        /// <c># NbMesures: 100</c> en tête du CSV ; absente = <see cref="NbMesuresParDefaut"/>.</summary>
+        [ObservableProperty] private int _nbMesures = NbMesuresParDefaut;
+
+        /// <summary>Nombre de mesures d'un module qui ne précise rien, et de toute mesure sans module.</summary>
+        public const int NbMesuresParDefaut = 30;
+
+        /// <summary>Nombre de mesures quand la case « prévu pour 100 mesures » est cochée.</summary>
+        public const int NbMesuresEtendu = 100;
+
+        /// <summary>Case à cocher de l'admin : cochée = 100 mesures, décochée = 30.</summary>
+        public bool Pour100Mesures
+        {
+            get => NbMesures >= NbMesuresEtendu;
+            set => NbMesures = value ? NbMesuresEtendu : NbMesuresParDefaut;
+        }
+
+        partial void OnNbMesuresChanged(int value) => OnPropertyChanged(nameof(Pour100Mesures));
+
         partial void OnNumModuleChanged(string value) => OnPropertyChanged(nameof(LibelleAffiche));
         partial void OnNomAffichageChanged(string value) => OnPropertyChanged(nameof(LibelleAffiche));
         partial void OnDegradeChanged(bool value) => OnPropertyChanged(nameof(LibelleAffiche));

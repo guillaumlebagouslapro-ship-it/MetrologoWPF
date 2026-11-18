@@ -48,7 +48,11 @@ namespace Metrologo.ViewModels
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CheminDossier))]
         [NotifyPropertyChangedFor(nameof(LibelleCategorie))]
+        [NotifyPropertyChangedFor(nameof(NbMesuresApplicable))]
         private TypeMesure _typeMesureSelectionne = TypeMesure.Frequence;
+
+        /// <summary>Le nombre de mesures du module ne s'applique pas en Intervalle (toujours 1 mesure).</summary>
+        public bool NbMesuresApplicable => TypeMesureSelectionne != TypeMesure.Interval;
 
         partial void OnTypeMesureSelectionneChanged(TypeMesure value)
         {
@@ -150,7 +154,8 @@ namespace Metrologo.ViewModels
                 NumModule = num,
                 NomAffichage = nom,
                 UtiliseTempsDeMesure = !dlg.SansTempsDeMesure,
-                Degrade = dlg.Degrade
+                Degrade = dlg.Degrade,
+                Pour100Mesures = dlg.Pour100Mesures
             };
             ModulesIncertitudeService.Sauvegarder(nouveau, TypeMesureSelectionne);
             Modules.Add(nouveau);

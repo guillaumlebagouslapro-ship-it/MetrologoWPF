@@ -10,6 +10,7 @@ namespace Metrologo.Views
         public string NomAffichageSaisi => TbNomAffichage.Text.Trim();
         public bool SansTempsDeMesure => CbSansTemps.IsChecked == true;
         public bool Degrade => CbDegrade.IsChecked == true;
+        public bool Pour100Mesures => CbCentMesures.IsChecked == true;
 
         public AjoutModuleIncertitudeDialog() : this(null) { }
 
@@ -24,6 +25,9 @@ namespace Metrologo.Views
                 || categorie == TypeMesure.TachyOptique
                 || categorie == TypeMesure.Stroboscope)
                 CbSansTemps.IsChecked = true;
+            // Intervalle : toujours 1 mesure, le nombre de mesures du module n'a pas de sens.
+            if (categorie == TypeMesure.Interval)
+                CbCentMesures.Visibility = Visibility.Collapsed;
             Loaded += (_, _) => TbNumModule.Focus();
         }
 

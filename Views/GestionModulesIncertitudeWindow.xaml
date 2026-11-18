@@ -98,6 +98,13 @@
                                 Visibility="{Binding Degrade, Converter={StaticResource BoolToVis}}">
                             <TextBlock Text="dégradé" FontSize="10" FontWeight="Bold" Foreground="#FF8A3A00"/>
                         </Border>
+                        <Border Background="#FFDCFCE7" CornerRadius="6" Padding="6,1" Margin="0,0,4,0"
+                                Visibility="{Binding DataContext.NbMesuresApplicable, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource BoolToVis}}">
+                            <TextBlock FontSize="10" FontWeight="Bold" Foreground="#FF166534">
+                                <Run Text="{Binding NbMesures, Mode=OneWay}"/>
+                                <Run Text=" mesures"/>
+                            </TextBlock>
+                        </Border>
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -283,9 +290,16 @@
                                       IsEnabled="{Binding AModuleSelectionne}"
                                       IsChecked="{Binding ModuleSelectionne.Degrade, Mode=TwoWay}"
                                       Content="Module dégradé (seul type proposé en mode Paillasse ; en Baie, tous les modules restent proposés)"/>
+                            <!-- Nombre de mesures du module : appliqué dans la Configuration quand on choisit ce module.
+                                 Masqué en Intervalle (1 mesure, nombre fixé par le type de mesure). -->
+                            <CheckBox Margin="0,8,0,0"
+                                      IsEnabled="{Binding AModuleSelectionne}"
+                                      IsChecked="{Binding ModuleSelectionne.Pour100Mesures, Mode=TwoWay}"
+                                      Visibility="{Binding NbMesuresApplicable, Converter={StaticResource BoolToVis}}"
+                                      Content="Module prévu pour 100 mesures (décoché : 30 mesures). Réglé automatiquement dans la Configuration quand ce module est choisi."/>
                             <TextBlock FontSize="10" Margin="0,4,0,0"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                       Text="Modifie le N°, la désignation ou « dégradé » puis clique « Enregistrer » (le renommage renomme le fichier CSV)."/>
+                                       Text="Modifie le N°, la désignation, « dégradé » ou le nombre de mesures puis clique « Enregistrer » (le renommage renomme le fichier CSV)."/>
                         </StackPanel>
                     </Grid>
                     <TextBlock Grid.Row="1" Text="{Binding InfosFonctions}"

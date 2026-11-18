@@ -37,6 +37,9 @@
 
             <CheckBox x:Name="CbDegrade" Content="Module dégradé (seul type proposé en mode Paillasse)" Margin="0,10,0,0"
                       ToolTip="En mode Paillasse, seuls les modules dégradés sont proposés. En mode Baie, tous les modules restent disponibles."/>
+
+            <CheckBox x:Name="CbCentMesures" Content="Module prévu pour 100 mesures (décoché : 30 mesures)" Margin="0,10,0,0"
+                      ToolTip="Choisir ce module dans la Configuration règle automatiquement le nombre de mesures (sauf en Intervalle)."/>
         </StackPanel>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,24,16">

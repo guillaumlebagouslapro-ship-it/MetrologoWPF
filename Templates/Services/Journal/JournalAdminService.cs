@@ -46,7 +46,8 @@ namespace Metrologo.Services.Journal
             // Côté rubidium
             "SELECTION_RUBIDIUM", "CATALOGUE_RUBIDIUMS_MAJ",
             // Rubidium : valeur de référence (l'écart hebdo Besançon)
-            "RUBIDIUM_VALEUR_MAJ", "RUBIDIUM_HEBDO_SOUS_SEUIL",
+            // (SOUS_SEUIL : ancien sens de l'alerte, gardé pour lire l'historique)
+            "RUBIDIUM_VALEUR_MAJ", "RUBIDIUM_HEBDO_AU_DESSUS_SEUIL", "RUBIDIUM_HEBDO_SOUS_SEUIL",
             // Modules d'incertitude
             "INCERT_MODULE_SAUVE", "INCERT_MODULE_COPIE", "INCERT_MODULE_SUPPR", "INCERT_MODULE_RENOMME",
             // Catalogue des appareils
@@ -68,7 +69,7 @@ namespace Metrologo.Services.Journal
         /// Elles restent dans le fichier : c'est par lui que les autres postes apprennent le changement.</summary>
         private static readonly HashSet<string> _actionsAutomatiques = new(StringComparer.OrdinalIgnoreCase)
         {
-            "RUBIDIUM_VALEUR_MAJ", "RUBIDIUM_HEBDO_SOUS_SEUIL",
+            "RUBIDIUM_VALEUR_MAJ", "RUBIDIUM_HEBDO_AU_DESSUS_SEUIL", "RUBIDIUM_HEBDO_SOUS_SEUIL",
         };
 
         public const string UtilisateurAutomatique = "(automatique)";
@@ -192,6 +193,7 @@ namespace Metrologo.Services.Journal
             "SELECTION_RUBIDIUM"        => "Rubidium actif changé",
             "CATALOGUE_RUBIDIUMS_MAJ"   => "Catalogue rubidiums modifié",
             "RUBIDIUM_VALEUR_MAJ"       => "Valeur du rubidium mise à jour (écart hebdo)",
+            "RUBIDIUM_HEBDO_AU_DESSUS_SEUIL" => "⚠ Écart hebdo rubidium au-dessus de la limite",
             "RUBIDIUM_HEBDO_SOUS_SEUIL" => "⚠ Écart hebdo rubidium sous la limite",
             "INCERT_MODULE_SAUVE"     => "Module d'incertitude enregistré",
             "INCERT_MODULE_COPIE"     => "Module d'incertitude dupliqué",

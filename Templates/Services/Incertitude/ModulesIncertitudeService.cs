@@ -129,7 +129,7 @@ namespace Metrologo.Services.Incertitude
 
         /// <summary>
         /// Charge un module depuis son CSV (NumModule = nom de fichier sans extension). Métadonnées
-        /// optionnelles en tête : <c># Nom:</c>, <c># SansTemps:</c>, <c># Degrade:</c>.
+        /// optionnelles en tête : <c># Nom:</c>, <c># SansTemps:</c>, <c># Degrade:</c>, <c># NbMesures:</c>.
         /// </summary>
         public static ModuleIncertitude? Charger(string cheminCsv)
         {
@@ -160,6 +160,11 @@ namespace Metrologo.Services.Incertitude
                     var mDegrade = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*Degrade\s*:\s*(true|1|oui)\s*$",
                         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (mDegrade.Success) module.Degrade = true;
+
+                    var mNb = System.Text.RegularExpressions.Regex.Match(l, @"^#\s*NbMesures\s*:\s*(\d+)\s*$",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (mNb.Success && int.TryParse(mNb.Groups[1].Value, out int nb) && nb >= 1 && nb <= 100)
+                        module.NbMesures = nb;
                     continue;
                 }
 
@@ -235,6 +240,7 @@ namespace Metrologo.Services.Incertitude
                 sb.AppendLine("# SansTemps: true");
             if (module.Degrade)
                 sb.AppendLine("# Degrade: true");
+            sb.AppendLine("# NbMesures: " + module.NbMesures.ToString(CultureInfo.InvariantCulture));
             // Format 9 colonnes : Fonction ; Temps ; Condition2 ; BB1 ; BH1 ; BB2 ; BH2 ; IncRel ; IncAbs
             sb.AppendLine("Fonction;TempsDeMesure;Condition2;BorneBasse1;BorneHaute1;BorneBasse2;BorneHaute2;IncertRelative;IncertAbsolue");
             foreach (var lg in module.Lignes)
